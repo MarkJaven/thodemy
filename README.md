@@ -1,6 +1,6 @@
 # Training Tracker System
 
-A web-based training management system built with the MERN stack (MongoDB, Express.js, React, Node.js).
+A web-based training management system built with the PERN stack (PostgreSQL, Express.js, React, Node.js) and Supabase.
 
 ## 📋 Features
 
@@ -22,7 +22,8 @@ A web-based training management system built with the MERN stack (MongoDB, Expre
 **Backend:**
 - Node.js
 - Express.js
-- MongoDB with Mongoose
+- PostgreSQL (Supabase)
+- Sequelize ORM
 - JWT Authentication
 
 **File Storage:**
@@ -42,7 +43,7 @@ training-tracker/
 
 ### Prerequisites
 - Node.js (v16 or higher)
-- MongoDB (local or MongoDB Atlas account)
+- PostgreSQL (Supabase project or local Postgres)
 - npm or yarn
 
 ### Installation
@@ -62,7 +63,7 @@ npm install
 Create `.env` file in `server/` folder:
 ```env
 PORT=5000
-MONGO_URI=your_mongodb_connection_string
+DATABASE_URL=your_supabase_postgres_connection_string
 JWT_SECRET=your_secret_key
 CLOUDINARY_CLOUD_NAME=your_cloudinary_name
 CLOUDINARY_API_KEY=your_cloudinary_key
