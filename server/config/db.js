@@ -1,37 +1,42 @@
-const { Sequelize } = require('sequelize');
+const { Sequelize } = require("sequelize");
+const logger = require("../src/utils/logger");
 
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
-  dialect: 'postgres',
-  logging: false, // Set to console.log to see SQL queries
+  dialect: "postgres",
+  logging: false,
   dialectOptions: {
     ssl: {
       require: true,
-      rejectUnauthorized: false
+      rejectUnauthorized: false,
     },
     statement_timeout: 30000,
-    idle_in_transaction_session_timeout: 30000
+    idle_in_transaction_session_timeout: 30000,
   },
   pool: {
     max: 5,
     min: 0,
     acquire: 30000,
     idle: 10000,
-    evict: 15000
-  }
+    evict: 15000,
+  },
 });
 
+/**
+ * Connect to the database and sync models.
+ * @returns {Promise<void>}
+ */
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
-    console.log('✅ PostgreSQL Connected via Supabase!');
-    console.log(`📊 Database: ${sequelize.config.database}`);
-    
-    // Sync models (creates tables if they don't exist)
+    logger.info("db_connected", { database: sequelize.config.database });
+
     await sequelize.sync({ alter: false });
-    console.log('📋 Database tables synced!');
+    logger.info("db_synced");
   } catch (error) {
-    console.error('❌ Unable to connect to PostgreSQL:', error.message);
-    console.error('Full error:', error);
+    logger.error("db_connection_failed", {
+      message: error.message,
+      stack: error.stack,
+    });
     process.exit(1);
   }
 };

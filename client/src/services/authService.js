@@ -1,0 +1,142 @@
+import { supabase } from "../lib/supabaseClient";
+
+const isConfigured = Boolean(supabase);
+
+/**
+ * Ensure Supabase client is configured.
+ * @returns {import("@supabase/supabase-js").SupabaseClient}
+ */
+const requireSupabase = () => {
+  if (!supabase) {
+    throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+  }
+  return supabase;
+};
+
+/**
+ * Fetch the current Supabase session.
+ * @returns {Promise<object|null>}
+ */
+const getSession = async () => {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.getSession();
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data.session ?? null;
+};
+
+/**
+ * Resolve the current access token, if available.
+ * @returns {Promise<string|null>}
+ */
+const getAccessToken = async () => {
+  const session = await getSession();
+  return session?.access_token ?? null;
+};
+
+/**
+ * Listen for auth state changes.
+ * @param {(event: string, session: object|null) => void} callback
+ * @returns {{unsubscribe: () => void}}
+ */
+const onAuthStateChange = (callback) => {
+  const client = requireSupabase();
+  const { data } = client.auth.onAuthStateChange(callback);
+  return data.subscription;
+};
+
+/**
+ * Register a new user with Supabase.
+ * @param {{email: string, password: string, firstName?: string, lastName?: string}} payload
+ * @returns {Promise<object>}
+ */
+const signUp = async ({ email, password, firstName, lastName }) => {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        first_name: firstName?.trim(),
+        last_name: lastName?.trim(),
+      },
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+};
+
+/**
+ * Sign in with email and password.
+ * @param {{email: string, password: string}} payload
+ * @returns {Promise<void>}
+ */
+const signInWithPassword = async ({ email, password }) => {
+  const client = requireSupabase();
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) {
+    throw new Error(error.message);
+  }
+};
+
+/**
+ * Start an OAuth flow with the selected provider.
+ * @param {"google"|"azure"} provider
+ * @returns {Promise<void>}
+ */
+const signInWithOAuth = async (provider) => {
+  const client = requireSupabase();
+  const { error } = await client.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+};
+
+/**
+ * Exchange the OAuth redirect code for a session.
+ * @param {string} url
+ * @returns {Promise<void>}
+ */
+const exchangeCodeForSession = async (url) => {
+  const client = requireSupabase();
+  const { error } = await client.auth.exchangeCodeForSession(url);
+  if (error) {
+    throw new Error(error.message);
+  }
+};
+
+/**
+ * Sign the current user out.
+ * @returns {Promise<void>}
+ */
+const signOut = async () => {
+  const client = requireSupabase();
+  const { error } = await client.auth.signOut();
+  if (error) {
+    throw new Error(error.message);
+  }
+};
+
+export const authService = {
+  isConfigured,
+  getSession,
+  getAccessToken,
+  onAuthStateChange,
+  signUp,
+  signInWithPassword,
+  signInWithOAuth,
+  exchangeCodeForSession,
+  signOut,
+};
