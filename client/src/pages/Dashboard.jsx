@@ -1,10 +1,44 @@
-﻿import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { profileService } from "../services/profileService";
 
+/**
+ * Display the authenticated dashboard.
+ * @returns {JSX.Element}
+ */
 const Dashboard = () => {
   const { user, loading, signOut } = useAuth();
   const location = useLocation();
   const pendingEmail = location.state?.pendingEmail;
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState(null);
+
+  useEffect(() => {
+    /**
+     * Fetch the latest profile details for the current user.
+     * @returns {Promise<void>}
+     */
+    const loadProfile = async () => {
+      if (!user) {
+        setProfile(null);
+        return;
+      }
+      setProfileLoading(true);
+      setProfileError(null);
+      try {
+        const data = await profileService.getMe();
+        setProfile(data?.profile ?? null);
+      } catch (error) {
+        setProfileError(error.message);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    loadProfile();
+  }, [user]);
 
   if (loading) {
     return (
@@ -29,6 +63,19 @@ const Dashboard = () => {
           {user ? (
             <>
               <p className="mt-4 text-sm text-slate-300">Signed in as {user.email}</p>
+              {profileLoading && (
+                <p className="mt-2 text-xs text-slate-400">Loading your profile...</p>
+              )}
+              {profileError && (
+                <p className="mt-2 text-xs text-rose-300">{profileError}</p>
+              )}
+              {profile && (
+                <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300">
+                  <p className="font-semibold text-white">Profile</p>
+                  <p className="mt-2">Name: {profile.first_name} {profile.last_name}</p>
+                  <p>Email: {profile.email}</p>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={signOut}
