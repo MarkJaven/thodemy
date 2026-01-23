@@ -1,9 +1,13 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
+import { authService } from "../services/authService";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Render the authentication experience.
+ * @returns {JSX.Element}
+ */
 const AuthPage = () => {
   const { mode } = useParams();
   const navigate = useNavigate();
@@ -25,21 +29,41 @@ const AuthPage = () => {
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
 
-  useEffect(() => {
+  /**
+   * Reset view state when the auth mode changes.
+   * @returns {void}
+   */
+  const resetModeState = () => {
     setError(null);
     setInfo(null);
-  }, [resolvedMode]);
+
+    if (!authService.isConfigured) {
+      setError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+      return;
+    }
+  };
+
+  useEffect(resetModeState, [resolvedMode]);
 
   const title = useMemo(
     () => (isRegister ? "Create an account" : "Welcome back"),
     [isRegister]
   );
 
+  /**
+   * Track changes to form fields.
+   * @param {React.ChangeEvent<HTMLInputElement>} event
+   * @returns {void}
+   */
   const handleChange = (event) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  /**
+   * Validate the current form state.
+   * @returns {string|null}
+   */
   const validate = () => {
     if (!EMAIL_REGEX.test(form.email)) {
       return "Enter a valid email address.";
@@ -61,16 +85,20 @@ const AuthPage = () => {
     return null;
   };
 
+  /**
+   * Submit the auth form.
+   * @param {React.FormEvent<HTMLFormElement>} event
+   * @returns {Promise<void>}
+   */
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError(null);
     setInfo(null);
 
-    if (!supabase) {
+    if (!authService.isConfigured) {
       setError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
       return;
     }
-
     const validationError = validate();
     if (validationError) {
       setError(validationError);
@@ -79,73 +107,65 @@ const AuthPage = () => {
 
     setLoadingTarget("form");
     if (isRegister) {
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      try {
+        const data = await authService.signUp({
+          email: form.email,
+          password: form.password,
+          firstName: form.firstName,
+          lastName: form.lastName,
+        });
+
+        if (!data.session) {
+          setInfo("Check your email to confirm your account.");
+        }
+
+        navigate("/dashboard", {
+          replace: true,
+          state: { pendingEmail: !data.session },
+        });
+      } catch (signUpError) {
+        setError(signUpError.message);
+      } finally {
+        setLoadingTarget(null);
+      }
+      return;
+    }
+
+    try {
+      await authService.signInWithPassword({
         email: form.email,
         password: form.password,
-        options: {
-          data: {
-            first_name: form.firstName.trim(),
-            last_name: form.lastName.trim(),
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
       });
-
-      if (signUpError) {
-        setError(signUpError.message);
-        setLoadingTarget(null);
-        return;
-      }
-
-      if (!data.session) {
-        setInfo("Check your email to confirm your account.");
-      }
-
-      navigate("/dashboard", {
-        replace: true,
-        state: { pendingEmail: !data.session },
-      });
-      setLoadingTarget(null);
-      return;
-    }
-
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: form.email,
-      password: form.password,
-    });
-
-    if (signInError) {
+      navigate("/dashboard", { replace: true });
+    } catch (signInError) {
       setError(signInError.message);
+    } finally {
       setLoadingTarget(null);
-      return;
     }
-
-    navigate("/dashboard", { replace: true });
-    setLoadingTarget(null);
   };
 
+  /**
+   * Start OAuth sign-in.
+   * @param {"google"|"azure"} provider
+   * @returns {Promise<void>}
+   */
   const handleOAuth = async (provider) => {
     setError(null);
-    if (!supabase) {
+    if (!authService.isConfigured) {
       setError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
       return;
     }
     setLoadingTarget(provider);
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    if (oauthError) {
+    try {
+      await authService.signInWithOAuth(provider);
+    } catch (oauthError) {
       setError(oauthError.message);
       setLoadingTarget(null);
     }
   };
 
   const isSubmitting = loadingTarget === "form";
-  const isConfigured = Boolean(supabase);
+  const isConfigured = authService.isConfigured;
 
   return (
     <div className="min-h-screen bg-ink-900 text-slate-100">
@@ -453,3 +473,8 @@ const AuthPage = () => {
 };
 
 export default AuthPage;
+
+
+
+
+

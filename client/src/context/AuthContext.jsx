@@ -1,8 +1,13 @@
-﻿import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { authService } from "../services/authService";
 
 const AuthContext = createContext(null);
 
+/**
+ * Provide auth state to child components.
+ * @param {{children: React.ReactNode}} props
+ * @returns {JSX.Element}
+ */
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
@@ -12,51 +17,61 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
 
+    /**
+     * Initialize the current auth session.
+     * @returns {Promise<void>}
+     */
     const init = async () => {
-      if (!supabase) {
+      try {
+        const currentSession = await authService.getSession();
+        if (!isMounted) return;
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+      } catch (error) {
+        if (!isMounted) return;
+        setAuthError(error.message);
+      } finally {
         if (isMounted) {
-          setAuthError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
           setLoading(false);
         }
-        return;
       }
-      const { data, error } = await supabase.auth.getSession();
-      if (!isMounted) return;
-      if (error) {
-        setAuthError(error.message);
-      }
-      setSession(data.session ?? null);
-      setUser(data.session?.user ?? null);
-      setLoading(false);
+    };
+
+    /**
+     * Handle Supabase auth state changes.
+     * @param {string} _event
+     * @param {object|null} nextSession
+     * @returns {void}
+     */
+    const handleAuthChange = (_event, nextSession) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
     };
 
     init();
 
-    if (!supabase) {
-      return () => {
-        isMounted = false;
-      };
+    let subscription;
+    try {
+      subscription = authService.onAuthStateChange(handleAuthChange);
+    } catch (error) {
+      setAuthError(error.message);
     }
-
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-    });
 
     return () => {
       isMounted = false;
-      data.subscription.unsubscribe();
+      subscription?.unsubscribe?.();
     };
   }, []);
 
+  /**
+   * Sign the current user out.
+   * @returns {Promise<void>}
+   */
   const signOut = async () => {
     setAuthError(null);
-    if (!supabase) {
-      setAuthError("Supabase is not configured.");
-      return;
-    }
-    const { error } = await supabase.auth.signOut();
-    if (error) {
+    try {
+      await authService.signOut();
+    } catch (error) {
       setAuthError(error.message);
     }
   };
@@ -69,6 +84,16 @@ export const AuthProvider = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+/**
+ * Access the auth context.
+ * @returns {{
+ *  session: object|null,
+ *  user: object|null,
+ *  loading: boolean,
+ *  authError: string|null,
+ *  signOut: () => Promise<void>
+ * }}
+ */
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
