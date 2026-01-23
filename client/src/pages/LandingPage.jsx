@@ -1,3 +1,7 @@
+/**
+ * Render the marketing landing page.
+ * @returns {JSX.Element}
+ */
 const LandingPage = () => {
   return (
     <div className="min-h-screen bg-ink-900 text-slate-100">
@@ -37,7 +41,7 @@ const LandingPage = () => {
               <h1 className="font-display text-4xl leading-tight sm:text-5xl lg:text-6xl">
                 <span className="text-[#d2c8ff]">Unlock Your Training Wins</span>
                 <br />
-                <span className="text-[#d2c8ff]">You Thought Were Out of Reach —</span>
+                <span className="text-[#d2c8ff]">You Thought Were Out of Reach?</span>
                 <br />
                 <span className="text-white">Now Just One Track Away!</span>
               </h1>
@@ -58,9 +62,7 @@ const LandingPage = () => {
                 <div className="absolute inset-24 rounded-full border border-white/10" />
                 <div className="relative text-center">
                   <p className="text-3xl font-semibold text-white">30+</p>
-                  <p className="text-xs uppercase tracking-widest text-slate-300">
-                    Trainees
-                  </p>
+                  <p className="text-xs uppercase tracking-widest text-slate-300">Trainees</p>
                 </div>
               </div>
 
@@ -95,3 +97,4 @@ const LandingPage = () => {
 };
 
 export default LandingPage;
+

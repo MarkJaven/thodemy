@@ -1,10 +1,14 @@
-﻿import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import AuthCallback from "./pages/AuthCallback";
 import AuthPage from "./pages/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/LandingPage";
 
+/**
+ * Configure application routes.
+ * @returns {JSX.Element}
+ */
 const App = () => {
   return (
     <AuthProvider>

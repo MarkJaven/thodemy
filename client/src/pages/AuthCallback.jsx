@@ -1,27 +1,27 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
+import { authService } from "../services/authService";
 
+/**
+ * Finalize OAuth flows and redirect to the dashboard.
+ * @returns {JSX.Element}
+ */
 const AuthCallback = () => {
   const navigate = useNavigate();
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    /**
+     * Exchange the redirect code for a session and navigate away.
+     * @returns {Promise<void>}
+     */
     const finishAuth = async () => {
-      if (!supabase) {
-        setError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-        return;
-      }
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
-        window.location.href
-      );
-
-      if (exchangeError) {
+      try {
+        await authService.exchangeCodeForSession(window.location.href);
+        navigate("/dashboard", { replace: true });
+      } catch (exchangeError) {
         setError(exchangeError.message);
-        return;
       }
-
-      navigate("/dashboard", { replace: true });
     };
 
     finishAuth();
@@ -37,9 +37,7 @@ const AuthCallback = () => {
               ? "We could not complete the sign-in. Please try again."
               : "Hang tight while we secure your session."}
           </p>
-          {error && (
-            <p className="mt-4 text-xs text-rose-300">{error}</p>
-          )}
+          {error && <p className="mt-4 text-xs text-rose-300">{error}</p>}
         </div>
       </div>
     </div>
