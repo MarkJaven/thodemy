@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authService } from "../services/authService";
+import { superAdminService } from "../services/superAdminService";
 
 /**
  * Finalize OAuth flows and redirect to the dashboard.
@@ -18,7 +19,9 @@ const AuthCallback = () => {
     const finishAuth = async () => {
       try {
         await authService.exchangeCodeForSession(window.location.href);
-        navigate("/dashboard", { replace: true });
+        const session = await authService.getSession();
+        const role = await superAdminService.getCurrentRole(session?.user?.id);
+        navigate(role === "superadmin" ? "/super-admin" : "/dashboard", { replace: true });
       } catch (exchangeError) {
         setError(exchangeError.message);
       }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { authService } from "../services/authService";
+import { superAdminService } from "../services/superAdminService";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -136,7 +137,9 @@ const AuthPage = () => {
         email: form.email,
         password: form.password,
       });
-      navigate("/dashboard", { replace: true });
+      const session = await authService.getSession();
+      const role = await superAdminService.getCurrentRole(session?.user?.id);
+      navigate(role === "superadmin" ? "/super-admin" : "/dashboard", { replace: true });
     } catch (signInError) {
       setError(signInError.message);
     } finally {
