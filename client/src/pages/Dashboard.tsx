@@ -142,15 +142,18 @@ const Dashboard = () => {
     return map;
   }, [topicsData.topicCompletionRequests]);
 
+  const hasActiveEnrollment = activeEnrollmentCourseIds.size > 0;
+
   const visibleQuizzes = data.quizzes.filter((quiz) => {
+    if (!hasActiveEnrollment) return false;
     const assignedMatch = !quiz.assigned_user_id || quiz.assigned_user_id === user?.id;
-    const courseMatch = quiz.course_id ? activeEnrollmentCourseIds.has(quiz.course_id) : true;
+    const courseMatch = quiz.course_id ? activeEnrollmentCourseIds.has(quiz.course_id) : false;
     return assignedMatch && courseMatch;
   });
 
-  const visibleForms = data.forms.filter(
-    (form) => form.assigned_user_id === user?.id || !form.assigned_user_id
-  );
+  const visibleForms = hasActiveEnrollment
+    ? data.forms.filter((form) => form.assigned_user_id === user?.id || !form.assigned_user_id)
+    : [];
 
   const assignedActivities = activityEntries.filter((activity) => {
     const isAssignment = !activity.file_name && !activity.file_type;
@@ -410,7 +413,11 @@ const Dashboard = () => {
           )}
         </div>
 
-        {publishedCourses.length === 0 ? (
+        {!hasActiveEnrollment ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300">
+            Courses are shared by code only. Enter a valid code above to unlock your course view.
+          </div>
+        ) : publishedCourses.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300">
             No published courses available yet.
           </div>

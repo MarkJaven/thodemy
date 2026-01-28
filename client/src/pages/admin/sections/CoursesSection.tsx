@@ -67,6 +67,7 @@ const CoursesSection = () => {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [removingEnrollmentId, setRemovingEnrollmentId] = useState<string | null>(null);
+  const [regeneratingCourseId, setRegeneratingCourseId] = useState<string | null>(null);
 
   const topicLookup = useMemo(() => new Map(topics.map((topic) => [topic.id, topic])), [topics]);
 
@@ -290,6 +291,46 @@ const CoursesSection = () => {
     }
   };
 
+  const handleUpdateEnrollment = async (enrollmentId: string, status: string) => {
+    setActionError(null);
+    setRemovingEnrollmentId(enrollmentId);
+    try {
+      await adminCourseService.updateEnrollmentStatus(enrollmentId, status);
+      if (detail) {
+        const updatedEnrollments = detail.enrollments.map((entry) =>
+          entry.id === enrollmentId ? { ...entry, status } : entry
+        );
+        setDetail({ ...detail, enrollments: updatedEnrollments });
+      }
+      await loadData();
+    } catch (updateError) {
+      setActionError(
+        updateError instanceof Error ? updateError.message : "Unable to update enrollment."
+      );
+    } finally {
+      setRemovingEnrollmentId(null);
+    }
+  };
+
+  const handleRegenerateCode = async (courseId: string) => {
+    setActionError(null);
+    setRegeneratingCourseId(courseId);
+    try {
+      await adminCourseService.updateCourse(courseId, { regenerate_code: true });
+      await loadData();
+      if (detail && detail.course.id === courseId) {
+        const refreshed = await adminCourseService.getCourseDetail(courseId);
+        setDetail(refreshed);
+      }
+    } catch (regenError) {
+      setActionError(
+        regenError instanceof Error ? regenError.message : "Unable to regenerate course code."
+      );
+    } finally {
+      setRegeneratingCourseId(null);
+    }
+  };
+
   const columns = useMemo(
     () => [
       {
@@ -310,6 +351,18 @@ const CoursesSection = () => {
             {course.status ?? "draft"}
           </span>
         ),
+      },
+      {
+        key: "code",
+        header: "Code",
+        render: (course: CourseSummary) =>
+          course.course_code ? (
+            <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.2em] text-indigo-200">
+              {course.course_code}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-500">--</span>
+          ),
       },
       {
         key: "hours",
@@ -346,6 +399,14 @@ const CoursesSection = () => {
             </button>
             <button
               type="button"
+              onClick={() => handleRegenerateCode(course.id)}
+              disabled={regeneratingCourseId === course.id}
+              className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 disabled:opacity-60"
+            >
+              {regeneratingCourseId === course.id ? "Generating..." : "Generate Code"}
+            </button>
+            <button
+              type="button"
               onClick={() => openEdit(course)}
               className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
             >
@@ -362,7 +423,7 @@ const CoursesSection = () => {
         ),
       },
     ],
-    [topics]
+    [topics, regeneratingCourseId]
   );
 
   return (
@@ -842,6 +903,10 @@ const CoursesSection = () => {
                   enrollment.user?.email ||
                   enrollment.user?.username ||
                   enrollment.user_id;
+                const enrollmentStatus = enrollment.status ?? "pending";
+                const isPending = enrollmentStatus === "pending";
+                const isRejected = enrollmentStatus === "rejected";
+                const isRemoved = enrollmentStatus === "removed";
                 return (
                   <div
                     key={`enrollment-${enrollment.id}`}
@@ -851,28 +916,47 @@ const CoursesSection = () => {
                       <div>
                         <p className="text-white">{displayName}</p>
                         <p className="text-xs text-slate-400">
-                          Status: {enrollment.status ?? "pending"}
+                          Status: {enrollmentStatus}
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
                           {completion}% complete
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleKickEnrollment(enrollment.id)}
-                          disabled={
-                            removingEnrollmentId === enrollment.id ||
-                            enrollment.status === "removed"
-                          }
-                          className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
-                        >
-                          {enrollment.status === "removed"
-                            ? "Removed"
-                            : removingEnrollmentId === enrollment.id
-                            ? "Removing..."
-                            : "Kick"}
-                        </button>
+                        {isPending && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateEnrollment(enrollment.id, "approved")}
+                              disabled={removingEnrollmentId === enrollment.id}
+                              className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 disabled:opacity-50"
+                            >
+                              {removingEnrollmentId === enrollment.id ? "Updating..." : "Approve"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateEnrollment(enrollment.id, "rejected")}
+                              disabled={removingEnrollmentId === enrollment.id}
+                              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
+                            >
+                              {removingEnrollmentId === enrollment.id ? "Updating..." : "Reject"}
+                            </button>
+                          </>
+                        )}
+                        {!isPending && !isRejected && (
+                          <button
+                            type="button"
+                            onClick={() => handleKickEnrollment(enrollment.id)}
+                            disabled={removingEnrollmentId === enrollment.id || isRemoved}
+                            className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
+                          >
+                            {isRemoved
+                              ? "Removed"
+                              : removingEnrollmentId === enrollment.id
+                              ? "Removing..."
+                              : "Kick"}
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
