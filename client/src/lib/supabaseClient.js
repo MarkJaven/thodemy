@@ -28,6 +28,7 @@ export const supabaseAdmin =
         auth: {
           persistSession: false,
           autoRefreshToken: false,
+          storageKey: "sb-admin-auth-token",
         },
       })
     : null;

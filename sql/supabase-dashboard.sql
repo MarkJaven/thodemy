@@ -210,10 +210,19 @@ alter table public.quiz_attempts enable row level security;
 alter table public.forms enable row level security;
 
 drop policy if exists "Courses are readable by authenticated users" on public.courses;
-create policy "Courses are readable by authenticated users"
+drop policy if exists "Courses are readable by enrolled users" on public.courses;
+create policy "Courses are readable by enrolled users"
   on public.courses
   for select
-  using (auth.role() = 'authenticated');
+  using (
+    exists (
+      select 1
+      from public.enrollments
+      where user_id = auth.uid()
+        and course_id = id
+        and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+    )
+  );
 
 drop policy if exists "Lessons are readable by authenticated users" on public.lessons;
 create policy "Lessons are readable by authenticated users"
@@ -323,12 +332,20 @@ create policy "Quizzes are readable by assignee"
   on public.quizzes
   for select
   using (
-    assigned_user_id = auth.uid()
-    or course_id in (
-      select course_id
+    exists (
+      select 1
       from public.enrollments
       where user_id = auth.uid()
-        and status in ('approved', 'active', 'completed')
+        and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+    )
+    and (
+      assigned_user_id = auth.uid()
+      or course_id in (
+        select course_id
+        from public.enrollments
+        where user_id = auth.uid()
+          and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+      )
     )
   );
 
@@ -383,7 +400,15 @@ drop policy if exists "Forms are readable by owner or global" on public.forms;
 create policy "Forms are readable by owner or global"
   on public.forms
   for select
-  using (assigned_user_id = auth.uid() or assigned_user_id is null);
+  using (
+    exists (
+      select 1
+      from public.enrollments
+      where user_id = auth.uid()
+        and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+    )
+    and (assigned_user_id = auth.uid() or assigned_user_id is null)
+  );
 
 create table if not exists public.topics (
   id uuid primary key default gen_random_uuid(),

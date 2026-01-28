@@ -5,6 +5,8 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_API_URL ||
   "http://localhost:5000";
+
+console.log("[apiClient] API_BASE_URL:", API_BASE_URL);
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_RETRY_ATTEMPTS = 1;
 const RETRY_DELAY_MS = 300;

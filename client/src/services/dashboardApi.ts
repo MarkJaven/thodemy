@@ -473,25 +473,52 @@ export const dashboardApi = {
     const mockData = buildMockData(effectiveUserId);
 
     const userFilter = userId ? { user_id: userId } : undefined;
+    const enrollments = await readTable<Enrollment>(
+      "enrollments",
+      mockData.enrollments,
+      userFilter
+    );
+
+    const enrolledCourseIds = Array.from(
+      new Set(
+        enrollments
+          .filter((entry) =>
+            ["pending", "approved", "active", "completed", "enrolled"].includes(entry.status ?? "")
+          )
+          .map((entry) => entry.course_id)
+          .filter(Boolean)
+      )
+    );
+
+    let courses: Course[] = [];
+    if (!supabase || !userId) {
+      courses = await readTable<Course>("courses", mockData.courses);
+    } else if (enrolledCourseIds.length > 0) {
+      const { data, error } = await supabase
+        .from("courses")
+        .select("*")
+        .in("id", enrolledCourseIds);
+      if (error) {
+        throw new Error(error.message);
+      }
+      courses = (data ?? []) as Course[];
+    }
+
     const [
-      courses,
       lessons,
       lessonTopics,
       lessonAssignments,
       lessonSubmissions,
-      enrollments,
       activities,
       quizzes,
       quizScores,
       quizAttempts,
       forms,
     ] = await Promise.all([
-      readTable<Course>("courses", mockData.courses),
       readTable<Lesson>("lessons", mockData.lessons),
       readTable<LessonTopic>("lesson_topics", mockData.lessonTopics),
       readTable<LessonAssignment>("lesson_assignments", mockData.lessonAssignments, userFilter),
       readTable<LessonSubmission>("lesson_submissions", mockData.lessonSubmissions, userFilter),
-      readTable<Enrollment>("enrollments", mockData.enrollments, userFilter),
       readTable<Activity>("activities", mockData.activities),
       readTable<Quiz>("quizzes", mockData.quizzes),
       readTable<QuizScore>("quiz_scores", mockData.quizScores, userFilter),
