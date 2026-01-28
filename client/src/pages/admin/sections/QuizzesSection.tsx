@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
 import { superAdminService } from "../../../services/superAdminService";
-import type { AdminUser, Course, Quiz, QuizScore } from "../../../types/superAdmin";
+import type { AdminUser, Course, Quiz, QuizAttempt, QuizScore } from "../../../types/superAdmin";
 
 const QuizzesSection = () => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [scores, setScores] = useState<QuizScore[]>([]);
+  const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,8 +18,12 @@ const QuizzesSection = () => {
   const [formState, setFormState] = useState({
     title: "",
     description: "",
+    status: "active",
     course_id: "",
     assigned_user_id: "",
+    link_url: "",
+    start_at: "",
+    end_at: "",
   });
 
   const [isScoreOpen, setIsScoreOpen] = useState(false);
@@ -36,14 +41,16 @@ const QuizzesSection = () => {
     setLoading(true);
     setError(null);
     try {
-      const [quizData, scoreData, courseData, userData] = await Promise.all([
+      const [quizData, scoreData, attemptData, courseData, userData] = await Promise.all([
         superAdminService.listQuizzes(),
         superAdminService.listQuizScores(),
+        superAdminService.listQuizAttempts(),
         superAdminService.listCourses(),
         superAdminService.listUsers(),
       ]);
       setQuizzes(quizData);
       setScores(scoreData);
+      setAttempts(attemptData);
       setCourses(courseData);
       setUsers(userData);
     } catch (loadError) {
@@ -62,8 +69,12 @@ const QuizzesSection = () => {
     setFormState({
       title: "",
       description: "",
+      status: "active",
       course_id: "",
       assigned_user_id: "",
+      link_url: "",
+      start_at: "",
+      end_at: "",
     });
     setActionError(null);
     setIsFormOpen(true);
@@ -74,8 +85,12 @@ const QuizzesSection = () => {
     setFormState({
       title: quiz.title,
       description: quiz.description ?? "",
+      status: quiz.status ?? "active",
       course_id: quiz.course_id ?? "",
       assigned_user_id: quiz.assigned_user_id ?? "",
+      link_url: quiz.link_url ?? "",
+      start_at: quiz.start_at ? quiz.start_at.slice(0, 16) : "",
+      end_at: quiz.end_at ? quiz.end_at.slice(0, 16) : "",
     });
     setActionError(null);
     setIsFormOpen(true);
@@ -91,8 +106,12 @@ const QuizzesSection = () => {
           updates: {
             title: formState.title,
             description: formState.description,
+            status: formState.status,
             course_id: formState.course_id || null,
             assigned_user_id: formState.assigned_user_id || null,
+            link_url: formState.link_url || null,
+            start_at: formState.start_at ? new Date(formState.start_at).toISOString() : null,
+            end_at: formState.end_at ? new Date(formState.end_at).toISOString() : null,
           },
           questions: [],
         });
@@ -101,8 +120,12 @@ const QuizzesSection = () => {
           quiz: {
             title: formState.title,
             description: formState.description,
+            status: formState.status,
             course_id: formState.course_id || null,
             assigned_user_id: formState.assigned_user_id || null,
+            link_url: formState.link_url || null,
+            start_at: formState.start_at ? new Date(formState.start_at).toISOString() : null,
+            end_at: formState.end_at ? new Date(formState.end_at).toISOString() : null,
             show_score: true,
           },
           questions: [],
@@ -179,6 +202,19 @@ const QuizzesSection = () => {
     }
   };
 
+  const handleDeleteScore = async (scoreId: string) => {
+    setSaving(true);
+    setActionError(null);
+    try {
+      await superAdminService.deleteQuizScore(scoreId);
+      await loadData();
+    } catch (deleteError) {
+      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete score.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const quizColumns = useMemo(
     () => [
       {
@@ -199,7 +235,11 @@ const QuizzesSection = () => {
           const userEmail = users.find((user) => user.id === quiz.assigned_user_id)?.email;
           return (
             <span className="text-xs text-slate-400">
-              {courseName ? `Course: ${courseName}` : userEmail ? `User: ${userEmail}` : "Unassigned"}
+              {courseName
+                ? `Course: ${courseName}`
+                : userEmail
+                  ? `User: ${userEmail}`
+                  : "All users"}
             </span>
           );
         },
@@ -261,13 +301,64 @@ const QuizzesSection = () => {
         key: "actions",
         header: "Actions",
         render: (score: QuizScore) => (
-          <button
-            type="button"
-            onClick={() => openScoreEdit(score)}
-            className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
-          >
-            Edit
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openScoreEdit(score)}
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteScore(score.id)}
+              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200"
+            >
+              Delete
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [quizzes, users]
+  );
+
+  const attemptColumns = useMemo(
+    () => [
+      {
+        key: "quiz",
+        header: "Quiz",
+        render: (attempt: QuizAttempt) => (
+          <span className="text-xs text-slate-300">
+            {quizzes.find((quiz) => quiz.id === attempt.quiz_id)?.title ?? attempt.quiz_id}
+          </span>
+        ),
+      },
+      {
+        key: "user",
+        header: "User",
+        render: (attempt: QuizAttempt) => (
+          <span className="text-xs text-slate-300">
+            {users.find((user) => user.id === attempt.user_id)?.email ?? attempt.user_id}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (attempt: QuizAttempt) => (
+          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
+            {attempt.submitted_at ? "completed" : "pending"}
+          </span>
+        ),
+      },
+      {
+        key: "submitted",
+        header: "Submitted",
+        render: (attempt: QuizAttempt) => (
+          <span className="text-xs text-slate-300">
+            {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : "--"}
+          </span>
         ),
       },
     ],
@@ -318,6 +409,19 @@ const QuizzesSection = () => {
 
       <DataTable columns={scoreColumns} data={scores} emptyMessage="No scores recorded yet." />
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-xl text-white">Quiz completions</h3>
+          <p className="text-sm text-slate-400">User-submitted completion status.</p>
+        </div>
+      </div>
+
+      <DataTable
+        columns={attemptColumns}
+        data={attempts}
+        emptyMessage="No quiz completions yet."
+      />
+
       {actionError && <p className="text-xs text-rose-200">{actionError}</p>}
 
       <Modal
@@ -367,6 +471,48 @@ const QuizzesSection = () => {
           </label>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+              Status
+              <select
+                value={formState.status}
+                onChange={(event) =>
+                  setFormState((prev) => ({ ...prev, status: event.target.value }))
+                }
+                className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+              >
+                <option value="active">active</option>
+                <option value="archived">archived</option>
+              </select>
+            </label>
+            <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+              Assigned user
+              <select
+                value={formState.assigned_user_id}
+                onChange={(event) =>
+                  setFormState((prev) => ({ ...prev, assigned_user_id: event.target.value }))
+                }
+                className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+              >
+                <option value="">All users</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+              Microsoft Forms link
+              <input
+                type="url"
+                value={formState.link_url}
+                onChange={(event) =>
+                  setFormState((prev) => ({ ...prev, link_url: event.target.value }))
+                }
+                placeholder="https://forms.office.com/..."
+                className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+              />
+            </label>
+            <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
               Course
               <select
                 value={formState.course_id}
@@ -384,21 +530,26 @@ const QuizzesSection = () => {
               </select>
             </label>
             <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-              Assign to user (optional)
-              <select
-                value={formState.assigned_user_id}
+              Start date/time
+              <input
+                type="datetime-local"
+                value={formState.start_at}
                 onChange={(event) =>
-                  setFormState((prev) => ({ ...prev, assigned_user_id: event.target.value }))
+                  setFormState((prev) => ({ ...prev, start_at: event.target.value }))
                 }
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
-              >
-                <option value="">All users</option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.email}
-                  </option>
-                ))}
-              </select>
+              />
+            </label>
+            <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+              End date/time
+              <input
+                type="datetime-local"
+                value={formState.end_at}
+                onChange={(event) =>
+                  setFormState((prev) => ({ ...prev, end_at: event.target.value }))
+                }
+                className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+              />
             </label>
           </div>
         </div>

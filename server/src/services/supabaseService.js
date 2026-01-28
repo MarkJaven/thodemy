@@ -10,7 +10,7 @@ const getProfileByUserId = async (userId) => {
   try {
     const { data, error } = await supabaseAdmin
       .from("profiles")
-      .select("id, first_name, last_name, email, created_at, updated_at")
+      .select("id, first_name, last_name, username, email, created_at, updated_at")
       .eq("id", userId)
       .single();
 
