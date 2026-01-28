@@ -1,14 +1,12 @@
 const { supabaseAdmin } = require("../config/supabase");
 const {
   BadRequestError,
-  ConflictError,
   ExternalServiceError,
   NotFoundError,
 } = require("../utils/errors");
 const {
   calculateCourseTotals,
   calculateCourseEndDate,
-  generateCourseCode,
 } = require("../utils/courseUtils");
 
 const normalizeRelationMap = (value) => {
@@ -41,25 +39,6 @@ const resolveCourseTotals = async (topicIds) => {
   }
   const totals = calculateCourseTotals(topics);
   return { ...totals, topics };
-};
-
-const ensureUniqueCourseCode = async (attempts = 6) => {
-  for (let i = 0; i < attempts; i += 1) {
-    const code = generateCourseCode();
-    const { data, error } = await supabaseAdmin
-      .from("courses")
-      .select("id")
-      .eq("course_code", code)
-      .maybeSingle();
-    if (error && error.code !== "PGRST116") {
-      throw new ExternalServiceError("Unable to validate course code", {
-        code: error.code,
-        details: error.message,
-      });
-    }
-    if (!data) return code;
-  }
-  throw new ConflictError("Unable to generate a unique course code.");
 };
 
 const listCourses = async (_req, res, next) => {
@@ -204,7 +183,6 @@ const upsertCourse = async (req, res, next) => {
       enrollment_enabled = true,
       enrollment_limit,
       start_at,
-      regenerate_code,
     } = payload;
 
     if (!title || typeof title !== "string") {
@@ -256,9 +234,6 @@ const upsertCourse = async (req, res, next) => {
       if (userId) {
         coursePayload.updated_by = userId;
       }
-      if (regenerate_code) {
-        coursePayload.course_code = await ensureUniqueCourseCode();
-      }
       const { error } = await supabaseAdmin.from("courses").update(coursePayload).eq("id", courseId);
       if (error) {
         throw new ExternalServiceError("Unable to update course", {
@@ -269,7 +244,6 @@ const upsertCourse = async (req, res, next) => {
       return res.json({ courseId });
     }
 
-    coursePayload.course_code = await ensureUniqueCourseCode();
     if (userId) {
       coursePayload.created_by = userId;
       coursePayload.updated_by = userId;
@@ -327,86 +301,7 @@ const deleteEnrollment = async (req, res, next) => {
 
 const enrollByCode = async (req, res, next) => {
   try {
-    const userId = req.auth?.sub;
-    if (!userId) {
-      throw new BadRequestError("User session required to enroll.");
-    }
-    const { courseCode } = req.body || {};
-    if (!courseCode || typeof courseCode !== "string") {
-      throw new BadRequestError("Course code is required.");
-    }
-
-    const { data: course, error } = await supabaseAdmin
-      .from("courses")
-      .select("id, status, enrollment_enabled, enrollment_limit")
-      .eq("course_code", courseCode.trim())
-      .maybeSingle();
-    if (error) {
-      throw new ExternalServiceError("Unable to validate course code", {
-        code: error.code,
-        details: error.message,
-      });
-    }
-    if (!course) {
-      throw new NotFoundError("Course not found.");
-    }
-    if (course.status !== "published") {
-      throw new BadRequestError("Course is not open for enrollment.");
-    }
-    if (course.enrollment_enabled === false) {
-      throw new BadRequestError("Enrollment is currently disabled.");
-    }
-
-    const { data: existing, error: existingError } = await supabaseAdmin
-      .from("enrollments")
-      .select("id")
-      .eq("course_id", course.id)
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (existingError && existingError.code !== "PGRST116") {
-      throw new ExternalServiceError("Unable to validate enrollment", {
-        code: existingError.code,
-        details: existingError.message,
-      });
-    }
-    if (existing) {
-      throw new ConflictError("You are already enrolled in this course.");
-    }
-
-    if (course.enrollment_limit) {
-      const { count, error: countError } = await supabaseAdmin
-        .from("enrollments")
-        .select("id", { count: "exact", head: true })
-        .eq("course_id", course.id);
-      if (countError) {
-        throw new ExternalServiceError("Unable to validate enrollment limit", {
-          code: countError.code,
-          details: countError.message,
-        });
-      }
-      if ((count ?? 0) >= course.enrollment_limit) {
-        throw new ConflictError("Enrollment limit has been reached.");
-      }
-    }
-
-    const { data: enrollment, error: enrollError } = await supabaseAdmin
-      .from("enrollments")
-      .insert({
-        course_id: course.id,
-        user_id: userId,
-        status: "pending",
-        created_by: userId,
-        updated_by: userId,
-      })
-      .select("id, course_id, user_id, status, enrolled_at, created_at")
-      .single();
-    if (enrollError) {
-      throw new ExternalServiceError("Unable to enroll in course", {
-        code: enrollError.code,
-        details: enrollError.message,
-      });
-    }
-    return res.status(201).json({ enrollment, courseId: course.id });
+    throw new BadRequestError("Course enrollment is disabled. Use a learning path code.");
   } catch (error) {
     return next(error);
   }

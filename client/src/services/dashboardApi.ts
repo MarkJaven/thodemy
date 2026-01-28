@@ -1,18 +1,22 @@
 import { apiClient, getApiErrorMessage } from "../lib/apiClient";
 import { supabase } from "../lib/supabaseClient";
 import { calculateTopicEndDate } from "../lib/topicDates";
+import { calculateLearningPathEndDate } from "../lib/learningPathSchedule";
 import type {
   Activity,
   Course,
   DashboardData,
   Enrollment,
   Form,
+  LearningPath,
+  LearningPathEnrollment,
   Lesson,
   LessonAssignment,
   LessonSubmission,
   LessonTopic,
   Topic,
   TopicCompletionRequest,
+  CourseCompletionRequest,
   TopicProgress,
   TopicsData,
   Quiz,
@@ -178,6 +182,30 @@ const buildMockData = (userId: string): DashboardData => ({
       status: "active",
     },
   ],
+  learningPaths: [
+    {
+      id: "lp-foundations",
+      title: "Productivity Foundations",
+      description: "Build momentum across design, data, and communication essentials.",
+      course_ids: ["course-ux-01", "course-data-02", "course-comms-03"],
+      total_hours: 13,
+      total_days: 2,
+      enrollment_code: "LP-FOUND",
+      status: "published",
+      enrollment_enabled: true,
+      created_at: new Date().toISOString(),
+    },
+  ],
+  learningPathEnrollments: [
+    {
+      id: "lp-enroll-1",
+      user_id: userId,
+      learning_path_id: "lp-foundations",
+      enrolled_at: new Date().toISOString(),
+      status: "active",
+    },
+  ],
+  courseCompletionRequests: [],
   activities: [
     {
       id: "activity-1",
@@ -276,6 +304,7 @@ const buildMockTopicsData = (userId: string): TopicsData => ({
       id: "topic-setup",
       title: "Orientation & Setup",
       description: "Complete your onboarding checklist and tool access.",
+      link_url: "https://example.com/onboarding",
       time_allocated: 2,
       time_unit: "days",
       pre_requisites: [],
@@ -286,6 +315,7 @@ const buildMockTopicsData = (userId: string): TopicsData => ({
       id: "topic-foundations",
       title: "Core Foundations",
       description: "Review key workflows and expectations for the quarter.",
+      link_url: "https://example.com/foundations",
       time_allocated: 3,
       time_unit: "days",
       pre_requisites: ["topic-setup"],
@@ -296,6 +326,7 @@ const buildMockTopicsData = (userId: string): TopicsData => ({
       id: "topic-collaboration",
       title: "Collaboration Rituals",
       description: "Practice standups, feedback loops, and handoffs.",
+      link_url: "https://example.com/collaboration",
       time_allocated: 2,
       time_unit: "days",
       pre_requisites: ["topic-setup"],
@@ -399,11 +430,19 @@ export const dashboardApi = {
     if (!supabase) {
       throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
     }
+    const now = new Date().toISOString();
     const { error } = await supabase
       .from("topic_progress")
-      .update({ status: "completed" })
-      .eq("topic_id", payload.topicId)
-      .eq("user_id", payload.userId);
+      .upsert(
+        {
+          topic_id: payload.topicId,
+          user_id: payload.userId,
+          status: "completed",
+          start_date: now,
+          end_date: now,
+        },
+        { onConflict: "user_id,topic_id" }
+      );
     if (error) {
       throw new Error(error.message);
     }
@@ -478,6 +517,16 @@ export const dashboardApi = {
       mockData.enrollments,
       userFilter
     );
+    const learningPathEnrollments = await readTable<LearningPathEnrollment>(
+      "learning_path_enrollments",
+      mockData.learningPathEnrollments,
+      userFilter
+    );
+    const courseCompletionRequests = await readTable<CourseCompletionRequest>(
+      "course_completion_requests",
+      mockData.courseCompletionRequests,
+      userFilter
+    );
 
     const enrolledCourseIds = Array.from(
       new Set(
@@ -490,14 +539,43 @@ export const dashboardApi = {
       )
     );
 
+    const enrolledLearningPathIds = Array.from(
+      new Set(
+        learningPathEnrollments
+          .map((entry) => entry.learning_path_id)
+          .filter(Boolean)
+      )
+    );
+
+    let learningPaths: LearningPath[] = [];
+    if (!supabase || !userId) {
+      learningPaths = await readTable<LearningPath>("learning_paths", mockData.learningPaths);
+    } else if (enrolledLearningPathIds.length > 0) {
+      const { data, error } = await supabase
+        .from("learning_paths")
+        .select("*")
+        .in("id", enrolledLearningPathIds);
+      if (error) {
+        throw new Error(error.message);
+      }
+      learningPaths = (data ?? []) as LearningPath[];
+    }
+
+    const learningPathCourseIds = Array.from(
+      new Set(learningPaths.flatMap((path) => path.course_ids ?? []).filter(Boolean))
+    );
+    const combinedCourseIds = Array.from(
+      new Set([...enrolledCourseIds, ...learningPathCourseIds])
+    );
+
     let courses: Course[] = [];
     if (!supabase || !userId) {
       courses = await readTable<Course>("courses", mockData.courses);
-    } else if (enrolledCourseIds.length > 0) {
+    } else if (combinedCourseIds.length > 0) {
       const { data, error } = await supabase
         .from("courses")
         .select("*")
-        .in("id", enrolledCourseIds);
+        .in("id", combinedCourseIds);
       if (error) {
         throw new Error(error.message);
       }
@@ -533,6 +611,9 @@ export const dashboardApi = {
       lessonAssignments,
       lessonSubmissions,
       enrollments,
+      learningPaths,
+      learningPathEnrollments,
+      courseCompletionRequests,
       activities,
       quizzes,
       quizScores,
@@ -664,6 +745,121 @@ export const dashboardApi = {
       return { courseId: data?.courseId };
     } catch (error) {
       throw new Error(getApiErrorMessage(error));
+    }
+  },
+  async requestLearningPathEnrollment(payload: {
+    enrollmentCode: string;
+  }): Promise<{ learningPathId: string }> {
+    try {
+      const { data } = await apiClient.post("/api/learning-paths/enroll", payload);
+      return { learningPathId: data?.learningPathId };
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
+  },
+  async startLearningPathEnrollment(payload: {
+    enrollmentId: string;
+    userId: string;
+    totalDays: number;
+    startDate?: Date;
+  }): Promise<{ start_date: string; end_date: string | null }> {
+    if (!supabase) {
+      throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+    }
+    const startDate = payload.startDate ?? new Date();
+    const endDate =
+      payload.totalDays > 0
+        ? await calculateLearningPathEndDate(startDate, payload.totalDays)
+        : startDate;
+    const { error } = await supabase
+      .from("learning_path_enrollments")
+      .update({
+        start_date: startDate.toISOString(),
+        end_date: endDate ? endDate.toISOString() : null,
+        status: "active",
+      })
+      .eq("id", payload.enrollmentId)
+      .eq("user_id", payload.userId);
+    if (error) {
+      throw new Error(error.message);
+    }
+    return {
+      start_date: startDate.toISOString(),
+      end_date: endDate ? endDate.toISOString() : null,
+    };
+  },
+  async submitCourseCompletionProof(payload: {
+    courseId: string;
+    learningPathId: string;
+    userId: string;
+    file: File;
+  }): Promise<CourseCompletionRequest> {
+    if (!supabase) {
+      throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+    }
+    const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+    if (!allowedTypes.includes(payload.file.type)) {
+      throw new Error("Proof file must be a JPG, PNG, or PDF.");
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from("course_completion_requests")
+      .select("id, status")
+      .eq("course_id", payload.courseId)
+      .eq("learning_path_id", payload.learningPathId)
+      .eq("user_id", payload.userId)
+      .eq("status", "pending")
+      .maybeSingle();
+    if (existingError) {
+      throw new Error(existingError.message);
+    }
+    if (existing) {
+      throw new Error("A completion proof is already pending review.");
+    }
+
+    const timestamp = Date.now();
+    const safeName = payload.file.name.replace(/\s+/g, "_");
+    const filePath = `${payload.userId}/${payload.learningPathId}/${payload.courseId}/${timestamp}-${safeName}`;
+    const upload = await supabase.storage
+      .from("course-proofs")
+      .upload(filePath, payload.file, {
+        contentType: payload.file.type,
+        upsert: false,
+      });
+    if (upload.error) {
+      throw new Error(upload.error.message);
+    }
+
+    const { data, error } = await supabase
+      .from("course_completion_requests")
+      .insert({
+        course_id: payload.courseId,
+        learning_path_id: payload.learningPathId,
+        user_id: payload.userId,
+        storage_path: filePath,
+        file_name: payload.file.name,
+        file_type: payload.file.type,
+        status: "pending",
+      })
+      .select(
+        "id, course_id, learning_path_id, user_id, storage_path, file_name, file_type, status, created_at, updated_at, reviewed_at, reviewed_by"
+      )
+      .single();
+    if (error) {
+      throw new Error(error.message);
+    }
+    return data as CourseCompletionRequest;
+  },
+  async deleteLearningPathEnrollment(enrollmentId: string): Promise<void> {
+    if (!supabase) {
+      throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+    }
+    const { error } = await supabase
+      .from("learning_path_enrollments")
+      .delete()
+      .eq("id", enrollmentId);
+    if (error) {
+      throw new Error(error.message);
     }
   },
 };

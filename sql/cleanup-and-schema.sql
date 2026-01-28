@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS public.topics (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title text NOT NULL,
   description text,
+  link_url text,
   time_allocated numeric NOT NULL,
   time_unit text NOT NULL DEFAULT 'days' CHECK (time_unit IN ('hours', 'days')),
   pre_requisites uuid[] NOT NULL DEFAULT '{}'::uuid[],
@@ -175,10 +176,29 @@ CREATE TABLE IF NOT EXISTS public.topic_completion_requests (
   reviewed_by uuid REFERENCES auth.users(id)
 );
 
+CREATE TABLE IF NOT EXISTS public.course_completion_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  course_id uuid NOT NULL REFERENCES public.courses(id) ON DELETE CASCADE,
+  learning_path_id uuid NOT NULL REFERENCES public.learning_paths(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  storage_path text NOT NULL,
+  file_name text NOT NULL,
+  file_type text NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  reviewed_at timestamptz,
+  reviewed_by uuid REFERENCES auth.users(id)
+);
+
 CREATE INDEX IF NOT EXISTS topic_progress_user_idx ON public.topic_progress(user_id);
 CREATE INDEX IF NOT EXISTS topic_progress_topic_idx ON public.topic_progress(topic_id);
 CREATE INDEX IF NOT EXISTS topic_completion_requests_user_idx ON public.topic_completion_requests(user_id);
 CREATE INDEX IF NOT EXISTS topic_completion_requests_topic_idx ON public.topic_completion_requests(topic_id);
+CREATE INDEX IF NOT EXISTS course_completion_requests_user_idx ON public.course_completion_requests(user_id);
+CREATE INDEX IF NOT EXISTS course_completion_requests_course_idx ON public.course_completion_requests(course_id);
+CREATE INDEX IF NOT EXISTS course_completion_requests_lp_idx ON public.course_completion_requests(learning_path_id);
+CREATE INDEX IF NOT EXISTS course_completion_requests_status_idx ON public.course_completion_requests(status);
 CREATE INDEX IF NOT EXISTS topic_completion_requests_status_idx ON public.topic_completion_requests(status);
 
 -- ============================================
@@ -387,6 +407,7 @@ ALTER TABLE public.enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.topics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.topic_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.topic_completion_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.course_completion_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lesson_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lesson_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
@@ -680,7 +701,6 @@ CREATE POLICY "Topic progress updatable by owner"
   WITH CHECK (
     auth.uid() = user_id
     AND public.topic_prereqs_met(topic_id, user_id)
-    AND (status <> 'completed' OR public.topic_completion_approved(topic_id, user_id))
   );
 
 DROP POLICY IF EXISTS "Topic progress updatable by admin" ON public.topic_progress;
@@ -708,6 +728,28 @@ CREATE POLICY "Topic completion requests readable by admin"
 DROP POLICY IF EXISTS "Topic completion requests updatable by admin" ON public.topic_completion_requests;
 CREATE POLICY "Topic completion requests updatable by admin"
   ON public.topic_completion_requests FOR UPDATE
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+-- Course completion request policies
+DROP POLICY IF EXISTS "Course completion readable by owner" ON public.course_completion_requests;
+CREATE POLICY "Course completion readable by owner"
+  ON public.course_completion_requests FOR SELECT
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Course completion insertable by owner" ON public.course_completion_requests;
+CREATE POLICY "Course completion insertable by owner"
+  ON public.course_completion_requests FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Course completion readable by admin" ON public.course_completion_requests;
+CREATE POLICY "Course completion readable by admin"
+  ON public.course_completion_requests FOR SELECT
+  USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Course completion updatable by admin" ON public.course_completion_requests;
+CREATE POLICY "Course completion updatable by admin"
+  ON public.course_completion_requests FOR UPDATE
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
@@ -838,6 +880,10 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('topic-proofs', 'topic-proofs', false)
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('course-proofs', 'course-proofs', false)
+ON CONFLICT (id) DO NOTHING;
+
 -- Storage policies
 DROP POLICY IF EXISTS "Lesson proofs insert by owner" ON storage.objects;
 CREATE POLICY "Lesson proofs insert by owner"
@@ -868,6 +914,21 @@ DROP POLICY IF EXISTS "Topic proofs read by admin" ON storage.objects;
 CREATE POLICY "Topic proofs read by admin"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'topic-proofs' AND public.is_admin());
+
+DROP POLICY IF EXISTS "Course proofs insert by owner" ON storage.objects;
+CREATE POLICY "Course proofs insert by owner"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'course-proofs' AND auth.uid() = owner);
+
+DROP POLICY IF EXISTS "Course proofs read by owner" ON storage.objects;
+CREATE POLICY "Course proofs read by owner"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'course-proofs' AND auth.uid() = owner);
+
+DROP POLICY IF EXISTS "Course proofs read by admin" ON storage.objects;
+CREATE POLICY "Course proofs read by admin"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'course-proofs' AND public.is_admin());
 
 -- ============================================
 -- DONE! Your database is now clean.

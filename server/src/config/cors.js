@@ -11,9 +11,15 @@ const validateOrigin = (origin, callback) => {
   if (!origin) {
     return callback(null, true);
   }
-  // Allow all localhost origins in development
-  if (env.nodeEnv === "development" && origin.includes("localhost")) {
-    return callback(null, true);
+  // Allow all local origins in development (localhost, 127.0.0.1, LAN IPs)
+  if (env.nodeEnv === "development") {
+    if (
+      origin.includes("localhost") ||
+      origin.includes("127.0.0.1") ||
+      /^https?:\/\/(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(origin)
+    ) {
+      return callback(null, true);
+    }
   }
   if (env.frontendOrigins.includes(origin)) {
     return callback(null, true);
