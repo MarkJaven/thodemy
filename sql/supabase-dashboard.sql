@@ -414,6 +414,7 @@ create table if not exists public.topics (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text,
+  link_url text,
   time_allocated numeric not null,
   time_unit text not null default 'days' check (time_unit in ('hours', 'days')),
   pre_requisites uuid[] not null default '{}'::uuid[],
@@ -421,6 +422,7 @@ create table if not exists public.topics (
   created_at timestamptz not null default now()
 );
 
+alter table public.topics add column if not exists link_url text;
 alter table public.topics add column if not exists time_unit text not null default 'days';
 alter table public.topics drop constraint if exists topics_time_unit_check;
 alter table public.topics
@@ -454,16 +456,36 @@ create table if not exists public.topic_completion_requests (
   reviewed_by uuid references auth.users(id)
 );
 
+create table if not exists public.course_completion_requests (
+  id uuid primary key default gen_random_uuid(),
+  course_id uuid not null references public.courses(id) on delete cascade,
+  learning_path_id uuid not null references public.learning_paths(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  storage_path text not null,
+  file_name text not null,
+  file_type text not null,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  reviewed_by uuid references auth.users(id)
+);
+
 create index if not exists topics_created_at_idx on public.topics(created_at);
 create index if not exists topic_progress_user_idx on public.topic_progress(user_id);
 create index if not exists topic_progress_topic_idx on public.topic_progress(topic_id);
 create index if not exists topic_completion_requests_user_idx on public.topic_completion_requests(user_id);
 create index if not exists topic_completion_requests_topic_idx on public.topic_completion_requests(topic_id);
 create index if not exists topic_completion_requests_status_idx on public.topic_completion_requests(status);
+create index if not exists course_completion_requests_user_idx on public.course_completion_requests(user_id);
+create index if not exists course_completion_requests_course_idx on public.course_completion_requests(course_id);
+create index if not exists course_completion_requests_lp_idx on public.course_completion_requests(learning_path_id);
+create index if not exists course_completion_requests_status_idx on public.course_completion_requests(status);
 
 alter table public.topics enable row level security;
 alter table public.topic_progress enable row level security;
 alter table public.topic_completion_requests enable row level security;
+alter table public.course_completion_requests enable row level security;
 
 create or replace function public.topic_prereqs_met(target_topic_id uuid, target_user_id uuid)
 returns boolean
@@ -514,6 +536,8 @@ drop policy if exists "Topic progress insertable by owner" on public.topic_progr
 drop policy if exists "Topic progress updatable by owner" on public.topic_progress;
 drop policy if exists "Topic completion requests readable by owner" on public.topic_completion_requests;
 drop policy if exists "Topic completion requests insertable by owner" on public.topic_completion_requests;
+drop policy if exists "Course completion readable by owner" on public.course_completion_requests;
+drop policy if exists "Course completion insertable by owner" on public.course_completion_requests;
 
 create policy "Topics are readable by authenticated users"
   on public.topics
@@ -537,7 +561,6 @@ create policy "Topic progress updatable by owner"
   with check (
     auth.uid() = user_id
     and public.topic_prereqs_met(topic_id, user_id)
-    and (status <> 'completed' or public.topic_completion_approved(topic_id, user_id))
   );
 
 create policy "Topic completion requests readable by owner"
@@ -547,6 +570,16 @@ create policy "Topic completion requests readable by owner"
 
 create policy "Topic completion requests insertable by owner"
   on public.topic_completion_requests
+  for insert
+  with check (auth.uid() = user_id);
+
+create policy "Course completion readable by owner"
+  on public.course_completion_requests
+  for select
+  using (auth.uid() = user_id);
+
+create policy "Course completion insertable by owner"
+  on public.course_completion_requests
   for insert
   with check (auth.uid() = user_id);
 
@@ -570,5 +603,28 @@ create policy "Topic proofs read by owner"
   for select
   using (
     bucket_id = 'topic-proofs'
+    and auth.uid() = owner
+  );
+
+insert into storage.buckets (id, name, public)
+values ('course-proofs', 'course-proofs', false)
+on conflict (id) do nothing;
+
+drop policy if exists "Course proofs insert by owner" on storage.objects;
+drop policy if exists "Course proofs read by owner" on storage.objects;
+
+create policy "Course proofs insert by owner"
+  on storage.objects
+  for insert
+  with check (
+    bucket_id = 'course-proofs'
+    and auth.uid() = owner
+  );
+
+create policy "Course proofs read by owner"
+  on storage.objects
+  for select
+  using (
+    bucket_id = 'course-proofs'
     and auth.uid() = owner
   );

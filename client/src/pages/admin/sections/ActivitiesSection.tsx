@@ -8,21 +8,36 @@ import type {
   ActivitySubmission,
   AdminUser,
   Course,
+  CourseCompletionRequest,
   Enrollment,
+  LearningPath,
+  LearningPathEnrollment,
   Topic,
-  TopicCompletionRequest,
   TopicProgress,
 } from "../../../types/superAdmin";
+
+const formatDate = (value?: string | null) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
 
 const ActivitiesSection = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [learningPaths, setLearningPaths] = useState<LearningPath[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [learningPathEnrollments, setLearningPathEnrollments] = useState<
+    LearningPathEnrollment[]
+  >([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicProgress, setTopicProgress] = useState<TopicProgress[]>([]);
-  const [completionRequests, setCompletionRequests] = useState<TopicCompletionRequest[]>([]);
+  const [courseCompletionRequests, setCourseCompletionRequests] = useState<
+    CourseCompletionRequest[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +51,8 @@ const ActivitiesSection = () => {
     status: "active",
   });
   const [saving, setSaving] = useState(false);
+  const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<string | null>(null);
+  const [updatingLPEnrollmentId, setUpdatingLPEnrollmentId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
   const { user } = useUser();
@@ -48,29 +65,35 @@ const ActivitiesSection = () => {
         activityData,
         submissionData,
         courseData,
+        learningPathData,
         userData,
         enrollmentData,
+        learningPathEnrollmentData,
         topicData,
         topicProgressData,
-        completionData,
+        courseCompletionData,
       ] = await Promise.all([
         superAdminService.listActivities(),
         superAdminService.listActivitySubmissions(),
         superAdminService.listCourses(),
+        superAdminService.listLearningPaths(),
         superAdminService.listUsers(),
         superAdminService.listEnrollments(),
+        superAdminService.listLearningPathEnrollments(),
         superAdminService.listTopics(),
         superAdminService.listTopicProgress(),
-        superAdminService.listTopicCompletionRequests(),
+        superAdminService.listCourseCompletionRequests(),
       ]);
       setActivities(activityData);
       setSubmissions(submissionData);
       setCourses(courseData);
+      setLearningPaths(learningPathData);
       setUsers(userData);
       setEnrollments(enrollmentData);
+      setLearningPathEnrollments(learningPathEnrollmentData);
       setTopics(topicData);
       setTopicProgress(topicProgressData);
-      setCompletionRequests(completionData);
+      setCourseCompletionRequests(courseCompletionData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load activities.");
     } finally {
@@ -175,10 +198,10 @@ const ActivitiesSection = () => {
     }
   };
 
-  const handleViewProof = async (request: TopicCompletionRequest) => {
+  const handleViewCourseProof = async (request: CourseCompletionRequest) => {
     setViewError(null);
     try {
-      const url = await superAdminService.getTopicProofUrl(request.storage_path);
+      const url = await superAdminService.getCourseProofUrl(request.storage_path);
       if (!url) {
         setViewError("No file available for this proof.");
         return;
@@ -189,20 +212,14 @@ const ActivitiesSection = () => {
     }
   };
 
-  const handleApproveRequest = async (request: TopicCompletionRequest) => {
+  const handleApproveCourseRequest = async (request: CourseCompletionRequest) => {
     setSaving(true);
     setActionError(null);
     try {
-      await superAdminService.updateTopicCompletionRequest(request.id, {
+      await superAdminService.updateCourseCompletionRequest(request.id, {
         status: "approved",
         reviewed_at: new Date().toISOString(),
         reviewed_by: user?.id ?? null,
-      });
-      await superAdminService.updateTopicProgressStatus({
-        topicId: request.topic_id,
-        userId: request.user_id,
-        status: "completed",
-        end_date: new Date().toISOString(),
       });
       await loadData();
     } catch (approveError) {
@@ -214,11 +231,11 @@ const ActivitiesSection = () => {
     }
   };
 
-  const handleRejectRequest = async (request: TopicCompletionRequest) => {
+  const handleRejectCourseRequest = async (request: CourseCompletionRequest) => {
     setSaving(true);
     setActionError(null);
     try {
-      await superAdminService.updateTopicCompletionRequest(request.id, {
+      await superAdminService.updateCourseCompletionRequest(request.id, {
         status: "rejected",
         reviewed_at: new Date().toISOString(),
         reviewed_by: user?.id ?? null,
@@ -232,6 +249,152 @@ const ActivitiesSection = () => {
       setSaving(false);
     }
   };
+
+  const handleEnrollmentAction = async (enrollmentId: string, status: string) => {
+    setUpdatingEnrollmentId(enrollmentId);
+    setActionError(null);
+    try {
+      await superAdminService.updateEnrollmentStatus(enrollmentId, { status });
+      setEnrollments((prev) =>
+        prev.map((entry) =>
+          entry.id === enrollmentId ? { ...entry, status } : entry
+        )
+      );
+    } catch (updateError) {
+      setActionError(
+        updateError instanceof Error ? updateError.message : "Unable to update enrollment."
+      );
+    } finally {
+      setUpdatingEnrollmentId(null);
+    }
+  };
+
+  const handleLearningPathEnrollmentAction = async (
+    enrollmentId: string,
+    status: string
+  ) => {
+    setUpdatingLPEnrollmentId(enrollmentId);
+    setActionError(null);
+    try {
+      await superAdminService.updateLearningPathEnrollmentStatus(enrollmentId, status);
+      setLearningPathEnrollments((prev) =>
+        prev.map((entry) =>
+          entry.id === enrollmentId ? { ...entry, status } : entry
+        )
+      );
+    } catch (updateError) {
+      setActionError(
+        updateError instanceof Error ? updateError.message : "Unable to update enrollment."
+      );
+    } finally {
+      setUpdatingLPEnrollmentId(null);
+    }
+  };
+
+  const learningPathEnrollmentRows = useMemo(
+    () =>
+      learningPathEnrollments.map((enrollment) => ({
+        enrollment,
+        user: users.find((entry) => entry.id === enrollment.user_id),
+        learningPath: learningPaths.find(
+          (entry) => entry.id === enrollment.learning_path_id
+        ),
+      })),
+    [learningPathEnrollments, users, learningPaths]
+  );
+
+  const learningPathEnrollmentColumns = useMemo(
+    () => [
+      {
+        key: "user",
+        header: "User",
+        render: (row: (typeof learningPathEnrollmentRows)[number]) => (
+          <span className="text-xs text-slate-300">
+            {row.user?.email ?? row.enrollment.user_id}
+          </span>
+        ),
+      },
+      {
+        key: "learningPath",
+        header: "Learning Path",
+        render: (row: (typeof learningPathEnrollmentRows)[number]) => (
+          <span className="text-xs text-slate-300">
+            {row.learningPath?.title ?? row.enrollment.learning_path_id}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (row: (typeof learningPathEnrollmentRows)[number]) => (
+          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
+            {row.enrollment.status ?? "pending"}
+          </span>
+        ),
+      },
+      {
+        key: "date",
+        header: "Enrolled",
+        render: (row: (typeof learningPathEnrollmentRows)[number]) => (
+          <span className="text-xs text-slate-400">
+            {formatDate(row.enrollment.enrolled_at ?? row.enrollment.created_at)}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (row: (typeof learningPathEnrollmentRows)[number]) => {
+          const status = row.enrollment.status ?? "pending";
+          const isPending = status === "pending";
+          const isActive = ["approved", "active", "enrolled"].includes(status);
+          const isUpdating = updatingLPEnrollmentId === row.enrollment.id;
+          if (!isPending && !isActive) return null;
+          return (
+            <div className="flex flex-wrap items-center gap-2">
+              {isPending && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleLearningPathEnrollmentAction(row.enrollment.id, "approved")
+                    }
+                    disabled={isUpdating}
+                    className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50"
+                  >
+                    {isUpdating ? "Updating..." : "Accept"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleLearningPathEnrollmentAction(row.enrollment.id, "rejected")
+                    }
+                    disabled={isUpdating}
+                    className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+                  >
+                    {isUpdating ? "Updating..." : "Reject"}
+                  </button>
+                </>
+              )}
+              {isActive && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleLearningPathEnrollmentAction(row.enrollment.id, "removed")
+                  }
+                  disabled={isUpdating}
+                  className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+                >
+                  {isUpdating ? "Removing..." : "Kick"}
+                </button>
+              )}
+            </div>
+          );
+        },
+      },
+    ],
+    [learningPathEnrollmentRows, updatingLPEnrollmentId, handleLearningPathEnrollmentAction]
+  );
 
   const activityColumns = useMemo(
     () => [
@@ -411,48 +574,94 @@ const ActivitiesSection = () => {
           </span>
         ),
       },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (row: (typeof progressRows)[number]) => {
+          const status = row.enrollment.status ?? "pending";
+          const isPending = status === "pending";
+          const isActive = ["approved", "active", "enrolled"].includes(status);
+          const isUpdating = updatingEnrollmentId === row.enrollment.id;
+          if (!isPending && !isActive) return null;
+          return (
+            <div className="flex flex-wrap items-center gap-2">
+              {isPending && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleEnrollmentAction(row.enrollment.id, "approved")}
+                    disabled={isUpdating}
+                    className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50"
+                  >
+                    {isUpdating ? "Updating..." : "Approve"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleEnrollmentAction(row.enrollment.id, "rejected")}
+                    disabled={isUpdating}
+                    className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+                  >
+                    {isUpdating ? "Updating..." : "Reject"}
+                  </button>
+                </>
+              )}
+              {isActive && (
+                <button
+                  type="button"
+                  onClick={() => handleEnrollmentAction(row.enrollment.id, "removed")}
+                  disabled={isUpdating}
+                  className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+                >
+                  {isUpdating ? "Removing..." : "Kick"}
+                </button>
+              )}
+            </div>
+          );
+        },
+      },
     ],
-    [progressRows, users]
+    [progressRows, users, updatingEnrollmentId]
   );
 
-  const pendingCompletionRequests = useMemo(
-    () => completionRequests.filter((request) => request.status === "pending"),
-    [completionRequests]
+  const pendingCourseCompletionRequests = useMemo(
+    () => courseCompletionRequests.filter((request) => request.status === "pending"),
+    [courseCompletionRequests]
   );
 
-  const completionColumns = useMemo(
+  const courseCompletionColumns = useMemo(
     () => [
       {
         key: "user",
         header: "User",
-        render: (request: TopicCompletionRequest) => (
+        render: (request: CourseCompletionRequest) => (
           <span className="text-xs text-slate-300">
             {users.find((entry) => entry.id === request.user_id)?.email ?? request.user_id}
           </span>
         ),
       },
       {
-        key: "course",
-        header: "Course",
-        render: (request: TopicCompletionRequest) => (
+        key: "learningPath",
+        header: "Learning Path",
+        render: (request: CourseCompletionRequest) => (
           <span className="text-xs text-slate-300">
-            {courses.find((course) => course.id === request.course_id)?.title ?? "Unassigned"}
+            {learningPaths.find((path) => path.id === request.learning_path_id)?.title ??
+              request.learning_path_id}
           </span>
         ),
       },
       {
-        key: "topic",
-        header: "Topic",
-        render: (request: TopicCompletionRequest) => (
+        key: "course",
+        header: "Course",
+        render: (request: CourseCompletionRequest) => (
           <span className="text-xs text-slate-300">
-            {topics.find((topic) => topic.id === request.topic_id)?.title ?? request.topic_id}
+            {courses.find((course) => course.id === request.course_id)?.title ?? request.course_id}
           </span>
         ),
       },
       {
         key: "status",
         header: "Status",
-        render: (request: TopicCompletionRequest) => (
+        render: (request: CourseCompletionRequest) => (
           <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
             {request.status ?? "pending"}
           </span>
@@ -461,18 +670,18 @@ const ActivitiesSection = () => {
       {
         key: "actions",
         header: "Actions",
-        render: (request: TopicCompletionRequest) => (
+        render: (request: CourseCompletionRequest) => (
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => handleViewProof(request)}
+              onClick={() => handleViewCourseProof(request)}
               className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
             >
               View
             </button>
             <button
               type="button"
-              onClick={() => handleApproveRequest(request)}
+              onClick={() => handleApproveCourseRequest(request)}
               disabled={request.status === "approved" || saving}
               className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 disabled:opacity-50"
             >
@@ -480,7 +689,7 @@ const ActivitiesSection = () => {
             </button>
             <button
               type="button"
-              onClick={() => handleRejectRequest(request)}
+              onClick={() => handleRejectCourseRequest(request)}
               disabled={request.status === "rejected" || saving}
               className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
             >
@@ -490,7 +699,7 @@ const ActivitiesSection = () => {
         ),
       },
     ],
-    [users, courses, topics, saving]
+    [users, courses, learningPaths, saving]
   );
 
   if (loading) {
@@ -503,6 +712,20 @@ const ActivitiesSection = () => {
 
   return (
     <div className="space-y-6">
+      <div className="space-y-4">
+        <div>
+          <h2 className="font-display text-2xl text-white">Learning path enrollments</h2>
+          <p className="text-sm text-slate-300">
+            Review users who requested access via learning path code.
+          </p>
+        </div>
+        <DataTable
+          columns={learningPathEnrollmentColumns}
+          data={learningPathEnrollmentRows}
+          emptyMessage="No learning path enrollment requests yet."
+        />
+      </div>
+
       <div className="space-y-4">
         <div>
           <h2 className="font-display text-2xl text-white">Course progress</h2>
@@ -547,15 +770,15 @@ const ActivitiesSection = () => {
 
       <div className="space-y-3">
         <div>
-          <h3 className="font-display text-xl text-white">Completion proofs</h3>
+          <h3 className="font-display text-xl text-white">Course completion proofs</h3>
           <p className="text-sm text-slate-400">
-            Review user proof uploads before marking topics complete.
+            Review uploaded course proofs before unlocking the next course.
           </p>
         </div>
         <DataTable
-          columns={completionColumns}
-          data={pendingCompletionRequests}
-          emptyMessage="No completion proofs yet."
+          columns={courseCompletionColumns}
+          data={pendingCourseCompletionRequests}
+          emptyMessage="No course proofs yet."
         />
       </div>
 
