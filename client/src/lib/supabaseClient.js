@@ -2,6 +2,7 @@
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
 const hasEnv = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -18,3 +19,15 @@ export const supabase = hasEnv
       },
     })
   : null;
+
+// Admin client for user management (requires service role key)
+// WARNING: Only use in development. For production, use Supabase Edge Functions.
+export const supabaseAdmin =
+  supabaseUrl && supabaseServiceKey
+    ? createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      })
+    : null;

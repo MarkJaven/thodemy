@@ -21,7 +21,13 @@ const AuthCallback = () => {
         await authService.exchangeCodeForSession(window.location.href);
         const session = await authService.getSession();
         const role = await superAdminService.getCurrentRole(session?.user?.id);
-        navigate(role === "superadmin" ? "/super-admin" : "/dashboard", { replace: true });
+        if (role === "superadmin") {
+          navigate("/super-admin", { replace: true });
+        } else if (role === "admin") {
+          navigate("/admin", { replace: true });
+        } else {
+          navigate("/dashboard", { replace: true });
+        }
       } catch (exchangeError) {
         setError(exchangeError.message);
       }

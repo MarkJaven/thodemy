@@ -1,6 +1,14 @@
 import type { ReactNode } from "react";
 
-export type TabKey = "enroll" | "track" | "activity" | "quiz" | "forms";
+export type TabKey =
+  | "enroll"
+  | "track"
+  | "activity"
+  | "quiz"
+  | "forms"
+  | "users"
+  | "courses"
+  | "topics";
 
 export type TabDefinition = {
   key: TabKey;

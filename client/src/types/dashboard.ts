@@ -6,6 +6,17 @@ export type Course = {
   level?: string | null;
   duration_hours?: number | null;
   banner_url?: string | null;
+  topic_ids?: string[] | null;
+  topic_prerequisites?: Record<string, string[]> | null;
+  topic_corequisites?: Record<string, string[]> | null;
+  total_hours?: number | null;
+  total_days?: number | null;
+  course_code?: string | null;
+  status?: "draft" | "published" | "archived" | string | null;
+  enrollment_enabled?: boolean | null;
+  enrollment_limit?: number | null;
+  start_at?: string | null;
+  end_at?: string | null;
   created_at?: string | null;
 };
 
@@ -18,20 +29,82 @@ export type Lesson = {
   is_required?: boolean | null;
 };
 
+export type LessonTopic = {
+  id: string;
+  lesson_id: string;
+  title: string;
+  content?: string | null;
+  order_index: number;
+};
+
+export type Topic = {
+  id: string;
+  title: string;
+  description?: string | null;
+  time_allocated: number;
+  time_unit?: "hours" | "days" | null;
+  pre_requisites?: string[] | null;
+  co_requisites?: string[] | null;
+  created_at?: string | null;
+};
+
+export type TopicStatus = "not_started" | "in_progress" | "completed";
+
+export type TopicProgress = {
+  id: string;
+  topic_id: string;
+  user_id: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  status?: TopicStatus | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type TopicCompletionRequest = {
+  id: string;
+  topic_id: string;
+  user_id: string;
+  course_id?: string | null;
+  storage_path: string;
+  file_name: string;
+  file_type: string;
+  status?: "pending" | "approved" | "rejected" | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+};
+
+export type LessonAssignment = {
+  id: string;
+  user_id: string;
+  course_id: string;
+  lesson_id: string;
+  start_at?: string | null;
+  due_at?: string | null;
+  status?: string | null;
+  submitted_at?: string | null;
+  review_status?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+};
+
+export type LessonSubmission = {
+  id: string;
+  lesson_assignment_id: string;
+  user_id: string;
+  file_path: string;
+  file_type: string;
+  submitted_at?: string | null;
+};
+
 export type Enrollment = {
   id: string;
   user_id: string;
   course_id: string;
   enrolled_at?: string | null;
   status?: "pending" | "approved" | "rejected" | "active" | "completed" | "paused" | null;
-};
-
-export type UserProgress = {
-  id: string;
-  user_id: string;
-  lesson_id: string;
-  completed: boolean;
-  completed_at?: string | null;
 };
 
 export type Activity = {
@@ -53,6 +126,10 @@ export type Quiz = {
   assigned_user_id?: string | null;
   title: string;
   description?: string | null;
+  status?: string | null;
+  link_url?: string | null;
+  start_at?: string | null;
+  end_at?: string | null;
   total_questions?: number | null;
   score_visible?: boolean | null;
   show_score?: boolean | null;
@@ -66,6 +143,15 @@ export type QuizScore = {
   score: number;
   submitted_at?: string | null;
   graded_by?: string | null;
+};
+
+export type QuizAttempt = {
+  id: string;
+  quiz_id: string;
+  user_id: string;
+  answers?: Record<string, string> | null;
+  score?: number | null;
+  submitted_at?: string | null;
 };
 
 export type Form = {
@@ -83,10 +169,19 @@ export type Form = {
 export type DashboardData = {
   courses: Course[];
   lessons: Lesson[];
+  lessonTopics: LessonTopic[];
+  lessonAssignments: LessonAssignment[];
+  lessonSubmissions: LessonSubmission[];
   enrollments: Enrollment[];
-  progress: UserProgress[];
   activities: Activity[];
   quizzes: Quiz[];
   quizScores: QuizScore[];
+  quizAttempts: QuizAttempt[];
   forms: Form[];
+};
+
+export type TopicsData = {
+  topics: Topic[];
+  topicProgress: TopicProgress[];
+  topicCompletionRequests: TopicCompletionRequest[];
 };

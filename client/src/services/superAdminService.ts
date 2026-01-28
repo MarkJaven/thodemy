@@ -1,10 +1,16 @@
-import { apiClient, getApiErrorMessage } from "../lib/apiClient";
-import { supabase } from "../lib/supabaseClient";
+import { supabase, supabaseAdmin } from "../lib/supabaseClient";
 import type {
   Activity,
   ActivitySubmission,
   AdminUser,
   Course,
+  Lesson,
+  LessonAssignment,
+  LessonSubmission,
+  LessonTopic,
+  Topic,
+  TopicCompletionRequest,
+  TopicProgress,
   Enrollment,
   Form,
   FormQuestion,
@@ -23,6 +29,13 @@ const requireSupabase = () => {
     throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
   }
   return supabase;
+};
+
+const requireSupabaseAdmin = () => {
+  if (!supabaseAdmin) {
+    throw new Error("Supabase Admin is not configured. Set VITE_SUPABASE_SERVICE_ROLE_KEY.");
+  }
+  return supabaseAdmin;
 };
 
 const parseOptions = (value: unknown): string[] => {
@@ -57,7 +70,7 @@ export const superAdminService = {
     const client = requireSupabase();
     const { data: profiles, error: profileError } = await client
       .from("profiles")
-      .select("id, first_name, last_name, email, created_at, updated_at")
+      .select("id, first_name, last_name, username, email, created_at, updated_at")
       .order("created_at", { ascending: false });
     if (profileError) throw new Error(profileError.message);
 
@@ -94,22 +107,92 @@ export const superAdminService = {
 
   async createUser(payload: {
     email: string;
-    first_name?: string;
-    last_name?: string;
+    username: string;
+    password: string;
     role: Role;
   }): Promise<void> {
-    try {
-      await apiClient.post("/api/admin/users", payload);
-    } catch (error) {
-      throw new Error(getApiErrorMessage(error));
+    const admin = requireSupabaseAdmin();
+
+    // Create auth user
+    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+      email: payload.email,
+      password: payload.password,
+      email_confirm: true,
+      user_metadata: { username: payload.username },
+    });
+
+    if (authError) throw new Error(authError.message);
+    if (!authData.user) throw new Error("Failed to create user");
+
+    const userId = authData.user.id;
+
+    // Create or sync profile (some projects auto-create profiles via triggers)
+    const { error: profileError } = await admin
+      .from("profiles")
+      .upsert(
+        {
+          id: userId,
+          email: payload.email,
+          username: payload.username,
+        },
+        { onConflict: "id" }
+      );
+
+    if (profileError) {
+      // Rollback: delete auth user if profile creation fails
+      await admin.auth.admin.deleteUser(userId);
+      throw new Error(profileError.message);
+    }
+
+    // Create or sync user role
+    const { error: roleError } = await admin
+      .from("user_roles")
+      .upsert({ user_id: userId, role: payload.role }, { onConflict: "user_id" });
+
+    if (roleError) {
+      // Rollback: delete auth user and profile if role creation fails
+      await admin.auth.admin.deleteUser(userId);
+      throw new Error(roleError.message);
     }
   },
 
   async deleteUser(userId: string): Promise<void> {
-    try {
-      await apiClient.delete(`/api/admin/users/${userId}`);
-    } catch (error) {
-      throw new Error(getApiErrorMessage(error));
+    const admin = requireSupabaseAdmin();
+
+    // Delete auth user (cascade will handle profiles and roles)
+    const { error } = await admin.auth.admin.deleteUser(userId);
+    if (error) throw new Error(error.message);
+  },
+
+  async updateUserAccount(
+    userId: string,
+    payload: { username?: string; password?: string; role?: Role }
+  ): Promise<void> {
+    const admin = requireSupabaseAdmin();
+
+    // Update password if provided
+    if (payload.password) {
+      const { error: pwError } = await admin.auth.admin.updateUserById(userId, {
+        password: payload.password,
+      });
+      if (pwError) throw new Error(pwError.message);
+    }
+
+    // Update username if provided
+    if (payload.username) {
+      const { error: profileError } = await admin
+        .from("profiles")
+        .update({ username: payload.username })
+        .eq("id", userId);
+      if (profileError) throw new Error(profileError.message);
+    }
+
+    // Update role if provided
+    if (payload.role) {
+      const { error: roleError } = await admin
+        .from("user_roles")
+        .upsert({ user_id: userId, role: payload.role });
+      if (roleError) throw new Error(roleError.message);
     }
   },
 
@@ -117,7 +200,9 @@ export const superAdminService = {
     const client = requireSupabase();
     const { data, error } = await client
       .from("courses")
-      .select("id, title, description, status, created_by, created_at, updated_at")
+      .select(
+        "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at, created_by, created_at, updated_at"
+      )
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
     return (data ?? []) as Course[];
@@ -144,6 +229,228 @@ export const superAdminService = {
     const client = requireSupabase();
     const { error } = await client.from("courses").delete().eq("id", courseId);
     if (error) throw new Error(error.message);
+  },
+
+  async listLessons(): Promise<Lesson[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("lessons")
+      .select("id, course_id, title, order_index, duration_minutes, is_required")
+      .order("order_index", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as Lesson[];
+  },
+
+  async createLesson(payload: Pick<Lesson, "course_id" | "title" | "order_index">): Promise<Lesson> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("lessons")
+      .insert(payload)
+      .select("id, course_id, title, order_index, duration_minutes, is_required")
+      .single();
+    if (error) throw new Error(error.message);
+    return data as Lesson;
+  },
+
+  async updateLesson(lessonId: string, payload: Partial<Lesson>): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("lessons").update(payload).eq("id", lessonId);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteLesson(lessonId: string): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("lessons").delete().eq("id", lessonId);
+    if (error) throw new Error(error.message);
+  },
+
+  async listLessonTopics(): Promise<LessonTopic[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("lesson_topics")
+      .select("id, lesson_id, title, content, order_index")
+      .order("order_index", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as LessonTopic[];
+  },
+
+  async createLessonTopic(
+    payload: Pick<LessonTopic, "lesson_id" | "title" | "content" | "order_index">
+  ): Promise<LessonTopic> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("lesson_topics")
+      .insert(payload)
+      .select("id, lesson_id, title, content, order_index")
+      .single();
+    if (error) throw new Error(error.message);
+    return data as LessonTopic;
+  },
+
+  async updateLessonTopic(topicId: string, payload: Partial<LessonTopic>): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("lesson_topics").update(payload).eq("id", topicId);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteLessonTopic(topicId: string): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("lesson_topics").delete().eq("id", topicId);
+    if (error) throw new Error(error.message);
+  },
+
+  async listTopics(): Promise<Topic[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("topics")
+      .select(
+        "id, title, description, time_allocated, time_unit, pre_requisites, co_requisites, created_at, updated_at, created_by, updated_by"
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as Topic[];
+  },
+
+  async listTopicProgress(): Promise<TopicProgress[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("topic_progress")
+      .select("id, topic_id, user_id, status, start_date, end_date, created_at, updated_at")
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as TopicProgress[];
+  },
+
+  async updateTopicProgressStatus(payload: {
+    topicId: string;
+    userId: string;
+    status: "in_progress" | "completed";
+    end_date?: string | null;
+  }): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client
+      .from("topic_progress")
+      .update({ status: payload.status, end_date: payload.end_date ?? null })
+      .eq("topic_id", payload.topicId)
+      .eq("user_id", payload.userId);
+    if (error) throw new Error(error.message);
+  },
+
+  async listTopicCompletionRequests(): Promise<TopicCompletionRequest[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("topic_completion_requests")
+      .select(
+        "id, topic_id, user_id, course_id, storage_path, file_name, file_type, status, created_at, updated_at, reviewed_at, reviewed_by"
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as TopicCompletionRequest[];
+  },
+
+  async updateTopicCompletionRequest(
+    requestId: string,
+    payload: Partial<TopicCompletionRequest>
+  ): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client
+      .from("topic_completion_requests")
+      .update(payload)
+      .eq("id", requestId);
+    if (error) throw new Error(error.message);
+  },
+
+  async getTopicProofUrl(storagePath?: string | null): Promise<string | null> {
+    if (!storagePath) return null;
+    const client = requireSupabase();
+    const { data, error } = await client.storage
+      .from("topic-proofs")
+      .createSignedUrl(storagePath, 300);
+    if (error) throw new Error(error.message);
+    return data?.signedUrl ?? null;
+  },
+
+  async createTopic(
+    payload: Pick<
+      Topic,
+      "title" | "description" | "time_allocated" | "time_unit" | "pre_requisites" | "co_requisites"
+    >
+  ): Promise<Topic> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("topics")
+      .insert(payload)
+      .select(
+        "id, title, description, time_allocated, time_unit, pre_requisites, co_requisites, created_at, updated_at, created_by, updated_by"
+      )
+      .single();
+    if (error) throw new Error(error.message);
+    return data as Topic;
+  },
+
+  async updateTopic(topicId: string, payload: Partial<Topic>): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("topics").update(payload).eq("id", topicId);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteTopic(topicId: string): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("topics").delete().eq("id", topicId);
+    if (error) throw new Error(error.message);
+  },
+
+  async listLessonAssignments(): Promise<LessonAssignment[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("lesson_assignments")
+      .select(
+        "id, user_id, course_id, lesson_id, start_at, due_at, status, submitted_at, review_status, reviewed_at, reviewed_by"
+      )
+      .order("due_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as LessonAssignment[];
+  },
+
+  async createLessonAssignments(assignments: Omit<LessonAssignment, "id">[]): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("lesson_assignments").insert(assignments);
+    if (error) throw new Error(error.message);
+  },
+
+  async updateLessonAssignment(
+    assignmentId: string,
+    payload: Partial<LessonAssignment>
+  ): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("lesson_assignments").update(payload).eq("id", assignmentId);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteLessonAssignment(assignmentId: string): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("lesson_assignments").delete().eq("id", assignmentId);
+    if (error) throw new Error(error.message);
+  },
+
+  async listLessonSubmissions(): Promise<LessonSubmission[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("lesson_submissions")
+      .select("id, lesson_assignment_id, user_id, file_path, file_type, submitted_at")
+      .order("submitted_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as LessonSubmission[];
+  },
+
+  async getLessonSubmissionUrl(filePath?: string | null): Promise<string | null> {
+    if (!filePath) return null;
+    const client = requireSupabase();
+    const { data, error } = await client.storage
+      .from("lesson-proofs")
+      .createSignedUrl(filePath, 300);
+    if (error) throw new Error(error.message);
+    return data?.signedUrl ?? null;
   },
 
   async listEnrollments(): Promise<Enrollment[]> {
@@ -232,7 +539,7 @@ export const superAdminService = {
     const { data, error } = await client
       .from("quizzes")
       .select(
-        "id, title, description, course_id, assigned_user_id, show_score, created_at, updated_at"
+        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, created_at, updated_at"
       )
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -254,14 +561,27 @@ export const superAdminService = {
   },
 
   async createQuiz(payload: {
-    quiz: Pick<Quiz, "title" | "description" | "course_id" | "assigned_user_id" | "show_score">;
+    quiz: Pick<
+      Quiz,
+      | "title"
+      | "description"
+      | "course_id"
+      | "assigned_user_id"
+      | "status"
+      | "link_url"
+      | "start_at"
+      | "end_at"
+      | "show_score"
+    >;
     questions: QuestionDraft[];
   }): Promise<Quiz> {
     const client = requireSupabase();
     const { data, error } = await client
       .from("quizzes")
       .insert(payload.quiz)
-      .select("id, title, description, course_id, assigned_user_id, show_score, created_at, updated_at")
+      .select(
+        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, created_at, updated_at"
+      )
       .single();
     if (error) throw new Error(error.message);
 
@@ -347,6 +667,12 @@ export const superAdminService = {
   async updateQuizScore(scoreId: string, score: number): Promise<void> {
     const client = requireSupabase();
     const { error } = await client.from("quiz_scores").update({ score }).eq("id", scoreId);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteQuizScore(scoreId: string): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.from("quiz_scores").delete().eq("id", scoreId);
     if (error) throw new Error(error.message);
   },
 

@@ -1,14 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
+import { useUser } from "../../../hooks/useUser";
 import { superAdminService } from "../../../services/superAdminService";
-import type { Activity, ActivitySubmission, AdminUser, Course } from "../../../types/superAdmin";
+import type {
+  Activity,
+  ActivitySubmission,
+  AdminUser,
+  Course,
+  Enrollment,
+  Topic,
+  TopicCompletionRequest,
+  TopicProgress,
+} from "../../../types/superAdmin";
 
 const ActivitiesSection = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicProgress, setTopicProgress] = useState<TopicProgress[]>([]);
+  const [completionRequests, setCompletionRequests] = useState<TopicCompletionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,21 +38,39 @@ const ActivitiesSection = () => {
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
+  const { user } = useUser();
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [activityData, submissionData, courseData, userData] = await Promise.all([
+      const [
+        activityData,
+        submissionData,
+        courseData,
+        userData,
+        enrollmentData,
+        topicData,
+        topicProgressData,
+        completionData,
+      ] = await Promise.all([
         superAdminService.listActivities(),
         superAdminService.listActivitySubmissions(),
         superAdminService.listCourses(),
         superAdminService.listUsers(),
+        superAdminService.listEnrollments(),
+        superAdminService.listTopics(),
+        superAdminService.listTopicProgress(),
+        superAdminService.listTopicCompletionRequests(),
       ]);
       setActivities(activityData);
       setSubmissions(submissionData);
       setCourses(courseData);
       setUsers(userData);
+      setEnrollments(enrollmentData);
+      setTopics(topicData);
+      setTopicProgress(topicProgressData);
+      setCompletionRequests(completionData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load activities.");
     } finally {
@@ -140,6 +172,64 @@ const ActivitiesSection = () => {
       setViewError(
         loadError instanceof Error ? loadError.message : "Unable to open submission file."
       );
+    }
+  };
+
+  const handleViewProof = async (request: TopicCompletionRequest) => {
+    setViewError(null);
+    try {
+      const url = await superAdminService.getTopicProofUrl(request.storage_path);
+      if (!url) {
+        setViewError("No file available for this proof.");
+        return;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (loadError) {
+      setViewError(loadError instanceof Error ? loadError.message : "Unable to open proof file.");
+    }
+  };
+
+  const handleApproveRequest = async (request: TopicCompletionRequest) => {
+    setSaving(true);
+    setActionError(null);
+    try {
+      await superAdminService.updateTopicCompletionRequest(request.id, {
+        status: "approved",
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user?.id ?? null,
+      });
+      await superAdminService.updateTopicProgressStatus({
+        topicId: request.topic_id,
+        userId: request.user_id,
+        status: "completed",
+        end_date: new Date().toISOString(),
+      });
+      await loadData();
+    } catch (approveError) {
+      setActionError(
+        approveError instanceof Error ? approveError.message : "Unable to approve proof."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRejectRequest = async (request: TopicCompletionRequest) => {
+    setSaving(true);
+    setActionError(null);
+    try {
+      await superAdminService.updateTopicCompletionRequest(request.id, {
+        status: "rejected",
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user?.id ?? null,
+      });
+      await loadData();
+    } catch (rejectError) {
+      setActionError(
+        rejectError instanceof Error ? rejectError.message : "Unable to reject proof."
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -254,6 +344,155 @@ const ActivitiesSection = () => {
     []
   );
 
+  const progressRows = useMemo(() => {
+    const activeEnrollments = enrollments.filter(
+      (entry) => !["removed", "rejected"].includes(entry.status ?? "")
+    );
+    return activeEnrollments.map((enrollment) => {
+      const course = courses.find((item) => item.id === enrollment.course_id);
+      const courseTopics = (course?.topic_ids ?? [])
+        .map((id) => topics.find((topic) => topic.id === id))
+        .filter(Boolean) as Topic[];
+      const completed = courseTopics.filter(
+        (topic) =>
+          topicProgress.find(
+            (entry) => entry.user_id === enrollment.user_id && entry.topic_id === topic.id
+          )?.status === "completed"
+      ).length;
+      const total = courseTopics.length;
+      const completion = total > 0 ? Math.round((completed / total) * 100) : 0;
+      return {
+        id: enrollment.id,
+        enrollment,
+        course,
+        completed,
+        total,
+        completion,
+      };
+    });
+  }, [enrollments, courses, topics, topicProgress]);
+
+  const progressColumns = useMemo(
+    () => [
+      {
+        key: "user",
+        header: "User",
+        render: (row: (typeof progressRows)[number]) => {
+          const profile = users.find((entry) => entry.id === row.enrollment.user_id);
+          return (
+            <span className="text-xs text-slate-300">
+              {profile?.email ?? row.enrollment.user_id}
+            </span>
+          );
+        },
+      },
+      {
+        key: "course",
+        header: "Course",
+        render: (row: (typeof progressRows)[number]) => (
+          <span className="text-xs text-slate-300">{row.course?.title ?? "Unknown course"}</span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Enrollment",
+        render: (row: (typeof progressRows)[number]) => (
+          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
+            {row.enrollment.status ?? "pending"}
+          </span>
+        ),
+      },
+      {
+        key: "progress",
+        header: "Progress",
+        render: (row: (typeof progressRows)[number]) => (
+          <span className="text-xs text-slate-300">
+            {row.completed}/{row.total} ({row.completion}%)
+          </span>
+        ),
+      },
+    ],
+    [progressRows, users]
+  );
+
+  const pendingCompletionRequests = useMemo(
+    () => completionRequests.filter((request) => request.status === "pending"),
+    [completionRequests]
+  );
+
+  const completionColumns = useMemo(
+    () => [
+      {
+        key: "user",
+        header: "User",
+        render: (request: TopicCompletionRequest) => (
+          <span className="text-xs text-slate-300">
+            {users.find((entry) => entry.id === request.user_id)?.email ?? request.user_id}
+          </span>
+        ),
+      },
+      {
+        key: "course",
+        header: "Course",
+        render: (request: TopicCompletionRequest) => (
+          <span className="text-xs text-slate-300">
+            {courses.find((course) => course.id === request.course_id)?.title ?? "Unassigned"}
+          </span>
+        ),
+      },
+      {
+        key: "topic",
+        header: "Topic",
+        render: (request: TopicCompletionRequest) => (
+          <span className="text-xs text-slate-300">
+            {topics.find((topic) => topic.id === request.topic_id)?.title ?? request.topic_id}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (request: TopicCompletionRequest) => (
+          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
+            {request.status ?? "pending"}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (request: TopicCompletionRequest) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleViewProof(request)}
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
+            >
+              View
+            </button>
+            <button
+              type="button"
+              onClick={() => handleApproveRequest(request)}
+              disabled={request.status === "approved" || saving}
+              className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 disabled:opacity-50"
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRejectRequest(request)}
+              disabled={request.status === "rejected" || saving}
+              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
+            >
+              Reject
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [users, courses, topics, saving]
+  );
+
   if (loading) {
     return <p className="text-sm text-slate-400">Loading activities...</p>;
   }
@@ -264,6 +503,18 @@ const ActivitiesSection = () => {
 
   return (
     <div className="space-y-6">
+      <div className="space-y-4">
+        <div>
+          <h2 className="font-display text-2xl text-white">Course progress</h2>
+          <p className="text-sm text-slate-300">Track enrollment progress by user.</p>
+        </div>
+        <DataTable
+          columns={progressColumns}
+          data={progressRows}
+          emptyMessage="No enrollments available."
+        />
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-2xl text-white">Activities</h2>
@@ -292,6 +543,20 @@ const ActivitiesSection = () => {
             emptyMessage="No submissions yet."
           />
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <h3 className="font-display text-xl text-white">Completion proofs</h3>
+          <p className="text-sm text-slate-400">
+            Review user proof uploads before marking topics complete.
+          </p>
+        </div>
+        <DataTable
+          columns={completionColumns}
+          data={pendingCompletionRequests}
+          emptyMessage="No completion proofs yet."
+        />
       </div>
 
       {actionError && <p className="text-xs text-rose-200">{actionError}</p>}

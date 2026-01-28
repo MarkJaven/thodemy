@@ -1,13 +1,17 @@
-﻿create table if not exists public.profiles (
+create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   first_name text,
   last_name text,
+  username text,
   email text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+alter table public.profiles add column if not exists username text;
+
 create index if not exists profiles_email_idx on public.profiles (email);
+create unique index if not exists profiles_username_idx on public.profiles (username);
 
 alter table public.profiles enable row level security;
 
@@ -18,11 +22,12 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, first_name, last_name, email)
+  insert into public.profiles (id, first_name, last_name, username, email)
   values (
     new.id,
     new.raw_user_meta_data ->> 'first_name',
     new.raw_user_meta_data ->> 'last_name',
+    new.raw_user_meta_data ->> 'username',
     new.email
   );
   return new;

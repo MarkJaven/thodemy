@@ -1,23 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { dashboardApi } from "../services/dashboardApi";
-import type { DashboardData } from "../types/dashboard";
+import type { TopicsData } from "../types/dashboard";
 
-const emptyData: DashboardData = {
-  courses: [],
-  lessons: [],
-  lessonTopics: [],
-  lessonAssignments: [],
-  lessonSubmissions: [],
-  enrollments: [],
-  activities: [],
-  quizzes: [],
-  quizScores: [],
-  quizAttempts: [],
-  forms: [],
+const emptyData: TopicsData = {
+  topics: [],
+  topicProgress: [],
+  topicCompletionRequests: [],
 };
 
-export const useDashboardData = (userId?: string) => {
-  const [data, setData] = useState<DashboardData>(emptyData);
+export const useTopicsData = (userId?: string) => {
+  const [data, setData] = useState<TopicsData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,11 +17,10 @@ export const useDashboardData = (userId?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await dashboardApi.getDashboardData(userId);
+      const response = await dashboardApi.getTopicsData(userId);
       setData(response);
     } catch (loadError) {
-      const message =
-        loadError instanceof Error ? loadError.message : "Unable to load dashboard data.";
+      const message = loadError instanceof Error ? loadError.message : "Unable to load topics.";
       setError(message);
       setData(emptyData);
     } finally {

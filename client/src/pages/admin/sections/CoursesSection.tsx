@@ -1,44 +1,98 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
+import { calculateCourseEndDate } from "../../../lib/topicDates";
+import { adminCourseService, CourseDetail, CourseSummary } from "../../../services/adminCourseService";
 import { superAdminService } from "../../../services/superAdminService";
-import type { AdminUser, Course, Enrollment } from "../../../types/superAdmin";
+import type { Topic } from "../../../types/superAdmin";
+
+const statusOptions = ["draft", "published", "archived"] as const;
+
+const formatDate = (value?: string | null) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const buildTotals = (topics: Topic[]) => {
+  const totalHours = topics.reduce((sum, topic) => {
+    const hours = Number(topic.time_allocated ?? 0);
+    if (topic.time_unit === "days") {
+      return sum + hours * 8;
+    }
+    return sum + hours;
+  }, 0);
+  const totalDays = totalHours > 0 ? Math.ceil(totalHours / 8) : 0;
+  return { totalHours, totalDays };
+};
+
+const normalizeRelationMap = (value?: Record<string, string[]> | null) => {
+  if (!value) return {};
+  return Object.entries(value).reduce<Record<string, string[]>>((acc, [key, list]) => {
+    acc[key] = Array.isArray(list) ? Array.from(new Set(list)) : [];
+    return acc;
+  }, {});
+};
 
 const CoursesSection = () => {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [courses, setCourses] = useState<CourseSummary[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-  const [formState, setFormState] = useState({ title: "", description: "", status: "draft" });
-  const [saving, setSaving] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  const [isApproveOpen, setIsApproveOpen] = useState(false);
-  const [selectedEnrollment, setSelectedEnrollment] = useState<Enrollment | null>(null);
-  const [endDate, setEndDate] = useState("");
-  const [isEditEnrollmentOpen, setIsEditEnrollmentOpen] = useState(false);
-  const [editEnrollmentState, setEditEnrollmentState] = useState({
-    status: "pending",
-    start_date: "",
-    end_date: "",
+  const [selectedCourse, setSelectedCourse] = useState<CourseSummary | null>(null);
+  const [formState, setFormState] = useState({
+    title: "",
+    description: "",
+    status: "draft",
+    enrollment_enabled: true,
+    enrollment_limit: "",
+    start_at: "",
+    topic_ids: [] as string[],
+    topic_prerequisites: {} as Record<string, string[]>,
+    topic_corequisites: {} as Record<string, string[]>,
+    regenerate_code: false,
   });
+
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<CourseDetail | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [removingEnrollmentId, setRemovingEnrollmentId] = useState<string | null>(null);
+
+  const topicLookup = useMemo(() => new Map(topics.map((topic) => [topic.id, topic])), [topics]);
+
+  const selectedTopics = useMemo(
+    () =>
+      formState.topic_ids
+        .map((id) => topicLookup.get(id))
+        .filter(Boolean) as Topic[],
+    [formState.topic_ids, topicLookup]
+  );
+
+  const totals = useMemo(() => buildTotals(selectedTopics), [selectedTopics]);
+  const startDate = formState.start_at ? new Date(formState.start_at) : null;
+  const calculatedEndDate =
+    startDate && totals.totalDays > 0 ? calculateCourseEndDate(startDate, totals.totalDays) : null;
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [courseData, enrollmentData, userData] = await Promise.all([
-        superAdminService.listCourses(),
-        superAdminService.listEnrollments(),
-        superAdminService.listUsers(),
+      const [courseData, topicData] = await Promise.all([
+        adminCourseService.listCourses(),
+        superAdminService.listTopics(),
       ]);
       setCourses(courseData);
-      setEnrollments(enrollmentData);
-      setUsers(userData);
+      setTopics(topicData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load courses.");
     } finally {
@@ -52,30 +106,131 @@ const CoursesSection = () => {
 
   const openCreate = () => {
     setSelectedCourse(null);
-    setFormState({ title: "", description: "", status: "draft" });
-    setActionError(null);
-    setIsFormOpen(true);
-  };
-
-  const openEdit = (course: Course) => {
-    setSelectedCourse(course);
     setFormState({
-      title: course.title,
-      description: course.description,
-      status: course.status ?? "draft",
+      title: "",
+      description: "",
+      status: "draft",
+      enrollment_enabled: true,
+      enrollment_limit: "",
+      start_at: "",
+      topic_ids: [],
+      topic_prerequisites: {},
+      topic_corequisites: {},
+      regenerate_code: false,
     });
     setActionError(null);
     setIsFormOpen(true);
   };
 
+  const openEdit = (course: CourseSummary) => {
+    setSelectedCourse(course);
+    setFormState({
+      title: course.title,
+      description: course.description ?? "",
+      status: course.status ?? "draft",
+      enrollment_enabled: course.enrollment_enabled ?? true,
+      enrollment_limit: course.enrollment_limit ? String(course.enrollment_limit) : "",
+      start_at: course.start_at ? course.start_at.slice(0, 10) : "",
+      topic_ids: course.topic_ids ?? [],
+      topic_prerequisites: normalizeRelationMap(course.topic_prerequisites),
+      topic_corequisites: normalizeRelationMap(course.topic_corequisites),
+      regenerate_code: false,
+    });
+    setActionError(null);
+    setIsFormOpen(true);
+  };
+
+  const updateTopicIds = (nextIds: string[]) => {
+    setFormState((prev) => {
+      const keep = new Set(nextIds);
+      const prune = (map: Record<string, string[]>) =>
+        Object.entries(map).reduce<Record<string, string[]>>((acc, [key, list]) => {
+          if (!keep.has(key)) return acc;
+          acc[key] = list.filter((id) => keep.has(id));
+          return acc;
+        }, {});
+      return {
+        ...prev,
+        topic_ids: nextIds,
+        topic_prerequisites: prune(prev.topic_prerequisites),
+        topic_corequisites: prune(prev.topic_corequisites),
+      };
+    });
+  };
+
+  const handleAddTopic = (topicId: string) => {
+    if (formState.topic_ids.includes(topicId)) return;
+    updateTopicIds([...formState.topic_ids, topicId]);
+  };
+
+  const handleRemoveTopic = (topicId: string) => {
+    updateTopicIds(formState.topic_ids.filter((id) => id !== topicId));
+  };
+
+  const handleDragStart = (topicId: string) => {
+    setDraggingId(topicId);
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!draggingId || draggingId === targetId) return;
+    const next = [...formState.topic_ids];
+    const from = next.indexOf(draggingId);
+    const to = next.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    next.splice(from, 1);
+    next.splice(to, 0, draggingId);
+    updateTopicIds(next);
+    setDraggingId(null);
+  };
+
+  const handleRelationChange = (
+    topicId: string,
+    type: "pre" | "co",
+    values: string[]
+  ) => {
+    setFormState((prev) => ({
+      ...prev,
+      topic_prerequisites:
+        type === "pre" ? { ...prev.topic_prerequisites, [topicId]: values } : prev.topic_prerequisites,
+      topic_corequisites:
+        type === "co" ? { ...prev.topic_corequisites, [topicId]: values } : prev.topic_corequisites,
+    }));
+  };
+
   const handleSave = async () => {
+    if (!formState.title.trim()) {
+      setActionError("Course title is required.");
+      return;
+    }
+    if (!formState.description.trim()) {
+      setActionError("Course description is required.");
+      return;
+    }
+    if (formState.topic_ids.length === 0) {
+      setActionError("Select at least one topic.");
+      return;
+    }
+
     setSaving(true);
     setActionError(null);
+    const payload = {
+      title: formState.title.trim(),
+      description: formState.description.trim(),
+      status: formState.status,
+      enrollment_enabled: formState.enrollment_enabled,
+      enrollment_limit: formState.enrollment_limit ? Number(formState.enrollment_limit) : null,
+      start_at: formState.start_at ? new Date(formState.start_at).toISOString() : null,
+      topic_ids: formState.topic_ids,
+      topic_prerequisites: formState.topic_prerequisites,
+      topic_corequisites: formState.topic_corequisites,
+      regenerate_code: formState.regenerate_code,
+    };
+
     try {
       if (selectedCourse) {
-        await superAdminService.updateCourse(selectedCourse.id, formState);
+        await adminCourseService.updateCourse(selectedCourse.id, payload);
       } else {
-        await superAdminService.createCourse(formState);
+        await adminCourseService.createCourse(payload);
       }
       setIsFormOpen(false);
       await loadData();
@@ -87,122 +242,60 @@ const CoursesSection = () => {
   };
 
   const handleDelete = async (courseId: string) => {
-    const previous = courses;
-    setCourses((prev) => prev.filter((course) => course.id !== courseId));
-    setSaving(true);
+    const confirmed = window.confirm("Delete this course? This cannot be undone.");
+    if (!confirmed) return;
     setActionError(null);
     try {
-      await superAdminService.deleteCourse(courseId);
+      await adminCourseService.deleteCourse(courseId);
+      await loadData();
     } catch (deleteError) {
       setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete course.");
-      setCourses(previous);
-    } finally {
-      setSaving(false);
     }
   };
 
-  const openApprove = (enrollment: Enrollment) => {
-    setSelectedEnrollment(enrollment);
-    setEndDate("");
-    setActionError(null);
-    setIsApproveOpen(true);
-  };
-
-  const openEditEnrollment = (enrollment: Enrollment) => {
-    setSelectedEnrollment(enrollment);
-    setEditEnrollmentState({
-      status: enrollment.status ?? "pending",
-      start_date: enrollment.start_date ? enrollment.start_date.slice(0, 10) : "",
-      end_date: enrollment.end_date ? enrollment.end_date.slice(0, 10) : "",
-    });
-    setActionError(null);
-    setIsEditEnrollmentOpen(true);
-  };
-
-  const handleSaveEnrollment = async () => {
-    if (!selectedEnrollment) return;
-    setSaving(true);
-    setActionError(null);
+  const openDetail = async (course: CourseSummary) => {
+    setDetailLoading(true);
+    setIsDetailOpen(true);
+    setDetail(null);
     try {
-      await superAdminService.updateEnrollmentStatus(selectedEnrollment.id, {
-        status: editEnrollmentState.status,
-        start_date: editEnrollmentState.start_date
-          ? new Date(editEnrollmentState.start_date).toISOString()
-          : null,
-        end_date: editEnrollmentState.end_date
-          ? new Date(editEnrollmentState.end_date).toISOString()
-          : null,
-      });
-      setIsEditEnrollmentOpen(false);
+      const response = await adminCourseService.getCourseDetail(course.id);
+      setDetail(response);
+    } catch (detailError) {
+      setActionError(detailError instanceof Error ? detailError.message : "Unable to load course.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleKickEnrollment = async (enrollmentId: string) => {
+    const confirmed = window.confirm("Remove this student from the course?");
+    if (!confirmed) return;
+    setActionError(null);
+    setRemovingEnrollmentId(enrollmentId);
+    try {
+      await adminCourseService.updateEnrollmentStatus(enrollmentId, "removed");
+      if (detail) {
+        const updatedEnrollments = detail.enrollments.map((entry) =>
+          entry.id === enrollmentId ? { ...entry, status: "removed" } : entry
+        );
+        setDetail({ ...detail, enrollments: updatedEnrollments });
+      }
       await loadData();
-    } catch (saveError) {
+    } catch (removeError) {
       setActionError(
-        saveError instanceof Error ? saveError.message : "Unable to update enrollment."
+        removeError instanceof Error ? removeError.message : "Unable to remove enrollment."
       );
     } finally {
-      setSaving(false);
+      setRemovingEnrollmentId(null);
     }
   };
 
-  const handleApprove = async () => {
-    if (!selectedEnrollment) return;
-    setEnrollments((prev) =>
-      prev.map((entry) =>
-        entry.id === selectedEnrollment.id
-          ? {
-              ...entry,
-              status: "approved",
-              start_date: new Date().toISOString(),
-              end_date: endDate ? new Date(endDate).toISOString() : null,
-            }
-          : entry
-      )
-    );
-    setSaving(true);
-    setActionError(null);
-    try {
-      await superAdminService.updateEnrollmentStatus(selectedEnrollment.id, {
-        status: "approved",
-        start_date: new Date().toISOString(),
-        end_date: endDate ? new Date(endDate).toISOString() : null,
-      });
-      setIsApproveOpen(false);
-    } catch (approveError) {
-      setActionError(
-        approveError instanceof Error ? approveError.message : "Unable to approve enrollment."
-      );
-      await loadData();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleReject = async (enrollmentId: string) => {
-    setEnrollments((prev) =>
-      prev.map((entry) => (entry.id === enrollmentId ? { ...entry, status: "rejected" } : entry))
-    );
-    setSaving(true);
-    setActionError(null);
-    try {
-      await superAdminService.updateEnrollmentStatus(enrollmentId, { status: "rejected" });
-    } catch (rejectError) {
-      setActionError(
-        rejectError instanceof Error ? rejectError.message : "Unable to reject enrollment."
-      );
-      await loadData();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const pendingEnrollments = enrollments.filter((item) => item.status === "pending");
-
-  const courseColumns = useMemo(
+  const columns = useMemo(
     () => [
       {
         key: "course",
         header: "Course",
-        render: (course: Course) => (
+        render: (course: CourseSummary) => (
           <div>
             <p className="font-semibold text-white">{course.title}</p>
             <p className="text-xs text-slate-400">{course.description}</p>
@@ -212,17 +305,45 @@ const CoursesSection = () => {
       {
         key: "status",
         header: "Status",
-        render: (course: Course) => (
+        render: (course: CourseSummary) => (
           <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
             {course.status ?? "draft"}
           </span>
         ),
       },
       {
+        key: "hours",
+        header: "Total Hours",
+        render: (course: CourseSummary) => (
+          <span className="text-xs text-slate-300">{course.total_hours ?? "--"}</span>
+        ),
+      },
+      {
+        key: "days",
+        header: "Total Days",
+        render: (course: CourseSummary) => (
+          <span className="text-xs text-slate-300">{course.total_days ?? "--"}</span>
+        ),
+      },
+      {
+        key: "enrolled",
+        header: "Enrolled",
+        render: (course: CourseSummary) => (
+          <span className="text-xs text-slate-300">{course.enrollment_count ?? 0}</span>
+        ),
+      },
+      {
         key: "actions",
         header: "Actions",
-        render: (course: Course) => (
+        render: (course: CourseSummary) => (
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openDetail(course)}
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
+            >
+              View
+            </button>
             <button
               type="button"
               onClick={() => openEdit(course)}
@@ -241,144 +362,65 @@ const CoursesSection = () => {
         ),
       },
     ],
-    []
+    [topics]
   );
-
-  const enrollmentColumns = useMemo(
-    () => [
-      {
-        key: "user",
-        header: "User",
-        render: (enrollment: Enrollment) => (
-          <span className="text-xs text-slate-300">
-            {users.find((user) => user.id === enrollment.user_id)?.email ?? enrollment.user_id}
-          </span>
-        ),
-      },
-      {
-        key: "course",
-        header: "Course",
-        render: (enrollment: Enrollment) => (
-          <span className="text-xs text-slate-300">
-            {courses.find((course) => course.id === enrollment.course_id)?.title ??
-              enrollment.course_id}
-          </span>
-        ),
-      },
-      {
-        key: "status",
-        header: "Status",
-        render: (enrollment: Enrollment) => (
-          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-            {enrollment.status ?? "pending"}
-          </span>
-        ),
-      },
-      {
-        key: "actions",
-        header: "Actions",
-        render: (enrollment: Enrollment) => {
-          const isPending = (enrollment.status ?? "pending") === "pending";
-          return (
-            <div className="flex flex-wrap items-center gap-2">
-              {isPending && (
-                <button
-                  type="button"
-                  onClick={() => openApprove(enrollment)}
-                  className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200"
-                >
-                  Approve
-                </button>
-              )}
-              {isPending && (
-                <button
-                  type="button"
-                  onClick={() => handleReject(enrollment.id)}
-                  className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200"
-                >
-                  Reject
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => openEditEnrollment(enrollment)}
-                className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
-              >
-                Edit
-              </button>
-            </div>
-          );
-        },
-      },
-    ],
-    [courses, users]
-  );
-
-  if (loading) {
-    return <p className="text-sm text-slate-400">Loading courses...</p>;
-  }
-
-  if (error) {
-    return <p className="text-sm text-rose-200">{error}</p>;
-  }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="font-display text-2xl text-white">Courses</h2>
-          <p className="text-sm text-slate-300">Manage course catalog and approvals.</p>
+          <p className="mt-2 text-sm text-slate-300">
+            Build ordered learning paths from superadmin topics.
+          </p>
         </div>
         <button
           type="button"
           onClick={openCreate}
-          className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl text-white transition hover:bg-white/20"
+          aria-label="Create course"
         >
-          New course
+          +
         </button>
       </div>
 
-      <DataTable columns={courseColumns} data={courses} emptyMessage="No courses yet." />
-      {actionError && <p className="text-xs text-rose-200">{actionError}</p>}
-
-      <div>
-        <h3 className="font-display text-xl text-white">Pending enrollments</h3>
-        <p className="text-sm text-slate-400">
-          Approve or reject enrollments before learners start.
-        </p>
-        <div className="mt-4">
-          <DataTable
-            columns={enrollmentColumns}
-            data={pendingEnrollments}
-            emptyMessage="No pending enrollments."
-          />
+      {error && (
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+          {error}
         </div>
-      </div>
-
-      <div>
-        <h3 className="font-display text-xl text-white">All enrollments</h3>
-        <p className="text-sm text-slate-400">
-          Edit statuses, start dates, and end dates for enrolled users.
-        </p>
-        <div className="mt-4">
-          <DataTable
-            columns={enrollmentColumns}
-            data={enrollments}
-            emptyMessage="No enrollments yet."
-          />
+      )}
+      {actionError && (
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+          {actionError}
         </div>
-      </div>
+      )}
+
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={`course-skeleton-${index}`}
+              className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/5"
+            />
+          ))}
+        </div>
+      ) : (
+        <DataTable columns={columns} data={courses} emptyMessage="No courses yet." />
+      )}
 
       <Modal
         isOpen={isFormOpen}
-        title={selectedCourse ? "Edit course" : "Create course"}
-        onClose={() => setIsFormOpen(false)}
+        title={selectedCourse ? "Edit Course" : "Create New Course"}
+        description="Design your learning path by adding topics and configuring enrollment settings."
+        onClose={() => (saving ? null : setIsFormOpen(false))}
+        size="full"
+        topAligned
         footer={
           <>
             <button
               type="button"
               onClick={() => setIsFormOpen(false)}
-              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
+              className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 hover:text-white"
             >
               Cancel
             </button>
@@ -386,153 +428,480 @@ const CoursesSection = () => {
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90 disabled:opacity-60"
+              className="rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 px-6 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-lg shadow-purple-500/25 transition hover:shadow-purple-500/40 disabled:opacity-60"
             >
-              {saving ? "Saving..." : "Save"}
+              {saving ? (
+                <span className="flex items-center gap-2">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Saving...
+                </span>
+              ) : (
+                "Save Course"
+              )}
             </button>
           </>
         }
       >
-        <div className="space-y-4">
-          <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-            Title
-            <input
-              type="text"
-              value={formState.title}
-              onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
-            />
-          </label>
-          <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-            Description
-            <textarea
-              value={formState.description}
-              onChange={(event) =>
-                setFormState((prev) => ({ ...prev, description: event.target.value }))
-              }
-              rows={3}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
-            />
-          </label>
-          <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-            Status
-            <select
-              value={formState.status}
-              onChange={(event) => setFormState((prev) => ({ ...prev, status: event.target.value }))}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
-            >
-              <option value="draft">draft</option>
-              <option value="active">active</option>
-              <option value="archived">archived</option>
-            </select>
-          </label>
+        <div className="grid gap-8 xl:grid-cols-[1fr_320px]">
+          {/* Main Content - Left Side */}
+          <div className="space-y-6">
+            {/* Course Details Card */}
+            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+              <div className="mb-5 flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </div>
+                <h4 className="text-sm font-medium text-white">Course Details</h4>
+              </div>
+              <div className="grid gap-5 lg:grid-cols-2">
+                <div className="lg:col-span-2">
+                  <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                    Course Title
+                  </label>
+                  <input
+                    type="text"
+                    value={formState.title}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, title: e.target.value }))}
+                    placeholder="e.g., Advanced Web Development"
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                    Description
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={formState.description}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
+                    placeholder="Brief description of what learners will achieve..."
+                    className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Settings Row */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                  Status
+                </label>
+                <select
+                  value={formState.status}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, status: e.target.value }))}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition focus:border-indigo-500/50 focus:outline-none"
+                >
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status} className="bg-[#1c1436]">
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                  Enrollment
+                </label>
+                <select
+                  value={formState.enrollment_enabled ? "enabled" : "disabled"}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, enrollment_enabled: e.target.value === "enabled" }))}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition focus:border-indigo-500/50 focus:outline-none"
+                >
+                  <option value="enabled" className="bg-[#1c1436]">Open</option>
+                  <option value="disabled" className="bg-[#1c1436]">Closed</option>
+                </select>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                  Max Seats
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={formState.enrollment_limit}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, enrollment_limit: e.target.value }))}
+                  placeholder="Unlimited"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none"
+                />
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={formState.start_at}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, start_at: e.target.value }))}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition focus:border-indigo-500/50 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Topics Section */}
+            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+              <div className="mb-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-white">Course Topics</h4>
+                    <p className="text-xs text-slate-400">Drag to reorder • {selectedTopics.length} selected</p>
+                  </div>
+                </div>
+                {selectedCourse?.course_code && (
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 font-mono text-xs text-indigo-300">
+                      {selectedCourse.course_code}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFormState((prev) => ({ ...prev, regenerate_code: true }))}
+                      className={`rounded-lg border px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.15em] transition ${
+                        formState.regenerate_code
+                          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                          : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      {formState.regenerate_code ? "Will Regenerate" : "New Code"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Topics */}
+              <div className="mb-4 min-h-[120px] rounded-xl border border-dashed border-white/10 bg-black/20 p-3">
+                {selectedTopics.length === 0 ? (
+                  <div className="flex h-[96px] items-center justify-center text-sm text-slate-500">
+                    Select topics from below to build your course
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {selectedTopics.map((topic, index) => (
+                      <div
+                        key={topic.id}
+                        draggable
+                        onDragStart={() => handleDragStart(topic.id)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => handleDrop(topic.id)}
+                        className="group flex cursor-grab items-center gap-3 rounded-xl border border-white/10 bg-gradient-to-r from-white/[0.03] to-transparent px-3 py-2.5 transition hover:border-indigo-500/30 hover:from-indigo-500/5 active:cursor-grabbing"
+                      >
+                        <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-indigo-500/20 text-xs font-semibold text-indigo-300">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-white">{topic.title}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {topic.time_allocated} {topic.time_unit === "hours" ? "hrs" : "days"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTopic(topic.id)}
+                          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-slate-500 opacity-0 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:opacity-100"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Available Topics */}
+              {topics.filter((t) => !formState.topic_ids.includes(t.id)).length > 0 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500">
+                    Available Topics
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {topics
+                      .filter((topic) => !formState.topic_ids.includes(topic.id))
+                      .map((topic) => (
+                        <button
+                          key={`add-${topic.id}`}
+                          type="button"
+                          onClick={() => handleAddTopic(topic.id)}
+                          className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 text-xs text-slate-300 transition hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-300"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M12 5v14M5 12h14" />
+                          </svg>
+                          {topic.title}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+              {topics.length === 0 && (
+                <p className="text-center text-xs text-slate-500">No topics available. Create topics in Superadmin first.</p>
+              )}
+            </div>
+
+            {/* Prerequisites Section */}
+            {selectedTopics.length > 1 && (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-white">Topic Dependencies</h4>
+                    <p className="text-xs text-slate-400">Define prerequisites and corequisites</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {selectedTopics.map((topic) => {
+                    const otherTopics = selectedTopics.filter((t) => t.id !== topic.id);
+                    return (
+                      <div key={`relations-${topic.id}`} className="rounded-xl border border-white/5 bg-black/20 p-4">
+                        <p className="mb-3 text-sm font-medium text-white">{topic.title}</p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.15em] text-slate-500">
+                              Prerequisites
+                            </label>
+                            <select
+                              multiple
+                              value={formState.topic_prerequisites[topic.id] ?? []}
+                              onChange={(e) =>
+                                handleRelationChange(topic.id, "pre", Array.from(e.target.selectedOptions).map((o) => o.value))
+                              }
+                              className="h-20 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white focus:border-indigo-500/50 focus:outline-none"
+                            >
+                              {otherTopics.map((t) => (
+                                <option key={`pre-${topic.id}-${t.id}`} value={t.id} className="bg-[#1c1436] py-1">
+                                  {t.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.15em] text-slate-500">
+                              Corequisites
+                            </label>
+                            <select
+                              multiple
+                              value={formState.topic_corequisites[topic.id] ?? []}
+                              onChange={(e) =>
+                                handleRelationChange(topic.id, "co", Array.from(e.target.selectedOptions).map((o) => o.value))
+                              }
+                              className="h-20 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white focus:border-indigo-500/50 focus:outline-none"
+                            >
+                              {otherTopics.map((t) => (
+                                <option key={`co-${topic.id}-${t.id}`} value={t.id} className="bg-[#1c1436] py-1">
+                                  {t.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar - Right Side */}
+          <div className="space-y-4">
+            {/* Summary Card */}
+            <div className="sticky top-0 rounded-2xl border border-white/10 bg-gradient-to-b from-indigo-500/5 to-transparent p-5">
+              <h4 className="mb-4 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Course Summary
+              </h4>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-white/5 bg-black/20 p-3 text-center">
+                    <p className="text-2xl font-semibold text-white">{totals.totalHours || 0}</p>
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500">Total Hours</p>
+                  </div>
+                  <div className="rounded-xl border border-white/5 bg-black/20 p-3 text-center">
+                    <p className="text-2xl font-semibold text-white">{totals.totalDays || 0}</p>
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500">Total Days</p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+                    <span className="text-slate-400">Topics</span>
+                    <span className="font-medium text-white">{selectedTopics.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+                    <span className="text-slate-400">Start</span>
+                    <span className="font-medium text-white">{formatDate(formState.start_at)}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+                    <span className="text-slate-400">End</span>
+                    <span className="font-medium text-white">
+                      {calculatedEndDate ? formatDate(calculatedEndDate.toISOString()) : "--"}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[10px] leading-relaxed text-slate-500">
+                  Duration is calculated at 8 hours per day, excluding weekends and PH holidays.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
-        {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
       </Modal>
 
       <Modal
-        isOpen={isApproveOpen}
-        title="Approve enrollment"
-        description="Select a target completion date."
-        onClose={() => setIsApproveOpen(false)}
+        isOpen={isDetailOpen}
+        title="Course Tracking"
+        description="Monitor enrollments and learner progress across all topics."
+        onClose={() => setIsDetailOpen(false)}
+        size="lg"
+        topAligned
         footer={
-          <>
-            <button
-              type="button"
-              onClick={() => setIsApproveOpen(false)}
-              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleApprove}
-              disabled={saving}
-              className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-5 py-2 text-xs uppercase tracking-[0.25em] text-emerald-200"
-            >
-              {saving ? "Saving..." : "Approve"}
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => setIsDetailOpen(false)}
+            className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 hover:text-white"
+          >
+            Close
+          </button>
         }
       >
-        <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-          End date
-          <input
-            type="date"
-            value={endDate}
-            onChange={(event) => setEndDate(event.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
-          />
-        </label>
-        {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
-      </Modal>
+        {detailLoading && (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300">
+            Loading course details...
+          </div>
+        )}
+        {!detailLoading && detail && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                    Course code
+                  </p>
+                  <h3 className="mt-2 font-display text-xl text-white">
+                    {detail.course.course_code ?? "--"}
+                  </h3>
+                </div>
+                <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
+                  {detail.course.status ?? "draft"}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 text-xs text-slate-300 sm:grid-cols-3">
+                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Hours</p>
+                  <p className="mt-1 text-sm text-white">{detail.course.total_hours ?? 0}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Days</p>
+                  <p className="mt-1 text-sm text-white">{detail.course.total_days ?? 0}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Enrollments</p>
+                  <p className="mt-1 text-sm text-white">{detail.enrollments.length}</p>
+                </div>
+              </div>
+            </div>
 
-      <Modal
-        isOpen={isEditEnrollmentOpen}
-        title="Edit enrollment"
-        description="Update enrollment status and dates."
-        onClose={() => setIsEditEnrollmentOpen(false)}
-        footer={
-          <>
-            <button
-              type="button"
-              onClick={() => setIsEditEnrollmentOpen(false)}
-              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveEnrollment}
-              disabled={saving}
-              className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90 disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </>
-        }
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-            Status
-            <select
-              value={editEnrollmentState.status}
-              onChange={(event) =>
-                setEditEnrollmentState((prev) => ({ ...prev, status: event.target.value }))
-              }
-              className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
-            >
-              <option value="pending">pending</option>
-              <option value="approved">approved</option>
-              <option value="active">active</option>
-              <option value="completed">completed</option>
-              <option value="rejected">rejected</option>
-            </select>
-          </label>
-          <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-            Start date
-            <input
-              type="date"
-              value={editEnrollmentState.start_date}
-              onChange={(event) =>
-                setEditEnrollmentState((prev) => ({ ...prev, start_date: event.target.value }))
-              }
-              className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
-            />
-          </label>
-          <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-            End date
-            <input
-              type="date"
-              value={editEnrollmentState.end_date}
-              onChange={(event) =>
-                setEditEnrollmentState((prev) => ({ ...prev, end_date: event.target.value }))
-              }
-              className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
-            />
-          </label>
-        </div>
-        {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
+            {detail.enrollments.length === 0 ? (
+              <p className="text-sm text-slate-400">No enrolled users yet.</p>
+            ) : (
+              detail.enrollments.map((enrollment) => {
+                const progressForUser = new Map(
+                  detail.topicProgress
+                    .filter((entry) => entry.user_id === enrollment.user_id)
+                    .map((entry) => [entry.topic_id, entry])
+                );
+                const orderedTopics =
+                  detail.course.topic_ids?.map((id) =>
+                    detail.topics.find((topic) => topic.id === id)
+                  ) ?? detail.topics;
+                const validTopics = orderedTopics.filter(Boolean) as Topic[];
+                const completedCount = validTopics.filter(
+                  (topic) => progressForUser.get(topic.id)?.status === "completed"
+                ).length;
+                const completion =
+                  validTopics.length > 0
+                    ? Math.round((completedCount / validTopics.length) * 100)
+                    : 0;
+                const displayName =
+                  enrollment.user?.email ||
+                  enrollment.user?.username ||
+                  enrollment.user_id;
+                return (
+                  <div
+                    key={`enrollment-${enrollment.id}`}
+                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-white">{displayName}</p>
+                        <p className="text-xs text-slate-400">
+                          Status: {enrollment.status ?? "pending"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
+                          {completion}% complete
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleKickEnrollment(enrollment.id)}
+                          disabled={
+                            removingEnrollmentId === enrollment.id ||
+                            enrollment.status === "removed"
+                          }
+                          className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
+                        >
+                          {enrollment.status === "removed"
+                            ? "Removed"
+                            : removingEnrollmentId === enrollment.id
+                            ? "Removing..."
+                            : "Kick"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {validTopics.map((topic) => {
+                        const progress = progressForUser.get(topic.id);
+                        const status = progress?.status
+                          ? progress.status === "completed"
+                            ? "Completed"
+                            : "In Progress"
+                          : "Not Started";
+                        return (
+                          <div
+                            key={`progress-${enrollment.id}-${topic.id}`}
+                            className="flex items-center justify-between rounded-lg border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-slate-300"
+                          >
+                            <span>{topic.title}</span>
+                            <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                              {status}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );
