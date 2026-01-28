@@ -1,7 +1,24 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { authService } from "../services/authService";
+import { supabase } from "../lib/supabaseClient";
 
 const AuthContext = createContext(null);
+
+/**
+ * Fetch the username from the profiles table.
+ * @param {string} userId
+ * @returns {Promise<string|null>}
+ */
+const fetchUsername = async (userId) => {
+  if (!supabase || !userId) return null;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("username")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) return null;
+  return data?.username ?? null;
+};
 
 /**
  * Provide auth state to child components.
@@ -26,7 +43,14 @@ export const AuthProvider = ({ children }) => {
         const currentSession = await authService.getSession();
         if (!isMounted) return;
         setSession(currentSession);
-        setUser(currentSession?.user ?? null);
+        const authUser = currentSession?.user ?? null;
+        if (authUser) {
+          const username = await fetchUsername(authUser.id);
+          if (!isMounted) return;
+          setUser({ ...authUser, username });
+        } else {
+          setUser(null);
+        }
       } catch (error) {
         if (!isMounted) return;
         setAuthError(error.message);
@@ -44,8 +68,20 @@ export const AuthProvider = ({ children }) => {
      * @returns {void}
      */
     const handleAuthChange = (_event, nextSession) => {
+      if (!isMounted) return;
       setSession(nextSession);
-      setUser(nextSession?.user ?? null);
+      const authUser = nextSession?.user ?? null;
+      if (authUser) {
+        // Fetch username asynchronously but don't block state update
+        setUser({ ...authUser, username: null });
+        fetchUsername(authUser.id).then((username) => {
+          if (isMounted) {
+            setUser({ ...authUser, username });
+          }
+        });
+      } else {
+        setUser(null);
+      }
     };
 
     init();

@@ -28,7 +28,7 @@ const LandingPage = () => {
                 Log in
               </a>
               <a
-                href="/auth/register"
+                href="/auth/login"
                 className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-widest text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90"
               >
                 Start Tracking

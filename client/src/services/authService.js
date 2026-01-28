@@ -47,29 +47,12 @@ const onAuthStateChange = (callback) => {
 };
 
 /**
- * Register a new user with Supabase.
+ * Register a new user with Supabase (disabled in this app).
  * @param {{email: string, password: string, firstName?: string, lastName?: string}} payload
  * @returns {Promise<object>}
  */
 const signUp = async ({ email, password, firstName, lastName }) => {
-  const client = requireSupabase();
-  const { data, error } = await client.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        first_name: firstName?.trim(),
-        last_name: lastName?.trim(),
-      },
-      emailRedirectTo: `${window.location.origin}/auth/callback`,
-    },
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
+  throw new Error("Self-registration is disabled. Contact your superadmin.");
 };
 
 /**

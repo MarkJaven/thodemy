@@ -21,12 +21,16 @@ const CourseCard = ({
     ? "enrolled"
     : "";
 
+  const totalHours =
+    course.total_hours ?? course.duration_hours ?? (course.total_days ? course.total_days * 8 : null);
+  const totalDays = course.total_days ?? (totalHours ? Math.ceil(totalHours / 8) : null);
+
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[0_18px_40px_rgba(10,8,18,0.35)]">
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-            {course.category || "Course"}
+            {course.status ? course.status : course.category || "Course"}
           </p>
           <h3 className="mt-2 font-display text-xl text-white">{course.title}</h3>
         </div>
@@ -36,23 +40,30 @@ const CourseCard = ({
             {course.level || "All Levels"}
           </span>
           <span className="rounded-full border border-white/10 px-3 py-1">
-            {course.duration_hours ? `${course.duration_hours}h` : "Self paced"}
+            {totalHours ? `${totalHours}h` : "Self paced"}
           </span>
+          {totalDays ? (
+            <span className="rounded-full border border-white/10 px-3 py-1">
+              {totalDays} day{totalDays === 1 ? "" : "s"}
+            </span>
+          ) : null}
           {statusLabel && (
             <span className="rounded-full border border-white/10 px-3 py-1 uppercase tracking-[0.2em]">
               {statusLabel}
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onEnroll}
-          disabled={isEnrolled || isSubmitting}
-          title={isEnrolled ? "Already enrolled" : "Enroll in this course"}
-          className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSubmitting ? "Enrolling..." : isEnrolled ? "Enrolled" : "Enroll"}
-        </button>
+        {onEnroll && (
+          <button
+            type="button"
+            onClick={onEnroll}
+            disabled={isEnrolled || isSubmitting}
+            title={isEnrolled ? "Already enrolled" : "Enroll in this course"}
+            className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSubmitting ? "Enrolling..." : isEnrolled ? "Enrolled" : "Enroll"}
+          </button>
+        )}
       </div>
     </div>
   );
