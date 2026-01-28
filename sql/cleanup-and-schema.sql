@@ -637,13 +637,11 @@ CREATE POLICY "Courses readable by user"
       WHERE user_id = auth.uid()
         AND role = 'user'
     )
-    AND (
-      status = 'published'
-      OR id IN (
-        SELECT course_id
-        FROM public.enrollments
-        WHERE user_id = auth.uid()
-      )
+    AND id IN (
+      SELECT course_id
+      FROM public.enrollments
+      WHERE user_id = auth.uid()
+        AND status IN ('pending', 'approved', 'active', 'completed', 'enrolled')
     )
   );
 

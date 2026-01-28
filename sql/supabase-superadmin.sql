@@ -457,13 +457,11 @@ create policy "Courses readable by user"
       where user_id = auth.uid()
         and role = 'user'
     )
-    and (
-      status = 'published'
-      or id in (
-        select course_id
-        from public.enrollments
-        where user_id = auth.uid()
-      )
+    and id in (
+      select course_id
+      from public.enrollments
+      where user_id = auth.uid()
+        and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
     )
   );
 
@@ -752,13 +750,21 @@ create policy "Quizzes readable by assignee"
   on public.quizzes
   for select
   using (
-    assigned_user_id = auth.uid()
-    or assigned_user_id is null
-    or course_id in (
-      select course_id
+    exists (
+      select 1
       from public.enrollments
       where user_id = auth.uid()
-        and status in ('approved', 'active', 'completed')
+        and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+    )
+    and (
+      assigned_user_id = auth.uid()
+      or assigned_user_id is null
+      or course_id in (
+        select course_id
+        from public.enrollments
+        where user_id = auth.uid()
+          and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+      )
     )
   );
 
@@ -868,7 +874,15 @@ drop policy if exists "Forms readable by assignee or global" on public.forms;
 create policy "Forms readable by assignee or global"
   on public.forms
   for select
-  using (assigned_user_id = auth.uid() or assigned_user_id is null);
+  using (
+    exists (
+      select 1
+      from public.enrollments
+      where user_id = auth.uid()
+        and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+    )
+    and (assigned_user_id = auth.uid() or assigned_user_id is null)
+  );
 
 drop policy if exists "Form questions manageable by superadmin" on public.form_questions;
 create policy "Form questions manageable by superadmin"
