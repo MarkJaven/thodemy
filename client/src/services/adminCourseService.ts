@@ -8,15 +8,6 @@ const requireSupabase = () => {
   return supabase;
 };
 
-const generateCourseCode = (): string => {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-};
-
 export type CourseSummary = {
   id: string;
   title: string;
@@ -216,8 +207,6 @@ export const adminCourseService = {
       endAt = currentDate.toISOString();
     }
 
-    const courseCode = generateCourseCode();
-
     const { data, error } = await client
       .from("courses")
       .insert({
@@ -233,7 +222,6 @@ export const adminCourseService = {
         topic_corequisites: payload.topic_corequisites ?? {},
         total_hours: totalHours,
         total_days: totalDays,
-        course_code: courseCode,
       })
       .select(
         "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at"
@@ -256,7 +244,6 @@ export const adminCourseService = {
       topic_ids?: string[];
       topic_prerequisites?: Record<string, string[]>;
       topic_corequisites?: Record<string, string[]>;
-      regenerate_code?: boolean;
     }
   ): Promise<void> {
     const client = requireSupabase();
@@ -272,10 +259,6 @@ export const adminCourseService = {
     if (payload.topic_ids !== undefined) updates.topic_ids = payload.topic_ids;
     if (payload.topic_prerequisites !== undefined) updates.topic_prerequisites = payload.topic_prerequisites;
     if (payload.topic_corequisites !== undefined) updates.topic_corequisites = payload.topic_corequisites;
-
-    if (payload.regenerate_code) {
-      updates.course_code = generateCourseCode();
-    }
 
     // Recalculate hours if topic_ids changed
     if (payload.topic_ids !== undefined) {

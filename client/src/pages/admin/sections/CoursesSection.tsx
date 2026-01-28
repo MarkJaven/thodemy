@@ -1,23 +1,12 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
-import { calculateCourseEndDate } from "../../../lib/topicDates";
 import { adminCourseService, CourseDetail, CourseSummary } from "../../../services/adminCourseService";
 import { superAdminService } from "../../../services/superAdminService";
 import type { Topic } from "../../../types/superAdmin";
+import LearningPathsSection from "./LearningPathsSection";
 
 const statusOptions = ["draft", "published", "archived"] as const;
-
-const formatDate = (value?: string | null) => {
-  if (!value) return "--";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "--";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-};
 
 const buildTotals = (topics: Topic[]) => {
   const totalHours = topics.reduce((sum, topic) => {
@@ -53,21 +42,15 @@ const CoursesSection = () => {
     title: "",
     description: "",
     status: "draft",
-    enrollment_enabled: true,
-    enrollment_limit: "",
-    start_at: "",
     topic_ids: [] as string[],
     topic_prerequisites: {} as Record<string, string[]>,
     topic_corequisites: {} as Record<string, string[]>,
-    regenerate_code: false,
   });
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CourseDetail | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [removingEnrollmentId, setRemovingEnrollmentId] = useState<string | null>(null);
-  const [regeneratingCourseId, setRegeneratingCourseId] = useState<string | null>(null);
 
   const topicLookup = useMemo(() => new Map(topics.map((topic) => [topic.id, topic])), [topics]);
 
@@ -80,9 +63,13 @@ const CoursesSection = () => {
   );
 
   const totals = useMemo(() => buildTotals(selectedTopics), [selectedTopics]);
-  const startDate = formState.start_at ? new Date(formState.start_at) : null;
-  const calculatedEndDate =
-    startDate && totals.totalDays > 0 ? calculateCourseEndDate(startDate, totals.totalDays) : null;
+  const orderedDetailTopics = useMemo(() => {
+    if (!detail) return [];
+    const ordered =
+      detail.course.topic_ids?.map((id) => detail.topics.find((topic) => topic.id === id)) ??
+      detail.topics;
+    return ordered.filter(Boolean) as Topic[];
+  }, [detail]);
 
   const loadData = async () => {
     setLoading(true);
@@ -111,13 +98,9 @@ const CoursesSection = () => {
       title: "",
       description: "",
       status: "draft",
-      enrollment_enabled: true,
-      enrollment_limit: "",
-      start_at: "",
       topic_ids: [],
       topic_prerequisites: {},
       topic_corequisites: {},
-      regenerate_code: false,
     });
     setActionError(null);
     setIsFormOpen(true);
@@ -129,13 +112,9 @@ const CoursesSection = () => {
       title: course.title,
       description: course.description ?? "",
       status: course.status ?? "draft",
-      enrollment_enabled: course.enrollment_enabled ?? true,
-      enrollment_limit: course.enrollment_limit ? String(course.enrollment_limit) : "",
-      start_at: course.start_at ? course.start_at.slice(0, 10) : "",
       topic_ids: course.topic_ids ?? [],
       topic_prerequisites: normalizeRelationMap(course.topic_prerequisites),
       topic_corequisites: normalizeRelationMap(course.topic_corequisites),
-      regenerate_code: false,
     });
     setActionError(null);
     setIsFormOpen(true);
@@ -218,13 +197,9 @@ const CoursesSection = () => {
       title: formState.title.trim(),
       description: formState.description.trim(),
       status: formState.status,
-      enrollment_enabled: formState.enrollment_enabled,
-      enrollment_limit: formState.enrollment_limit ? Number(formState.enrollment_limit) : null,
-      start_at: formState.start_at ? new Date(formState.start_at).toISOString() : null,
       topic_ids: formState.topic_ids,
       topic_prerequisites: formState.topic_prerequisites,
       topic_corequisites: formState.topic_corequisites,
-      regenerate_code: formState.regenerate_code,
     };
 
     try {
@@ -268,69 +243,6 @@ const CoursesSection = () => {
     }
   };
 
-  const handleKickEnrollment = async (enrollmentId: string) => {
-    const confirmed = window.confirm("Remove this student from the course?");
-    if (!confirmed) return;
-    setActionError(null);
-    setRemovingEnrollmentId(enrollmentId);
-    try {
-      await adminCourseService.updateEnrollmentStatus(enrollmentId, "removed");
-      if (detail) {
-        const updatedEnrollments = detail.enrollments.map((entry) =>
-          entry.id === enrollmentId ? { ...entry, status: "removed" } : entry
-        );
-        setDetail({ ...detail, enrollments: updatedEnrollments });
-      }
-      await loadData();
-    } catch (removeError) {
-      setActionError(
-        removeError instanceof Error ? removeError.message : "Unable to remove enrollment."
-      );
-    } finally {
-      setRemovingEnrollmentId(null);
-    }
-  };
-
-  const handleUpdateEnrollment = async (enrollmentId: string, status: string) => {
-    setActionError(null);
-    setRemovingEnrollmentId(enrollmentId);
-    try {
-      await adminCourseService.updateEnrollmentStatus(enrollmentId, status);
-      if (detail) {
-        const updatedEnrollments = detail.enrollments.map((entry) =>
-          entry.id === enrollmentId ? { ...entry, status } : entry
-        );
-        setDetail({ ...detail, enrollments: updatedEnrollments });
-      }
-      await loadData();
-    } catch (updateError) {
-      setActionError(
-        updateError instanceof Error ? updateError.message : "Unable to update enrollment."
-      );
-    } finally {
-      setRemovingEnrollmentId(null);
-    }
-  };
-
-  const handleRegenerateCode = async (courseId: string) => {
-    setActionError(null);
-    setRegeneratingCourseId(courseId);
-    try {
-      await adminCourseService.updateCourse(courseId, { regenerate_code: true });
-      await loadData();
-      if (detail && detail.course.id === courseId) {
-        const refreshed = await adminCourseService.getCourseDetail(courseId);
-        setDetail(refreshed);
-      }
-    } catch (regenError) {
-      setActionError(
-        regenError instanceof Error ? regenError.message : "Unable to regenerate course code."
-      );
-    } finally {
-      setRegeneratingCourseId(null);
-    }
-  };
-
   const columns = useMemo(
     () => [
       {
@@ -353,18 +265,6 @@ const CoursesSection = () => {
         ),
       },
       {
-        key: "code",
-        header: "Code",
-        render: (course: CourseSummary) =>
-          course.course_code ? (
-            <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.2em] text-indigo-200">
-              {course.course_code}
-            </span>
-          ) : (
-            <span className="text-xs text-slate-500">--</span>
-          ),
-      },
-      {
         key: "hours",
         header: "Total Hours",
         render: (course: CourseSummary) => (
@@ -379,13 +279,6 @@ const CoursesSection = () => {
         ),
       },
       {
-        key: "enrolled",
-        header: "Enrolled",
-        render: (course: CourseSummary) => (
-          <span className="text-xs text-slate-300">{course.enrollment_count ?? 0}</span>
-        ),
-      },
-      {
         key: "actions",
         header: "Actions",
         render: (course: CourseSummary) => (
@@ -396,14 +289,6 @@ const CoursesSection = () => {
               className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
             >
               View
-            </button>
-            <button
-              type="button"
-              onClick={() => handleRegenerateCode(course.id)}
-              disabled={regeneratingCourseId === course.id}
-              className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 disabled:opacity-60"
-            >
-              {regeneratingCourseId === course.id ? "Generating..." : "Generate Code"}
             </button>
             <button
               type="button"
@@ -423,89 +308,92 @@ const CoursesSection = () => {
         ),
       },
     ],
-    [topics, regeneratingCourseId]
+    [topics]
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="font-display text-2xl text-white">Courses</h2>
-          <p className="mt-2 text-sm text-slate-300">
-            Build ordered learning paths from superadmin topics.
-          </p>
+    <div className="space-y-10">
+      <LearningPathsSection />
+      <div className="h-px w-full bg-white/10" />
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="font-display text-2xl text-white">Courses</h2>
+            <p className="mt-2 text-sm text-slate-300">
+              Build courses and topics that roll up into learning paths.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl text-white transition hover:bg-white/20"
+            aria-label="Create course"
+          >
+            +
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl text-white transition hover:bg-white/20"
-          aria-label="Create course"
+
+        {error && (
+          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+            {error}
+          </div>
+        )}
+        {actionError && (
+          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+            {actionError}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div
+                key={`course-skeleton-${index}`}
+                className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/5"
+              />
+            ))}
+          </div>
+        ) : (
+          <DataTable columns={columns} data={courses} emptyMessage="No courses yet." />
+        )}
+
+        <Modal
+          isOpen={isFormOpen}
+          title={selectedCourse ? "Edit Course" : "Create New Course"}
+          description="Design your course by adding topics and estimating duration."
+          onClose={() => (saving ? null : setIsFormOpen(false))}
+          size="full"
+          topAligned
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(false)}
+                className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 px-6 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-lg shadow-purple-500/25 transition hover:shadow-purple-500/40 disabled:opacity-60"
+              >
+                {saving ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Saving...
+                  </span>
+                ) : (
+                  "Save Course"
+                )}
+              </button>
+            </>
+          }
         >
-          +
-        </button>
-      </div>
-
-      {error && (
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
-          {error}
-        </div>
-      )}
-      {actionError && (
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
-          {actionError}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={`course-skeleton-${index}`}
-              className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/5"
-            />
-          ))}
-        </div>
-      ) : (
-        <DataTable columns={columns} data={courses} emptyMessage="No courses yet." />
-      )}
-
-      <Modal
-        isOpen={isFormOpen}
-        title={selectedCourse ? "Edit Course" : "Create New Course"}
-        description="Design your learning path by adding topics and configuring enrollment settings."
-        onClose={() => (saving ? null : setIsFormOpen(false))}
-        size="full"
-        topAligned
-        footer={
-          <>
-            <button
-              type="button"
-              onClick={() => setIsFormOpen(false)}
-              className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 hover:text-white"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 px-6 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-lg shadow-purple-500/25 transition hover:shadow-purple-500/40 disabled:opacity-60"
-            >
-              {saving ? (
-                <span className="flex items-center gap-2">
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Saving...
-                </span>
-              ) : (
-                "Save Course"
-              )}
-            </button>
-          </>
-        }
-      >
         <div className="grid gap-8 xl:grid-cols-[1fr_320px]">
           {/* Main Content - Left Side */}
           <div className="space-y-6">
@@ -549,7 +437,7 @@ const CoursesSection = () => {
             </div>
 
             {/* Settings Row */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
                   Status
@@ -565,43 +453,6 @@ const CoursesSection = () => {
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
-                  Enrollment
-                </label>
-                <select
-                  value={formState.enrollment_enabled ? "enabled" : "disabled"}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, enrollment_enabled: e.target.value === "enabled" }))}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition focus:border-indigo-500/50 focus:outline-none"
-                >
-                  <option value="enabled" className="bg-[#1c1436]">Open</option>
-                  <option value="disabled" className="bg-[#1c1436]">Closed</option>
-                </select>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
-                  Max Seats
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={formState.enrollment_limit}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, enrollment_limit: e.target.value }))}
-                  placeholder="Unlimited"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none"
-                />
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={formState.start_at}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, start_at: e.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition focus:border-indigo-500/50 focus:outline-none"
-                />
               </div>
             </div>
 
@@ -619,24 +470,6 @@ const CoursesSection = () => {
                     <p className="text-xs text-slate-400">Drag to reorder • {selectedTopics.length} selected</p>
                   </div>
                 </div>
-                {selectedCourse?.course_code && (
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 font-mono text-xs text-indigo-300">
-                      {selectedCourse.course_code}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setFormState((prev) => ({ ...prev, regenerate_code: true }))}
-                      className={`rounded-lg border px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.15em] transition ${
-                        formState.regenerate_code
-                          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                          : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                      }`}
-                    >
-                      {formState.regenerate_code ? "Will Regenerate" : "New Code"}
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Selected Topics */}
@@ -804,19 +637,9 @@ const CoursesSection = () => {
                     <span className="text-slate-400">Topics</span>
                     <span className="font-medium text-white">{selectedTopics.length}</span>
                   </div>
-                  <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2">
-                    <span className="text-slate-400">Start</span>
-                    <span className="font-medium text-white">{formatDate(formState.start_at)}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2">
-                    <span className="text-slate-400">End</span>
-                    <span className="font-medium text-white">
-                      {calculatedEndDate ? formatDate(calculatedEndDate.toISOString()) : "--"}
-                    </span>
-                  </div>
                 </div>
                 <p className="text-[10px] leading-relaxed text-slate-500">
-                  Duration is calculated at 8 hours per day, excluding weekends and PH holidays.
+                  Total days are calculated at 8 hours per day.
                 </p>
               </div>
             </div>
@@ -826,8 +649,8 @@ const CoursesSection = () => {
 
       <Modal
         isOpen={isDetailOpen}
-        title="Course Tracking"
-        description="Monitor enrollments and learner progress across all topics."
+        title="Course Overview"
+        description="Review the topics and estimated duration for this course."
         onClose={() => setIsDetailOpen(false)}
         size="lg"
         topAligned
@@ -851,12 +674,9 @@ const CoursesSection = () => {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                    Course code
-                  </p>
-                  <h3 className="mt-2 font-display text-xl text-white">
-                    {detail.course.course_code ?? "--"}
-                  </h3>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Course</p>
+                  <h3 className="mt-2 font-display text-xl text-white">{detail.course.title}</h3>
+                  <p className="mt-2 text-sm text-slate-300">{detail.course.description}</p>
                 </div>
                 <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
                   {detail.course.status ?? "draft"}
@@ -872,121 +692,46 @@ const CoursesSection = () => {
                   <p className="mt-1 text-sm text-white">{detail.course.total_days ?? 0}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Enrollments</p>
-                  <p className="mt-1 text-sm text-white">{detail.enrollments.length}</p>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Topics</p>
+                  <p className="mt-1 text-sm text-white">{orderedDetailTopics.length}</p>
                 </div>
               </div>
             </div>
 
-            {detail.enrollments.length === 0 ? (
-              <p className="text-sm text-slate-400">No enrolled users yet.</p>
+            {orderedDetailTopics.length === 0 ? (
+              <p className="text-sm text-slate-400">No topics assigned to this course yet.</p>
             ) : (
-              detail.enrollments.map((enrollment) => {
-                const progressForUser = new Map(
-                  detail.topicProgress
-                    .filter((entry) => entry.user_id === enrollment.user_id)
-                    .map((entry) => [entry.topic_id, entry])
-                );
-                const orderedTopics =
-                  detail.course.topic_ids?.map((id) =>
-                    detail.topics.find((topic) => topic.id === id)
-                  ) ?? detail.topics;
-                const validTopics = orderedTopics.filter(Boolean) as Topic[];
-                const completedCount = validTopics.filter(
-                  (topic) => progressForUser.get(topic.id)?.status === "completed"
-                ).length;
-                const completion =
-                  validTopics.length > 0
-                    ? Math.round((completedCount / validTopics.length) * 100)
-                    : 0;
-                const displayName =
-                  enrollment.user?.email ||
-                  enrollment.user?.username ||
-                  enrollment.user_id;
-                const enrollmentStatus = enrollment.status ?? "pending";
-                const isPending = enrollmentStatus === "pending";
-                const isRejected = enrollmentStatus === "rejected";
-                const isRemoved = enrollmentStatus === "removed";
-                return (
-                  <div
-                    key={`enrollment-${enrollment.id}`}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-white">{displayName}</p>
-                        <p className="text-xs text-slate-400">
-                          Status: {enrollmentStatus}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-                          {completion}% complete
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Topics</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {orderedDetailTopics.map((topic, index) => (
+                    <div
+                      key={`course-topic-${topic.id}`}
+                      className="rounded-xl border border-white/10 bg-ink-800/50 px-4 py-3 text-sm text-slate-300"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-white">{topic.title}</p>
+                          {topic.description && (
+                            <p className="text-xs text-slate-400">{topic.description}</p>
+                          )}
+                        </div>
+                        <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                          {topic.time_allocated} {topic.time_unit === "hours" ? "hrs" : "days"}
                         </span>
-                        {isPending && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateEnrollment(enrollment.id, "approved")}
-                              disabled={removingEnrollmentId === enrollment.id}
-                              className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 disabled:opacity-50"
-                            >
-                              {removingEnrollmentId === enrollment.id ? "Updating..." : "Approve"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateEnrollment(enrollment.id, "rejected")}
-                              disabled={removingEnrollmentId === enrollment.id}
-                              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
-                            >
-                              {removingEnrollmentId === enrollment.id ? "Updating..." : "Reject"}
-                            </button>
-                          </>
-                        )}
-                        {!isPending && !isRejected && (
-                          <button
-                            type="button"
-                            onClick={() => handleKickEnrollment(enrollment.id)}
-                            disabled={removingEnrollmentId === enrollment.id || isRemoved}
-                            className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
-                          >
-                            {isRemoved
-                              ? "Removed"
-                              : removingEnrollmentId === enrollment.id
-                              ? "Removing..."
-                              : "Kick"}
-                          </button>
-                        )}
                       </div>
+                      <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                        Topic {index + 1}
+                      </p>
                     </div>
-                    <div className="mt-3 grid gap-2 md:grid-cols-2">
-                      {validTopics.map((topic) => {
-                        const progress = progressForUser.get(topic.id);
-                        const status = progress?.status
-                          ? progress.status === "completed"
-                            ? "Completed"
-                            : "In Progress"
-                          : "Not Started";
-                        return (
-                          <div
-                            key={`progress-${enrollment.id}-${topic.id}`}
-                            className="flex items-center justify-between rounded-lg border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-slate-300"
-                          >
-                            <span>{topic.title}</span>
-                            <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                              {status}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}
-      </Modal>
+        </Modal>
+      </div>
     </div>
   );
 };

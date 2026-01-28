@@ -7,6 +7,7 @@ import type { Topic } from "../../../types/superAdmin";
 type TopicFormState = {
   title: string;
   description: string;
+  link_url: string;
   time_allocated: number;
   time_unit: "hours" | "days";
   pre_requisites: string[];
@@ -24,6 +25,7 @@ const TopicsSection = () => {
   const [formState, setFormState] = useState<TopicFormState>({
     title: "",
     description: "",
+    link_url: "",
     time_allocated: 1,
     time_unit: "days",
     pre_requisites: [],
@@ -56,6 +58,7 @@ const TopicsSection = () => {
     setFormState({
       title: "",
       description: "",
+      link_url: "",
       time_allocated: 1,
       time_unit: "days",
       pre_requisites: [],
@@ -70,6 +73,7 @@ const TopicsSection = () => {
     setFormState({
       title: topic.title,
       description: topic.description ?? "",
+      link_url: topic.link_url ?? "",
       time_allocated: Number(topic.time_allocated ?? 1),
       time_unit: topic.time_unit === "hours" ? "hours" : "days",
       pre_requisites: topic.pre_requisites ?? [],
@@ -94,6 +98,7 @@ const TopicsSection = () => {
     const payload = {
       title: formState.title.trim(),
       description: formState.description.trim() || null,
+      link_url: formState.link_url.trim() || null,
       time_allocated: formState.time_allocated,
       time_unit: formState.time_unit,
       pre_requisites: Array.from(new Set(formState.pre_requisites)),
@@ -326,6 +331,18 @@ const TopicsSection = () => {
               value={formState.description}
               onChange={(event) =>
                 setFormState((prev) => ({ ...prev, description: event.target.value }))
+              }
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
+            />
+          </label>
+          <label className="md:col-span-2 text-xs uppercase tracking-[0.25em] text-slate-400">
+            Topic link (optional)
+            <input
+              type="url"
+              placeholder="https://example.com/lesson"
+              value={formState.link_url}
+              onChange={(event) =>
+                setFormState((prev) => ({ ...prev, link_url: event.target.value }))
               }
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
