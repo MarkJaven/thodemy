@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { authService } from "../services/authService";
 import { superAdminService } from "../services/superAdminService";
 
@@ -10,25 +10,18 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * @returns {JSX.Element}
  */
 const AuthPage = () => {
-  const { mode } = useParams();
   const navigate = useNavigate();
-  const resolvedMode = mode === "login" ? "login" : "register";
-  const isRegister = resolvedMode === "register";
+  const resolvedMode = "login";
+  const isRegister = false;
 
   const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
     email: "",
     password: "",
   });
-  const [acceptTerms, setAcceptTerms] = useState(false);
-  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loadingTarget, setLoadingTarget] = useState(null);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
-  const [showTerms, setShowTerms] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
 
   /**
    * Reset view state when the auth mode changes.
@@ -72,17 +65,6 @@ const AuthPage = () => {
     if (form.password.length < 8) {
       return "Password must be at least 8 characters.";
     }
-    if (isRegister) {
-      if (!form.firstName.trim() || !form.lastName.trim()) {
-        return "First and last name are required.";
-      }
-      if (!acceptTerms) {
-        return "You must accept the terms to continue.";
-      }
-      if (!acceptPrivacy) {
-        return "You must accept the data privacy notice to continue.";
-      }
-    }
     return null;
   };
 
@@ -107,31 +89,6 @@ const AuthPage = () => {
     }
 
     setLoadingTarget("form");
-    if (isRegister) {
-      try {
-        const data = await authService.signUp({
-          email: form.email,
-          password: form.password,
-          firstName: form.firstName,
-          lastName: form.lastName,
-        });
-
-        if (!data.session) {
-          setInfo("Check your email to confirm your account.");
-        }
-
-        navigate("/dashboard", {
-          replace: true,
-          state: { pendingEmail: !data.session },
-        });
-      } catch (signUpError) {
-        setError(signUpError.message);
-      } finally {
-        setLoadingTarget(null);
-      }
-      return;
-    }
-
     try {
       await authService.signInWithPassword({
         email: form.email,
@@ -139,30 +96,16 @@ const AuthPage = () => {
       });
       const session = await authService.getSession();
       const role = await superAdminService.getCurrentRole(session?.user?.id);
-      navigate(role === "superadmin" ? "/super-admin" : "/dashboard", { replace: true });
+      if (role === "superadmin") {
+        navigate("/super-admin", { replace: true });
+      } else if (role === "admin") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     } catch (signInError) {
       setError(signInError.message);
     } finally {
-      setLoadingTarget(null);
-    }
-  };
-
-  /**
-   * Start OAuth sign-in.
-   * @param {"google"|"azure"} provider
-   * @returns {Promise<void>}
-   */
-  const handleOAuth = async (provider) => {
-    setError(null);
-    if (!authService.isConfigured) {
-      setError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-      return;
-    }
-    setLoadingTarget(provider);
-    try {
-      await authService.signInWithOAuth(provider);
-    } catch (oauthError) {
-      setError(oauthError.message);
       setLoadingTarget(null);
     }
   };
@@ -210,45 +153,11 @@ const AuthPage = () => {
               <div className="space-y-2">
                 <h1 className="font-display text-3xl">{title}</h1>
                 <p className="text-sm text-slate-400">
-                  {isRegister ? (
-                    <>
-                      Already have an account?{" "}
-                      <Link className="text-indigo-300 hover:text-indigo-200" to="/auth/login">
-                        Log in
-                      </Link>
-                    </>
-                  ) : (
-                    <>
-                      Don&apos;t have an account?{" "}
-                      <Link className="text-indigo-300 hover:text-indigo-200" to="/auth/register">
-                        Create account
-                      </Link>
-                    </>
-                  )}
+                  Contact your superadmin to request access.
                 </p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {isRegister && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <input
-                      name="firstName"
-                      value={form.firstName}
-                      onChange={handleChange}
-                      placeholder="First name"
-                      autoComplete="given-name"
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                    />
-                    <input
-                      name="lastName"
-                      value={form.lastName}
-                      onChange={handleChange}
-                      placeholder="Last name"
-                      autoComplete="family-name"
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                    />
-                  </div>
-                )}
                 <input
                   name="email"
                   type="email"
@@ -265,7 +174,7 @@ const AuthPage = () => {
                     value={form.password}
                     onChange={handleChange}
                     placeholder="Enter your password"
-                    autoComplete={isRegister ? "new-password" : "current-password"}
+                    autoComplete="current-password"
                     className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                   />
                   <button
@@ -314,48 +223,6 @@ const AuthPage = () => {
                   </button>
                 </div>
 
-                {isRegister && (
-                  <label className="flex items-start gap-3 text-xs text-slate-400">
-                    <input
-                      type="checkbox"
-                      checked={acceptTerms}
-                      onChange={(event) => setAcceptTerms(event.target.checked)}
-                      className="mt-0.5 rounded border-white/20 bg-white/10 text-indigo-400 focus:ring-indigo-400"
-                    />
-                    <span>
-                      I agree to the{" "}
-                      <button
-                        type="button"
-                        onClick={() => setShowTerms(true)}
-                        className="text-indigo-300 underline-offset-4 hover:underline"
-                      >
-                        Terms &amp; Conditions
-                      </button>
-                    </span>
-                  </label>
-                )}
-
-                {isRegister && (
-                  <label className="flex items-start gap-3 text-xs text-slate-400">
-                    <input
-                      type="checkbox"
-                      checked={acceptPrivacy}
-                      onChange={(event) => setAcceptPrivacy(event.target.checked)}
-                      className="mt-0.5 rounded border-white/20 bg-white/10 text-indigo-400 focus:ring-indigo-400"
-                    />
-                    <span>
-                      I acknowledge the{" "}
-                      <button
-                        type="button"
-                        onClick={() => setShowPrivacy(true)}
-                        className="text-indigo-300 underline-offset-4 hover:underline"
-                      >
-                        Data Privacy Act of 2012
-                      </button>
-                    </span>
-                  </label>
-                )}
-
                 {(error || info) && (
                   <div
                     className={`rounded-xl border px-4 py-3 text-xs ${
@@ -373,104 +240,13 @@ const AuthPage = () => {
                   disabled={isSubmitting || !isConfigured}
                   className="w-full rounded-xl bg-indigo-500 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSubmitting
-                    ? "Working..."
-                    : isRegister
-                    ? "Create account"
-                    : "Log in"}
+                  {isSubmitting ? "Working..." : "Log in"}
                 </button>
               </form>
-
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <div className="h-px flex-1 bg-white/10" />
-                <span>Or continue with</span>
-                <div className="h-px flex-1 bg-white/10" />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => handleOAuth("google")}
-                  disabled={loadingTarget === "google" || !isConfigured}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-3 text-sm text-white transition hover:bg-white/10 disabled:opacity-50"
-                >
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-semibold text-black">
-                    G
-                  </span>
-                  Google
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleOAuth("azure")}
-                  disabled={loadingTarget === "azure" || !isConfigured}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-3 text-sm text-white transition hover:bg-white/10 disabled:opacity-50"
-                >
-                  <span className="grid h-5 w-5 grid-cols-2 gap-0.5">
-                    <span className="block h-2.5 w-2.5 bg-[#f25022]" />
-                    <span className="block h-2.5 w-2.5 bg-[#7fba00]" />
-                    <span className="block h-2.5 w-2.5 bg-[#00a4ef]" />
-                    <span className="block h-2.5 w-2.5 bg-[#ffb900]" />
-                  </span>
-                  Microsoft
-                </button>
-              </div>
             </section>
           </div>
         </div>
       </div>
-
-      {showTerms && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-ink-800/95 p-6 shadow-glow">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg">Terms &amp; Conditions</h3>
-              <button
-                type="button"
-                onClick={() => setShowTerms(false)}
-                className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:bg-white/10"
-              >
-                Close
-              </button>
-            </div>
-            <p className="mt-4 text-justify text-sm text-slate-300">
-              By using Thodemy, you agree to use the platform responsibly and only for its intended
-              purpose of tracking training and achievements. You are responsible for your account
-              and the information you provide, and your data will be handled securely and used only
-              to operate and improve the service. You agree not to misuse, abuse, or attempt to
-              disrupt the platform, and you understand that features may change or be unavailable
-              at times as Thodemy continues to improve.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {showPrivacy && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-ink-800/95 p-6 shadow-glow">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg">Data Privacy Act Notice</h3>
-              <button
-                type="button"
-                onClick={() => setShowPrivacy(false)}
-                className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:bg-white/10"
-              >
-                Close
-              </button>
-            </div>
-            <p className="mt-4 text-justify text-sm text-slate-300">
-              Thodemy is committed to protecting the privacy and security of personal data in
-              compliance with the Data Privacy Act of 2012 (Republic Act No. 10173). All personal
-              information collected, processed, and stored by the platform shall be handled with
-              confidentiality and used solely for legitimate purposes related to providing training
-              and progress-tracking services. Appropriate organizational, physical, and technical
-              security measures are implemented to safeguard personal data against unauthorized
-              access, alteration, disclosure, or destruction. Users have the right to access,
-              correct, and request the deletion of their personal information in accordance with
-              the provisions of the Act and its implementing rules and regulations.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
