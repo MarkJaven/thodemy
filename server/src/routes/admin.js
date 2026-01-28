@@ -6,6 +6,7 @@ const { requireSuperAdmin } = require("../middleware/requireSuperAdmin");
 const { validateRequest } = require("../middleware/validation");
 const { adminController } = require("../controllers/adminController");
 const { courseController } = require("../controllers/courseController");
+const { learningPathController } = require("../controllers/learningPathController");
 const {
   validateCreateUser,
   validateUpdateUser,
@@ -80,5 +81,12 @@ router.delete(
   requireAdmin,
   courseController.deleteEnrollment
 );
+
+router.get("/learning-paths", authLimiter, requireAuth, requireAdmin, learningPathController.listLearningPaths);
+router.get("/learning-paths/:learningPathId", authLimiter, requireAuth, requireAdmin, learningPathController.getLearningPathDetail);
+router.post("/learning-paths", authLimiter, requireAuth, requireAdmin, learningPathController.upsertLearningPath);
+router.patch("/learning-paths/:learningPathId", authLimiter, requireAuth, requireAdmin, learningPathController.upsertLearningPath);
+router.delete("/learning-paths/:learningPathId", authLimiter, requireAuth, requireAdmin, learningPathController.deleteLearningPath);
+router.delete("/lp-enrollments/:enrollmentId", authLimiter, requireAuth, requireAdmin, learningPathController.deleteLPEnrollment);
 
 module.exports = router;

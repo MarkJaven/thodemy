@@ -10,6 +10,7 @@ import type {
   LessonTopic,
   Topic,
   TopicCompletionRequest,
+  CourseCompletionRequest,
   TopicProgress,
   Enrollment,
   Form,
@@ -20,6 +21,8 @@ import type {
   QuizAttempt,
   QuizQuestion,
   QuizScore,
+  LearningPath,
+  LearningPathEnrollment,
   Role,
   UserProfile,
 } from "../types/superAdmin";
@@ -208,6 +211,42 @@ export const superAdminService = {
     return (data ?? []) as Course[];
   },
 
+  async listLearningPaths(): Promise<LearningPath[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("learning_paths")
+      .select(
+        "id, title, description, course_ids, total_hours, total_days, enrollment_code, status, enrollment_enabled, enrollment_limit, start_at, end_at, created_at, updated_at"
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as LearningPath[];
+  },
+
+  async listLearningPathEnrollments(): Promise<LearningPathEnrollment[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("learning_path_enrollments")
+      .select(
+        "id, user_id, learning_path_id, status, enrolled_at, start_date, end_date, created_at, updated_at"
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as LearningPathEnrollment[];
+  },
+
+  async updateLearningPathEnrollmentStatus(
+    enrollmentId: string,
+    status: string
+  ): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client
+      .from("learning_path_enrollments")
+      .update({ status })
+      .eq("id", enrollmentId);
+    if (error) throw new Error(error.message);
+  },
+
   async createCourse(payload: Pick<Course, "title" | "description" | "status">): Promise<Course> {
     const client = requireSupabase();
     const { data, error } = await client
@@ -304,7 +343,7 @@ export const superAdminService = {
     const { data, error } = await client
       .from("topics")
       .select(
-        "id, title, description, time_allocated, time_unit, pre_requisites, co_requisites, created_at, updated_at, created_by, updated_by"
+        "id, title, description, link_url, time_allocated, time_unit, pre_requisites, co_requisites, created_at, updated_at, created_by, updated_by"
       )
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -370,10 +409,50 @@ export const superAdminService = {
     return data?.signedUrl ?? null;
   },
 
+  async listCourseCompletionRequests(): Promise<CourseCompletionRequest[]> {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("course_completion_requests")
+      .select(
+        "id, course_id, learning_path_id, user_id, storage_path, file_name, file_type, status, created_at, updated_at, reviewed_at, reviewed_by"
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as CourseCompletionRequest[];
+  },
+
+  async updateCourseCompletionRequest(
+    requestId: string,
+    payload: Partial<CourseCompletionRequest>
+  ): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client
+      .from("course_completion_requests")
+      .update(payload)
+      .eq("id", requestId);
+    if (error) throw new Error(error.message);
+  },
+
+  async getCourseProofUrl(storagePath?: string | null): Promise<string | null> {
+    if (!storagePath) return null;
+    const client = requireSupabase();
+    const { data, error } = await client.storage
+      .from("course-proofs")
+      .createSignedUrl(storagePath, 300);
+    if (error) throw new Error(error.message);
+    return data?.signedUrl ?? null;
+  },
+
   async createTopic(
     payload: Pick<
       Topic,
-      "title" | "description" | "time_allocated" | "time_unit" | "pre_requisites" | "co_requisites"
+      | "title"
+      | "description"
+      | "link_url"
+      | "time_allocated"
+      | "time_unit"
+      | "pre_requisites"
+      | "co_requisites"
     >
   ): Promise<Topic> {
     const client = requireSupabase();
@@ -381,7 +460,7 @@ export const superAdminService = {
       .from("topics")
       .insert(payload)
       .select(
-        "id, title, description, time_allocated, time_unit, pre_requisites, co_requisites, created_at, updated_at, created_by, updated_by"
+        "id, title, description, link_url, time_allocated, time_unit, pre_requisites, co_requisites, created_at, updated_at, created_by, updated_by"
       )
       .single();
     if (error) throw new Error(error.message);

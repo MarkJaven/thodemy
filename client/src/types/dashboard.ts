@@ -41,6 +41,7 @@ export type Topic = {
   id: string;
   title: string;
   description?: string | null;
+  link_url?: string | null;
   time_allocated: number;
   time_unit?: "hours" | "days" | null;
   pre_requisites?: string[] | null;
@@ -66,6 +67,21 @@ export type TopicCompletionRequest = {
   topic_id: string;
   user_id: string;
   course_id?: string | null;
+  storage_path: string;
+  file_name: string;
+  file_type: string;
+  status?: "pending" | "approved" | "rejected" | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+};
+
+export type CourseCompletionRequest = {
+  id: string;
+  course_id: string;
+  learning_path_id: string;
+  user_id: string;
   storage_path: string;
   file_name: string;
   file_type: string;
@@ -166,6 +182,32 @@ export type Form = {
   due_at?: string | null;
 };
 
+export type LearningPath = {
+  id: string;
+  title: string;
+  description: string;
+  course_ids?: string[] | null;
+  total_hours?: number | null;
+  total_days?: number | null;
+  enrollment_code?: string | null;
+  status?: "draft" | "published" | "archived" | string | null;
+  enrollment_enabled?: boolean | null;
+  enrollment_limit?: number | null;
+  start_at?: string | null;
+  end_at?: string | null;
+  created_at?: string | null;
+};
+
+export type LearningPathEnrollment = {
+  id: string;
+  user_id: string;
+  learning_path_id: string;
+  enrolled_at?: string | null;
+  status?: "pending" | "approved" | "rejected" | "active" | "completed" | "paused" | "removed" | null;
+  start_date?: string | null;
+  end_date?: string | null;
+};
+
 export type DashboardData = {
   courses: Course[];
   lessons: Lesson[];
@@ -173,6 +215,9 @@ export type DashboardData = {
   lessonAssignments: LessonAssignment[];
   lessonSubmissions: LessonSubmission[];
   enrollments: Enrollment[];
+  learningPaths: LearningPath[];
+  learningPathEnrollments: LearningPathEnrollment[];
+  courseCompletionRequests: CourseCompletionRequest[];
   activities: Activity[];
   quizzes: Quiz[];
   quizScores: QuizScore[];
