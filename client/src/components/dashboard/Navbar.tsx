@@ -5,28 +5,54 @@ type NavbarProps = {
 
 const Navbar = ({ userEmail, onSignOut }: NavbarProps) => {
   return (
-    <nav className="flex flex-wrap items-center justify-between gap-4 text-sm">
-      <div className="flex items-center gap-3 font-display text-lg tracking-wide">
-        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-sm">
-          T
-        </span>
+    <nav className="flex flex-wrap items-center justify-between gap-4">
+      {/* Logo & Brand */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent-purple/20 to-accent-violet/10 ring-1 ring-white/10">
+          <span className="font-display text-lg font-semibold text-white">T</span>
+        </div>
         <div>
-          <p className="text-white">Thodemy</p>
-          <p className="text-[11px] uppercase tracking-[0.35em] text-slate-400">
-            Training Hub
+          <p className="font-display text-lg font-medium tracking-wide text-white">Thodemy</p>
+          <p className="text-2xs uppercase tracking-[0.35em] text-slate-500">
+            Learning Platform
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
-        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-          {userEmail || "Guest"}
-        </span>
+
+      {/* User Controls */}
+      <div className="flex items-center gap-3">
+        {/* User Badge */}
+        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent-purple/20 text-2xs font-semibold uppercase text-accent-purple">
+            {userEmail ? userEmail.charAt(0).toUpperCase() : "G"}
+          </div>
+          <span className="max-w-[140px] truncate text-xs text-slate-300">
+            {userEmail || "Guest"}
+          </span>
+        </div>
+
+        {/* Sign Out Button */}
         <button
           type="button"
           onClick={onSignOut}
-          className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90"
+          className="group flex items-center gap-2 rounded-xl bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-violet px-4 py-2.5 text-[11px] font-semibold uppercase tracking-widest text-white shadow-purple-glow transition-all duration-200 hover:shadow-purple-glow-lg hover:brightness-110"
         >
-          Sign out
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="transition-transform duration-200 group-hover:translate-x-0.5"
+          >
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span className="hidden sm:inline">Sign out</span>
         </button>
       </div>
     </nav>

@@ -135,11 +135,18 @@ CREATE TABLE IF NOT EXISTS public.topics (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title text NOT NULL,
   description text,
+  certificate_file_url text,
+  start_date timestamptz,
+  end_date timestamptz,
+  author_id uuid DEFAULT auth.uid() REFERENCES auth.users(id),
   link_url text,
   time_allocated numeric NOT NULL,
   time_unit text NOT NULL DEFAULT 'days' CHECK (time_unit IN ('hours', 'days')),
   pre_requisites uuid[] NOT NULL DEFAULT '{}'::uuid[],
   co_requisites uuid[] NOT NULL DEFAULT '{}'::uuid[],
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  deleted_at timestamptz,
+  edited boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   created_by uuid DEFAULT auth.uid() REFERENCES auth.users(id),
@@ -147,6 +154,8 @@ CREATE TABLE IF NOT EXISTS public.topics (
 );
 
 CREATE INDEX IF NOT EXISTS topics_created_at_idx ON public.topics(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS topics_title_unique ON public.topics(lower(title)) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS topics_status_idx ON public.topics(status);
 
 -- Topic Progress (user progress on topics)
 CREATE TABLE IF NOT EXISTS public.topic_progress (
@@ -176,6 +185,21 @@ CREATE TABLE IF NOT EXISTS public.topic_completion_requests (
   reviewed_by uuid REFERENCES auth.users(id)
 );
 
+CREATE TABLE IF NOT EXISTS public.topic_submissions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  topic_id uuid NOT NULL REFERENCES public.topics(id) ON DELETE RESTRICT,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  file_url text NOT NULL,
+  message text,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'rejected')),
+  submitted_at timestamptz NOT NULL DEFAULT now(),
+  reviewed_by uuid REFERENCES auth.users(id),
+  reviewed_at timestamptz,
+  review_notes text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.course_completion_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   course_id uuid NOT NULL REFERENCES public.courses(id) ON DELETE CASCADE,
@@ -191,15 +215,33 @@ CREATE TABLE IF NOT EXISTS public.course_completion_requests (
   reviewed_by uuid REFERENCES auth.users(id)
 );
 
+-- Audit logs (submission + topic actions)
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_type text NOT NULL,
+  entity_id uuid,
+  action text NOT NULL,
+  actor_id uuid REFERENCES auth.users(id),
+  timestamp timestamptz NOT NULL DEFAULT now(),
+  details jsonb
+);
+
 CREATE INDEX IF NOT EXISTS topic_progress_user_idx ON public.topic_progress(user_id);
 CREATE INDEX IF NOT EXISTS topic_progress_topic_idx ON public.topic_progress(topic_id);
 CREATE INDEX IF NOT EXISTS topic_completion_requests_user_idx ON public.topic_completion_requests(user_id);
 CREATE INDEX IF NOT EXISTS topic_completion_requests_topic_idx ON public.topic_completion_requests(topic_id);
+CREATE INDEX IF NOT EXISTS topic_submissions_user_idx ON public.topic_submissions(user_id);
+CREATE INDEX IF NOT EXISTS topic_submissions_topic_idx ON public.topic_submissions(topic_id);
+CREATE INDEX IF NOT EXISTS topic_submissions_status_idx ON public.topic_submissions(status);
+CREATE INDEX IF NOT EXISTS topic_submissions_submitted_idx ON public.topic_submissions(submitted_at);
 CREATE INDEX IF NOT EXISTS course_completion_requests_user_idx ON public.course_completion_requests(user_id);
 CREATE INDEX IF NOT EXISTS course_completion_requests_course_idx ON public.course_completion_requests(course_id);
 CREATE INDEX IF NOT EXISTS course_completion_requests_lp_idx ON public.course_completion_requests(learning_path_id);
 CREATE INDEX IF NOT EXISTS course_completion_requests_status_idx ON public.course_completion_requests(status);
 CREATE INDEX IF NOT EXISTS topic_completion_requests_status_idx ON public.topic_completion_requests(status);
+CREATE INDEX IF NOT EXISTS audit_logs_entity_idx ON public.audit_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS audit_logs_actor_idx ON public.audit_logs(actor_id);
+CREATE INDEX IF NOT EXISTS audit_logs_timestamp_idx ON public.audit_logs(timestamp);
 
 -- ============================================
 -- STEP 5: LESSON ASSIGNMENTS & SUBMISSIONS
@@ -408,6 +450,8 @@ ALTER TABLE public.topics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.topic_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.topic_completion_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.course_completion_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.topic_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lesson_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lesson_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
@@ -586,6 +630,12 @@ CREATE TRIGGER set_topic_completion_requests_updated_at
   BEFORE UPDATE ON public.topic_completion_requests
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- Topic submissions triggers
+DROP TRIGGER IF EXISTS set_topic_submissions_updated_at ON public.topic_submissions;
+CREATE TRIGGER set_topic_submissions_updated_at
+  BEFORE UPDATE ON public.topic_submissions
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 -- ============================================
 -- STEP 12: ROW LEVEL SECURITY POLICIES
 -- ============================================
@@ -673,10 +723,15 @@ CREATE POLICY "Topics manageable by superadmin"
   USING (public.is_superadmin())
   WITH CHECK (public.is_superadmin());
 
+DROP POLICY IF EXISTS "Topics readable by admin" ON public.topics;
+CREATE POLICY "Topics readable by admin"
+  ON public.topics FOR SELECT
+  USING (public.is_admin());
+
 DROP POLICY IF EXISTS "Topics readable by authenticated" ON public.topics;
 CREATE POLICY "Topics readable by authenticated"
   ON public.topics FOR SELECT
-  USING (auth.role() = 'authenticated');
+  USING (auth.role() = 'authenticated' AND status = 'active' AND deleted_at IS NULL);
 
 -- Topic progress policies
 DROP POLICY IF EXISTS "Topic progress readable by owner" ON public.topic_progress;
@@ -729,6 +784,39 @@ DROP POLICY IF EXISTS "Topic completion requests updatable by admin" ON public.t
 CREATE POLICY "Topic completion requests updatable by admin"
   ON public.topic_completion_requests FOR UPDATE
   USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+-- Topic submissions policies
+DROP POLICY IF EXISTS "Topic submissions readable by owner" ON public.topic_submissions;
+CREATE POLICY "Topic submissions readable by owner"
+  ON public.topic_submissions FOR SELECT
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Topic submissions insertable by owner" ON public.topic_submissions;
+CREATE POLICY "Topic submissions insertable by owner"
+  ON public.topic_submissions FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Topic submissions readable by admin" ON public.topic_submissions;
+CREATE POLICY "Topic submissions readable by admin"
+  ON public.topic_submissions FOR SELECT
+  USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Topic submissions updatable by admin" ON public.topic_submissions;
+CREATE POLICY "Topic submissions updatable by admin"
+  ON public.topic_submissions FOR UPDATE
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+-- Audit log policies
+DROP POLICY IF EXISTS "Audit logs readable by admin" ON public.audit_logs;
+CREATE POLICY "Audit logs readable by admin"
+  ON public.audit_logs FOR SELECT
+  USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Audit logs insertable by admin" ON public.audit_logs;
+CREATE POLICY "Audit logs insertable by admin"
+  ON public.audit_logs FOR INSERT
   WITH CHECK (public.is_admin());
 
 -- Course completion request policies

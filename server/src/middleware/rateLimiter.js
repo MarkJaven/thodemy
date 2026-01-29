@@ -5,6 +5,11 @@ const baseConfig = {
   windowMs: env.rateLimitWindowMs,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === "OPTIONS",
+  keyGenerator: (req) => {
+    const scope = req.baseUrl || req.path || "";
+    return `${req.ip}:${scope}`;
+  },
 };
 
 /**

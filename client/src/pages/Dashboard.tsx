@@ -1101,7 +1101,7 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-ink-900 text-slate-100">
       <div className="min-h-screen bg-gradient-to-br from-[#bda6ff]/20 via-[#5f3dc4]/20 to-[#140c2c] px-4 py-6 sm:px-8">
-        <div className="mx-auto flex min-h-[90vh] max-w-6xl flex-col gap-8 rounded-[32px] border border-white/10 bg-gradient-to-br from-[#1c1436]/95 via-[#17122b]/95 to-[#0c0b14]/95 p-6 shadow-glow backdrop-blur sm:p-8">
+        <div className="mx-auto flex min-h-[90vh] w-full max-w-7xl flex-col gap-10">
           <Navbar userEmail={user?.email} onSignOut={handleOpenSignOut} />
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>

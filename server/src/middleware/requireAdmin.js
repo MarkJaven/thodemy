@@ -29,10 +29,11 @@ const requireAdmin = async (req, _res, next) => {
     );
   }
 
-  if (data?.role !== "admin") {
+  if (!["admin", "superadmin"].includes(data?.role)) {
     return next(new ForbiddenError("Admin access required."));
   }
 
+  req.userRole = data?.role;
   return next();
 };
 

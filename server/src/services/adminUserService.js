@@ -1,12 +1,92 @@
 const { supabaseAdmin } = require("../config/supabase");
 const { ConflictError, ExternalServiceError, DatabaseError } = require("../utils/errors");
 
+const ensureSingleSuperAdmin = async (targetUserId) => {
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "superadmin");
+
+  if (error) {
+    throw new ExternalServiceError("Unable to validate superadmin assignment", {
+      code: error.code,
+      details: error.message,
+    });
+  }
+
+  const existing = (data ?? []).filter(
+    (entry) => entry?.user_id && entry.user_id !== targetUserId
+  );
+
+  if (existing.length > 0) {
+    throw new ConflictError("Only one superadmin is allowed.");
+  }
+};
+
+const nullifyUserReferences = async (userId) => {
+  const references = [
+    { table: "user_roles", column: "created_by" },
+    { table: "user_roles", column: "updated_by" },
+    { table: "courses", column: "created_by" },
+    { table: "courses", column: "updated_by" },
+    { table: "enrollments", column: "created_by" },
+    { table: "enrollments", column: "updated_by" },
+    { table: "topics", column: "author_id" },
+    { table: "topics", column: "created_by" },
+    { table: "topics", column: "updated_by" },
+    { table: "topic_completion_requests", column: "reviewed_by" },
+    { table: "course_completion_requests", column: "reviewed_by" },
+    { table: "topic_submissions", column: "reviewed_by" },
+    { table: "audit_logs", column: "actor_id" },
+    { table: "lesson_assignments", column: "reviewed_by" },
+    { table: "activities", column: "created_by" },
+    { table: "activities", column: "updated_by" },
+    { table: "activity_submissions", column: "updated_by" },
+    { table: "quizzes", column: "assigned_user_id" },
+    { table: "quizzes", column: "created_by" },
+    { table: "quizzes", column: "updated_by" },
+    { table: "quiz_questions", column: "updated_by" },
+    { table: "quiz_attempts", column: "updated_by" },
+    { table: "forms", column: "assigned_user_id" },
+    { table: "forms", column: "created_by" },
+    { table: "forms", column: "updated_by" },
+    { table: "form_questions", column: "updated_by" },
+    { table: "form_responses", column: "updated_by" },
+    { table: "learning_paths", column: "created_by" },
+    { table: "learning_paths", column: "updated_by" },
+    { table: "learning_path_enrollments", column: "created_by" },
+    { table: "learning_path_enrollments", column: "updated_by" },
+  ];
+
+  for (const reference of references) {
+    const { table, column } = reference;
+    const { error } = await supabaseAdmin
+      .from(table)
+      .update({ [column]: null })
+      .eq(column, userId);
+    if (error) {
+      if (["42P01", "42703"].includes(error.code)) {
+        continue;
+      }
+      throw new DatabaseError("Unable to clear user references", {
+        table,
+        column,
+        code: error.code,
+        details: error.message,
+      });
+    }
+  }
+};
+
 /**
  * Create an auth user and related profile/role entries.
  * @param {{email: string, username: string, password: string, role: string, createdBy?: string}} payload
  * @returns {Promise<{id: string}>}
  */
 const createUser = async ({ email, username, password, role, createdBy }) => {
+  if (role === "superadmin") {
+    await ensureSingleSuperAdmin();
+  }
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
@@ -67,6 +147,9 @@ const createUser = async ({ email, username, password, role, createdBy }) => {
  * @returns {Promise<void>}
  */
 const updateUser = async ({ userId, username, password, role, updatedBy }) => {
+  if (role === "superadmin") {
+    await ensureSingleSuperAdmin(userId);
+  }
   if (password) {
     const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
       password,
@@ -117,6 +200,8 @@ const updateUser = async ({ userId, username, password, role, updatedBy }) => {
  * @returns {Promise<void>}
  */
 const deleteUser = async (userId) => {
+  await nullifyUserReferences(userId);
+
   const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
   if (error) {
     throw new ExternalServiceError("Unable to delete user", {

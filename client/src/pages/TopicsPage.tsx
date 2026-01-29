@@ -44,6 +44,11 @@ const TopicsPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [savingTopic, setSavingTopic] = useState(false);
+  const [submissionTopic, setSubmissionTopic] = useState<Topic | null>(null);
+  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+  const [submissionMessage, setSubmissionMessage] = useState("");
+  const [submittingSubmission, setSubmittingSubmission] = useState(false);
+  const [submissionSuccess, setSubmissionSuccess] = useState<string | null>(null);
   const [formState, setFormState] = useState<TopicFormState>({
     title: "",
     description: "",
@@ -133,7 +138,9 @@ const TopicsPage = () => {
   };
 
   const handleDeleteTopic = async (topic: Topic) => {
-    const confirmed = window.confirm(`Delete "${topic.title}"? This cannot be undone.`);
+    const confirmed = window.confirm(
+      `Archive "${topic.title}"? Learners will no longer see this topic.`
+    );
     if (!confirmed) return;
     setActionError(null);
     try {
@@ -143,6 +150,55 @@ const TopicsPage = () => {
       const message =
         deleteError instanceof Error ? deleteError.message : "Unable to delete the topic.";
       setActionError(message);
+    }
+  };
+
+  const handleOpenSubmission = (topic: Topic) => {
+    setActionError(null);
+    setSubmissionSuccess(null);
+    setSubmissionTopic(topic);
+    setSubmissionFile(null);
+    setSubmissionMessage("");
+  };
+
+  const handleCloseSubmission = () => {
+    if (submittingSubmission) return;
+    setSubmissionTopic(null);
+  };
+
+  const handleSubmitProof = async () => {
+    if (!submissionTopic || !user?.id) {
+      setActionError("You must be signed in to submit a certificate.");
+      return;
+    }
+    if (!submissionFile) {
+      setActionError("Please attach a certificate file.");
+      return;
+    }
+
+    setSubmittingSubmission(true);
+    setActionError(null);
+    try {
+      await dashboardApi.submitTopicSubmission({
+        topicId: submissionTopic.id,
+        userId: user.id,
+        file: submissionFile,
+        message: submissionMessage.trim() || undefined,
+      });
+      setSubmissionTopic(null);
+      setSubmissionFile(null);
+      setSubmissionMessage("");
+      setSubmissionSuccess("Submission received (pending review).");
+      await refresh();
+      setTimeout(() => setSubmissionSuccess(null), 4000);
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : "Unable to submit the certificate.";
+      setActionError(message);
+    } finally {
+      setSubmittingSubmission(false);
     }
   };
 
@@ -218,14 +274,18 @@ const TopicsPage = () => {
     return "In Progress";
   };
 
-  const availableTopics = data.topics.filter((topic) =>
+  const visibleTopics = data.topics.filter(
+    (topic) => topic.status !== "inactive" && !topic.deleted_at
+  );
+
+  const availableTopics = visibleTopics.filter((topic) =>
     editingTopic ? topic.id !== editingTopic.id : true
   );
 
   return (
     <div className="min-h-screen bg-ink-900 text-slate-100">
       <div className="min-h-screen px-4 py-6 sm:px-8">
-        <div className="mx-auto flex min-h-[90vh] max-w-5xl flex-col gap-8 rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-glow backdrop-blur sm:p-8">
+        <div className="mx-auto flex min-h-[90vh] w-full max-w-7xl flex-col gap-10">
           <Navbar
             userEmail={user?.email}
             onSignOut={async () => {
@@ -261,6 +321,11 @@ const TopicsPage = () => {
               {actionError || error}
             </div>
           )}
+          {submissionSuccess && (
+            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-200">
+              {submissionSuccess}
+            </div>
+          )}
 
           {loading ? (
             <div className="grid gap-4 md:grid-cols-2">
@@ -271,13 +336,13 @@ const TopicsPage = () => {
                 />
               ))}
             </div>
-          ) : data.topics.length === 0 ? (
+          ) : visibleTopics.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300">
               No topics available yet.
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {data.topics.map((topic) => {
+              {visibleTopics.map((topic) => {
                 const progress = progressByTopicId.get(topic.id);
                 const status = renderStatus(progress);
                 const prereqs = topic.pre_requisites ?? [];
@@ -338,6 +403,15 @@ const TopicsPage = () => {
                           {completingTopicId === topic.id ? "Completing..." : "Mark complete"}
                         </button>
                       )}
+                      {user?.id && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSubmission(topic)}
+                          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/20"
+                        >
+                          Upload Certificate
+                        </button>
+                      )}
                       {isSuperAdmin && (
                         <>
                           <button
@@ -352,7 +426,7 @@ const TopicsPage = () => {
                             onClick={() => handleDeleteTopic(topic)}
                             className="rounded-full border border-rose-500/40 px-4 py-2 text-xs uppercase tracking-[0.2em] text-rose-200 transition hover:text-rose-100"
                           >
-                            Delete
+                            Archive
                           </button>
                         </>
                       )}
@@ -492,6 +566,57 @@ const TopicsPage = () => {
         <p className="mt-3 text-xs text-slate-400">
           Set each topic as prerequisite, corequisite, or none.
         </p>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(submissionTopic)}
+        title="Submit proof"
+        description={
+          submissionTopic ? `Upload a certificate for "${submissionTopic.title}".` : undefined
+        }
+        onClose={handleCloseSubmission}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={handleCloseSubmission}
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmitProof}
+              disabled={submittingSubmission}
+              className="rounded-full bg-white px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-ink-900 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {submittingSubmission ? "Submitting..." : "Submit"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+            Certificate file (PDF/JPG/PNG)
+            <input
+              type="file"
+              accept=".pdf,image/jpeg,image/png"
+              onChange={(event) =>
+                setSubmissionFile(event.target.files?.[0] ?? null)
+              }
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white file:mr-4 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1 file:text-xs file:text-white"
+            />
+          </label>
+          <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+            Notes (optional)
+            <textarea
+              rows={3}
+              value={submissionMessage}
+              onChange={(event) => setSubmissionMessage(event.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
+            />
+          </label>
+        </div>
       </Modal>
     </div>
   );

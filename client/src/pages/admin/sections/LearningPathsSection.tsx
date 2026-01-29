@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
 import {
   adminLearningPathService,
@@ -20,6 +19,10 @@ const LearningPathsSection = () => {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published" | "archived">("all");
+  const [pageSize, setPageSize] = useState(6);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Form modal state
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -62,6 +65,26 @@ const LearningPathsSection = () => {
     [courses, formState.course_ids]
   );
 
+  const filteredLearningPaths = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return learningPaths.filter((path) => {
+      const status = path.status ?? "draft";
+      if (statusFilter !== "all" && status !== statusFilter) {
+        return false;
+      }
+      if (!normalizedQuery) return true;
+      const haystack = `${path.title} ${path.description ?? ""} ${path.enrollment_code ?? ""}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [learningPaths, searchQuery, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLearningPaths.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedLearningPaths = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredLearningPaths.slice(start, start + pageSize);
+  }, [filteredLearningPaths, pageSize, safePage]);
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -82,6 +105,16 @@ const LearningPathsSection = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, pageSize]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const openCreate = () => {
     setSelectedPath(null);
@@ -281,99 +314,6 @@ const LearningPathsSection = () => {
     }
   };
 
-  const columns = useMemo(
-    () => [
-      {
-        key: "learningPath",
-        header: "Learning Path",
-        render: (path: LearningPathSummary) => (
-          <div>
-            <p className="font-semibold text-white">{path.title}</p>
-            <p className="text-xs text-slate-400">{path.description}</p>
-          </div>
-        ),
-      },
-      {
-        key: "status",
-        header: "Status",
-        render: (path: LearningPathSummary) => (
-          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-            {path.status ?? "draft"}
-          </span>
-        ),
-      },
-      {
-        key: "code",
-        header: "Code",
-        render: (path: LearningPathSummary) =>
-          path.enrollment_code ? (
-            <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.2em] text-indigo-200">
-              {path.enrollment_code}
-            </span>
-          ) : (
-            <span className="text-xs text-slate-500">&mdash;</span>
-          ),
-      },
-      {
-        key: "courses",
-        header: "Courses",
-        render: (path: LearningPathSummary) => (
-          <span className="text-xs text-slate-300">
-            {path.course_ids?.length ?? 0}
-          </span>
-        ),
-      },
-      {
-        key: "hoursDays",
-        header: "Hours / Days",
-        render: (path: LearningPathSummary) => (
-          <span className="text-xs text-slate-300">
-            {path.total_hours ?? 0}h / {path.total_days ?? 0}d
-          </span>
-        ),
-      },
-      {
-        key: "enrolled",
-        header: "Enrolled",
-        render: (path: LearningPathSummary) => (
-          <span className="text-xs text-slate-300">
-            {path.enrollment_count ?? 0}
-          </span>
-        ),
-      },
-      {
-        key: "actions",
-        header: "Actions",
-        render: (path: LearningPathSummary) => (
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleViewDetail(path)}
-              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
-            >
-              View
-            </button>
-            <button
-              type="button"
-              onClick={() => openEdit(path)}
-              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDelete(path.id)}
-              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200"
-            >
-              Delete
-            </button>
-          </div>
-        ),
-      },
-    ],
-    []
-  );
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -386,11 +326,46 @@ const LearningPathsSection = () => {
         <button
           type="button"
           onClick={openCreate}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl text-white transition hover:bg-white/20"
-          aria-label="Create learning path"
+          className="btn-primary flex items-center gap-2"
         >
-          +
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          New Learning Path
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-[220px]">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search learning paths, codes, descriptions..."
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-slate-500"
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(event) =>
+            setStatusFilter(event.target.value as "all" | "draft" | "published" | "archived")
+          }
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+        >
+          <option value="all">All status</option>
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+          <option value="archived">Archived</option>
+        </select>
+        <select
+          value={String(pageSize)}
+          onChange={(event) => setPageSize(Number(event.target.value))}
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+        >
+          <option value="6">6 per page</option>
+          <option value="9">9 per page</option>
+          <option value="12">12 per page</option>
+        </select>
       </div>
 
       {error && (
@@ -413,12 +388,120 @@ const LearningPathsSection = () => {
             />
           ))}
         </div>
+      ) : filteredLearningPaths.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/5 px-6 py-10 text-center text-sm text-slate-400">
+          No learning paths match your filters.
+        </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={learningPaths}
-          emptyMessage="No learning paths yet."
-        />
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {paginatedLearningPaths.map((path) => {
+              const status = path.status ?? "draft";
+              const statusConfig: Record<string, string> = {
+                draft: "border-white/10 bg-white/5 text-slate-300",
+                published: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+                archived: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+              };
+
+              return (
+                <div
+                  key={path.id}
+                  className="flex h-full flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-card transition hover:border-white/20 hover:bg-white/[0.05]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{path.title}</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {path.description || "No description"}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] ${
+                        statusConfig[status] || statusConfig.draft
+                      }`}
+                    >
+                      {status}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-3 text-xs text-slate-300">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Code</span>
+                      <span className="font-mono text-[11px] text-slate-200">
+                        {path.enrollment_code || "--"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Courses</span>
+                      <span>{path.course_ids?.length ?? 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Hours / Days</span>
+                      <span>
+                        {path.total_hours ?? 0}h / {path.total_days ?? 0}d
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Enrolled</span>
+                      <span>{path.enrollment_count ?? 0}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleViewDetail(path)}
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10"
+                    >
+                      View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(path)}
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(path.id)}
+                      className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+            <span>
+              Showing {paginatedLearningPaths.length} of {filteredLearningPaths.length} learning paths
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={safePage <= 1}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <span className="text-slate-300">
+                Page {safePage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={safePage >= totalPages}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Create / Edit Modal */}
