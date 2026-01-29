@@ -65,11 +65,23 @@ export type Topic = {
   id: string;
   title: string;
   description?: string | null;
+  certificate_file_url?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  author_id?: string | null;
+  author?: {
+    id: string;
+    username?: string | null;
+    email?: string | null;
+  } | null;
   link_url?: string | null;
   time_allocated: number;
   time_unit?: "hours" | "days" | null;
   pre_requisites?: string[] | null;
   co_requisites?: string[] | null;
+  status?: "active" | "inactive" | string | null;
+  deleted_at?: string | null;
+  edited?: boolean | null;
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -87,19 +99,19 @@ export type TopicProgress = {
   updated_at?: string | null;
 };
 
-export type TopicCompletionRequest = {
+export type TopicSubmission = {
   id: string;
   topic_id: string;
   user_id: string;
-  course_id?: string | null;
-  storage_path: string;
-  file_name: string;
-  file_type: string;
-  status?: "pending" | "approved" | "rejected" | null;
+  file_url: string;
+  message?: string | null;
+  status?: "pending" | "in_progress" | "completed" | "rejected" | null;
+  submitted_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   reviewed_at?: string | null;
   reviewed_by?: string | null;
+  review_notes?: string | null;
 };
 
 export type CourseCompletionRequest = {

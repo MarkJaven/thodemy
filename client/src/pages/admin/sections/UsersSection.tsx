@@ -6,6 +6,24 @@ import type { AdminUser, Role } from "../../../types/superAdmin";
 
 const roleOptions: Role[] = ["user", "admin", "superadmin"];
 
+const roleConfig: Record<Role, { color: string; bgColor: string; borderColor: string }> = {
+  user: {
+    color: "text-slate-300",
+    bgColor: "bg-slate-500/10",
+    borderColor: "border-slate-500/20",
+  },
+  admin: {
+    color: "text-blue-300",
+    bgColor: "bg-blue-500/10",
+    borderColor: "border-blue-500/30",
+  },
+  superadmin: {
+    color: "text-amber-300",
+    bgColor: "bg-amber-500/10",
+    borderColor: "border-amber-500/30",
+  },
+};
+
 type UsersSectionProps = {
   readOnly?: boolean;
 };
@@ -115,7 +133,6 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     setActionError(null);
 
     try {
-      // Update all fields via Supabase Admin
       await superAdminService.updateUserAccount(selectedUser.id, {
         username: formState.username !== selectedUser.username ? formState.username : undefined,
         password: formState.password || undefined,
@@ -151,20 +168,28 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
         key: "name",
         header: "User",
         render: (user: AdminUser) => (
-          <div>
-            <p className="font-semibold text-white">{user.username || "No username"}</p>
-            <p className="text-xs text-slate-400">{user.email}</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent-purple/20 to-accent-violet/10 text-sm font-semibold text-white ring-1 ring-white/10">
+              {(user.username || user.email || "U").charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <p className="font-medium text-white">{user.username || "No username"}</p>
+              <p className="text-xs text-slate-400">{user.email}</p>
+            </div>
           </div>
         ),
       },
       {
         key: "role",
         header: "Role",
-        render: (user: AdminUser) => (
-          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-            {user.role}
-          </span>
-        ),
+        render: (user: AdminUser) => {
+          const config = roleConfig[user.role] || roleConfig.user;
+          return (
+            <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest ${config.color} ${config.bgColor} ${config.borderColor}`}>
+              {user.role}
+            </span>
+          );
+        },
       },
     ];
 
@@ -177,20 +202,29 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       {
         key: "actions",
         header: "Actions",
+        align: "right" as const,
         render: (user: AdminUser) => (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => openEdit(user)}
-              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
+              className="btn-secondary py-1.5 px-3"
             >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
               Edit
             </button>
             <button
               type="button"
               onClick={() => openDelete(user)}
-              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200"
+              className="btn-danger py-1.5 px-3"
             >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              </svg>
               Delete
             </button>
           </div>
@@ -200,50 +234,88 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   }, [readOnly]);
 
   if (loading) {
-    return <p className="text-sm text-slate-400">Loading users...</p>;
+    return (
+      <div className="space-y-6">
+        <div className="section-header">
+          <div>
+            <div className="skeleton h-8 w-48" />
+            <div className="skeleton mt-2 h-4 w-64" />
+          </div>
+        </div>
+        <div className="skeleton h-64" />
+      </div>
+    );
   }
 
   if (error) {
-    return <p className="text-sm text-rose-200">{error}</p>;
+    return (
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-rose-500/20 bg-rose-500/5 px-6 py-12 text-center">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 8v4M12 16h.01" />
+          </svg>
+        </div>
+        <p className="text-sm text-rose-200">{error}</p>
+        <button
+          type="button"
+          onClick={loadUsers}
+          className="btn-secondary mt-4"
+        >
+          Try again
+        </button>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-6">
+      {/* Section Header */}
+      <div className="section-header">
         <div>
-          <h2 className="font-display text-2xl text-white">User Management</h2>
-          <p className="text-sm text-slate-300">
+          <h2 className="section-title">User Management</h2>
+          <p className="section-description">
             {readOnly
               ? "View users and roles across the platform."
-              : "Manage accounts, assign roles, and view ownership context."}
+              : "Manage accounts, assign roles, and control access permissions."}
           </p>
         </div>
         {!readOnly && (
           <button
             type="button"
             onClick={openCreate}
-            className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90"
+            className="btn-primary flex items-center gap-2"
           >
-            Add user
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+              <circle cx="8.5" cy="7" r="4" />
+              <line x1="20" y1="8" x2="20" y2="14" />
+              <line x1="23" y1="11" x2="17" y2="11" />
+            </svg>
+            Add User
           </button>
         )}
       </div>
 
+      {/* Data Table */}
       <DataTable columns={columns} data={users} emptyMessage="No users found." />
 
+      {/* Modals */}
       {!readOnly && (
         <>
+          {/* Create User Modal */}
           <Modal
             isOpen={isCreateOpen}
-            title="Create user"
-            description="This action requires a secure admin API to create auth users."
+            title="Create New User"
+            description="Add a new user to the platform with specified role and credentials."
             onClose={() => setIsCreateOpen(false)}
+            variant="user"
             footer={
               <>
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
+                  className="btn-secondary"
                 >
                   Cancel
                 </button>
@@ -251,77 +323,93 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   type="button"
                   onClick={handleCreate}
                   disabled={saving}
-                  className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90 disabled:opacity-60"
+                  className="btn-primary flex items-center gap-2"
                 >
-                  {saving ? "Saving..." : "Create"}
+                  {saving ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Creating...
+                    </>
+                  ) : (
+                    "Create User"
+                  )}
                 </button>
               </>
             }
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                Email
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="label">Email Address</label>
                 <input
                   type="email"
                   value={formState.email}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, email: event.target.value }))
-                  }
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                  onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))}
+                  placeholder="user@example.com"
+                  className="input"
                 />
-              </label>
-              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                Role
+              </div>
+              <div className="space-y-2">
+                <label className="label">Role</label>
                 <select
                   value={formState.role}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, role: event.target.value as Role }))
-                  }
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                  onChange={(e) => setFormState((prev) => ({ ...prev, role: e.target.value as Role }))}
+                  className="input"
                 >
                   {roleOptions.map((role) => (
                     <option key={role} value={role}>
-                      {role}
+                      {role.charAt(0).toUpperCase() + role.slice(1)}
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                Username
+              </div>
+              <div className="space-y-2">
+                <label className="label">Username</label>
                 <input
                   type="text"
                   value={formState.username}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, username: event.target.value }))
-                  }
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                  onChange={(e) => setFormState((prev) => ({ ...prev, username: e.target.value }))}
+                  placeholder="johndoe"
+                  className="input"
                 />
-              </label>
-              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                Password
+              </div>
+              <div className="space-y-2">
+                <label className="label">Password</label>
                 <input
                   type="password"
                   value={formState.password}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, password: event.target.value }))
-                  }
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                  onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))}
+                  placeholder="Min. 8 characters"
+                  className="input"
                 />
-              </label>
+              </div>
             </div>
-            {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
+            {actionError && (
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+                {actionError}
+              </div>
+            )}
           </Modal>
 
+          {/* Edit User Modal */}
           <Modal
             isOpen={isEditOpen}
-            title="Update user"
+            title="Edit User"
+            description="Update user details and permissions."
             onClose={() => setIsEditOpen(false)}
+            variant="user"
             footer={
               <>
                 <button
                   type="button"
                   onClick={() => setIsEditOpen(false)}
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
+                  className="btn-secondary"
                 >
                   Cancel
                 </button>
@@ -329,77 +417,98 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   type="button"
                   onClick={handleUpdate}
                   disabled={saving}
-                  className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90 disabled:opacity-60"
+                  className="btn-primary flex items-center gap-2"
                 >
-                  {saving ? "Saving..." : "Save changes"}
+                  {saving ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
                 </button>
               </>
             }
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                Email (read-only)
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="label">
+                  Email Address
+                  <span className="ml-2 text-2xs font-normal normal-case text-slate-500">(read-only)</span>
+                </label>
                 <input
                   type="email"
                   value={formState.email}
                   readOnly
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-400"
+                  className="input cursor-not-allowed opacity-60"
                 />
-              </label>
-              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                Role
+              </div>
+              <div className="space-y-2">
+                <label className="label">Role</label>
                 <select
                   value={formState.role}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, role: event.target.value as Role }))
-                  }
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                  onChange={(e) => setFormState((prev) => ({ ...prev, role: e.target.value as Role }))}
+                  className="input"
                 >
                   {roleOptions.map((role) => (
                     <option key={role} value={role}>
-                      {role}
+                      {role.charAt(0).toUpperCase() + role.slice(1)}
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                Username
+              </div>
+              <div className="space-y-2">
+                <label className="label">Username</label>
                 <input
                   type="text"
                   value={formState.username}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, username: event.target.value }))
-                  }
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                  onChange={(e) => setFormState((prev) => ({ ...prev, username: e.target.value }))}
+                  className="input"
                 />
-              </label>
-              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                Password (reset)
+              </div>
+              <div className="space-y-2">
+                <label className="label">
+                  New Password
+                  <span className="ml-2 text-2xs font-normal normal-case text-slate-500">(optional)</span>
+                </label>
                 <input
                   type="password"
                   value={formState.password}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, password: event.target.value }))
-                  }
-                  placeholder="Leave blank to keep"
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                  onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))}
+                  placeholder="Leave blank to keep current"
+                  className="input"
                 />
-              </label>
+              </div>
             </div>
-            {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
+            {actionError && (
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+                {actionError}
+              </div>
+            )}
           </Modal>
 
+          {/* Delete User Modal */}
           <Modal
             isOpen={isDeleteOpen}
-            title="Delete user"
-            description="This will remove the user from auth and their related data."
+            title="Delete User"
+            description="This action cannot be undone."
             onClose={() => setIsDeleteOpen(false)}
+            variant="danger"
+            size="sm"
             footer={
               <>
                 <button
                   type="button"
                   onClick={() => setIsDeleteOpen(false)}
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
+                  className="btn-secondary"
                 >
                   Cancel
                 </button>
@@ -407,17 +516,46 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   type="button"
                   onClick={handleDelete}
                   disabled={saving}
-                  className="rounded-full border border-rose-500/40 bg-rose-500/10 px-5 py-2 text-xs uppercase tracking-[0.25em] text-rose-200"
+                  className="btn-danger flex items-center gap-2"
                 >
-                  {saving ? "Deleting..." : "Delete"}
+                  {saving ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Deleting...
+                    </>
+                  ) : (
+                    "Delete User"
+                  )}
                 </button>
               </>
             }
           >
-            <p className="text-sm text-slate-300">
-              {selectedUser?.email} will lose access immediately.
-            </p>
-            {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent-purple/20 to-accent-violet/10 text-sm font-semibold text-white ring-1 ring-white/10">
+                  {(selectedUser?.username || selectedUser?.email || "U").charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-medium text-white">{selectedUser?.username || "No username"}</p>
+                  <p className="text-xs text-slate-400">{selectedUser?.email}</p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-400">
+                This user will lose access immediately and all their associated data will be removed from the system.
+              </p>
+            </div>
+            {actionError && (
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+                {actionError}
+              </div>
+            )}
           </Modal>
         </>
       )}

@@ -5,7 +5,7 @@ import type { TopicsData } from "../types/dashboard";
 const emptyData: TopicsData = {
   topics: [],
   topicProgress: [],
-  topicCompletionRequests: [],
+  topicSubmissions: [],
 };
 
 export const useTopicsData = (userId?: string) => {

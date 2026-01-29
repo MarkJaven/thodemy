@@ -3,6 +3,7 @@ import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
 import { useUser } from "../../../hooks/useUser";
 import { superAdminService } from "../../../services/superAdminService";
+import { topicSubmissionService } from "../../../services/topicSubmissionService";
 import type {
   Activity,
   ActivitySubmission,
@@ -14,6 +15,7 @@ import type {
   LearningPathEnrollment,
   Topic,
   TopicProgress,
+  TopicSubmission,
 } from "../../../types/superAdmin";
 
 const formatDate = (value?: string | null) => {
@@ -35,6 +37,7 @@ const ActivitiesSection = () => {
   >([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicProgress, setTopicProgress] = useState<TopicProgress[]>([]);
+  const [topicSubmissions, setTopicSubmissions] = useState<TopicSubmission[]>([]);
   const [courseCompletionRequests, setCourseCompletionRequests] = useState<
     CourseCompletionRequest[]
   >([]);
@@ -51,10 +54,22 @@ const ActivitiesSection = () => {
     status: "active",
   });
   const [saving, setSaving] = useState(false);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<string | null>(null);
   const [updatingLPEnrollmentId, setUpdatingLPEnrollmentId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [selectedSubmission, setSelectedSubmission] = useState<TopicSubmission | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [reviewingSubmission, setReviewingSubmission] = useState(false);
+  const [submissionFilters, setSubmissionFilters] = useState({
+    status: "pending",
+    topicId: "",
+    userId: "",
+    from: "",
+    to: "",
+  });
   const { user } = useUser();
 
   const loadData = async () => {
@@ -101,9 +116,34 @@ const ActivitiesSection = () => {
     }
   };
 
+  const loadTopicSubmissions = async () => {
+    setSubmissionsLoading(true);
+    setSubmissionError(null);
+    try {
+      const data = await topicSubmissionService.listSubmissions({
+        status: submissionFilters.status || undefined,
+        topicId: submissionFilters.topicId || undefined,
+        userId: submissionFilters.userId || undefined,
+        from: submissionFilters.from || undefined,
+        to: submissionFilters.to || undefined,
+      });
+      setTopicSubmissions(data);
+    } catch (loadError) {
+      setSubmissionError(
+        loadError instanceof Error ? loadError.message : "Unable to load submissions."
+      );
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    loadTopicSubmissions();
+  }, [submissionFilters]);
 
   const openCreate = () => {
     setSelectedActivity(null);
@@ -209,6 +249,51 @@ const ActivitiesSection = () => {
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (loadError) {
       setViewError(loadError instanceof Error ? loadError.message : "Unable to open proof file.");
+    }
+  };
+
+  const handleViewTopicSubmission = async (submission: TopicSubmission) => {
+    setViewError(null);
+    try {
+      const url = await topicSubmissionService.getSubmissionFileUrl(submission.id);
+      if (!url) {
+        setViewError("No file available for this submission.");
+        return;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (loadError) {
+      setViewError(
+        loadError instanceof Error ? loadError.message : "Unable to open submission file."
+      );
+    }
+  };
+
+  const openSubmissionReview = (submission: TopicSubmission) => {
+    setSelectedSubmission(submission);
+    setReviewNotes(submission.review_notes ?? "");
+    setActionError(null);
+  };
+
+  const handleSubmissionAction = async (
+    status: "completed" | "rejected" | "in_progress"
+  ) => {
+    if (!selectedSubmission) return;
+    setReviewingSubmission(true);
+    setActionError(null);
+    try {
+      await topicSubmissionService.updateSubmissionStatus(selectedSubmission.id, {
+        status,
+        review_notes: reviewNotes.trim() || undefined,
+      });
+      setSelectedSubmission(null);
+      setReviewNotes("");
+      await loadTopicSubmissions();
+    } catch (updateError) {
+      setActionError(
+        updateError instanceof Error ? updateError.message : "Unable to update submission."
+      );
+    } finally {
+      setReviewingSubmission(false);
     }
   };
 
@@ -326,11 +411,22 @@ const ActivitiesSection = () => {
       {
         key: "status",
         header: "Status",
-        render: (row: (typeof learningPathEnrollmentRows)[number]) => (
-          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-            {row.enrollment.status ?? "pending"}
-          </span>
-        ),
+        render: (row: (typeof learningPathEnrollmentRows)[number]) => {
+          const status = row.enrollment.status ?? "pending";
+          const statusConfig: Record<string, string> = {
+            pending: "badge-warning",
+            approved: "badge-success",
+            active: "badge-success",
+            enrolled: "badge-success",
+            rejected: "badge-error",
+            removed: "badge-default",
+          };
+          return (
+            <span className={statusConfig[status] || "badge-default"}>
+              {status}
+            </span>
+          );
+        },
       },
       {
         key: "date",
@@ -430,11 +526,18 @@ const ActivitiesSection = () => {
       {
         key: "status",
         header: "Status",
-        render: (activity: Activity) => (
-          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-            {activity.status ?? "active"}
-          </span>
-        ),
+        render: (activity: Activity) => {
+          const status = activity.status ?? "active";
+          const statusConfig: Record<string, string> = {
+            active: "badge-success",
+            archived: "badge-warning",
+          };
+          return (
+            <span className={statusConfig[status] || "badge-default"}>
+              {status}
+            </span>
+          );
+        },
       },
       {
         key: "actions",
@@ -444,15 +547,22 @@ const ActivitiesSection = () => {
             <button
               type="button"
               onClick={() => openEdit(activity)}
-              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
+              className="btn-secondary flex items-center gap-1.5"
             >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
               Edit
             </button>
             <button
               type="button"
               onClick={() => handleDelete(activity.id)}
-              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200"
+              className="btn-danger flex items-center gap-1.5"
             >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              </svg>
               Delete
             </button>
           </div>
@@ -489,15 +599,22 @@ const ActivitiesSection = () => {
             <button
               type="button"
               onClick={() => handleViewSubmission(submission)}
-              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
+              className="btn-ghost flex items-center gap-1.5"
             >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
               View
             </button>
             <button
               type="button"
               onClick={() => handleDeleteSubmission(submission.id)}
-              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200"
+              className="btn-danger flex items-center gap-1.5"
             >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              </svg>
               Delete
             </button>
           </div>
@@ -559,11 +676,22 @@ const ActivitiesSection = () => {
       {
         key: "status",
         header: "Enrollment",
-        render: (row: (typeof progressRows)[number]) => (
-          <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-            {row.enrollment.status ?? "pending"}
-          </span>
-        ),
+        render: (row: (typeof progressRows)[number]) => {
+          const status = row.enrollment.status ?? "pending";
+          const statusConfig: Record<string, string> = {
+            pending: "badge-warning",
+            approved: "badge-success",
+            active: "badge-success",
+            enrolled: "badge-success",
+            rejected: "badge-error",
+            removed: "badge-default",
+          };
+          return (
+            <span className={statusConfig[status] || "badge-default"}>
+              {status}
+            </span>
+          );
+        },
       },
       {
         key: "progress",
@@ -621,6 +749,94 @@ const ActivitiesSection = () => {
       },
     ],
     [progressRows, users, updatingEnrollmentId]
+  );
+
+  const topicSubmissionRows = useMemo(
+    () =>
+      topicSubmissions.map((submission) => ({
+        submission,
+        topic: topics.find((entry) => entry.id === submission.topic_id),
+        user: users.find((entry) => entry.id === submission.user_id),
+      })),
+    [topicSubmissions, topics, users]
+  );
+
+  const topicSubmissionColumns = useMemo(
+    () => [
+      {
+        key: "topic",
+        header: "Topic",
+        render: (row: (typeof topicSubmissionRows)[number]) => (
+          <div>
+            <p className="font-semibold text-white">
+              {row.topic?.title ?? row.submission.topic_id}
+            </p>
+            {row.submission.message && (
+              <p className="text-xs text-slate-400">{row.submission.message}</p>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "user",
+        header: "User",
+        render: (row: (typeof topicSubmissionRows)[number]) => (
+          <span className="text-xs text-slate-300">
+            {row.user?.email ?? row.submission.user_id}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (row: (typeof topicSubmissionRows)[number]) => {
+          const status = row.submission.status ?? "pending";
+          const statusConfig: Record<string, string> = {
+            pending: "badge-warning",
+            in_progress: "badge-info",
+            completed: "badge-success",
+            rejected: "badge-error",
+          };
+          return (
+            <span className={statusConfig[status] || "badge-default"}>
+              {status}
+            </span>
+          );
+        },
+      },
+      {
+        key: "submitted",
+        header: "Submitted",
+        render: (row: (typeof topicSubmissionRows)[number]) => (
+          <span className="text-xs text-slate-400">
+            {formatDate(row.submission.submitted_at ?? row.submission.created_at)}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (row: (typeof topicSubmissionRows)[number]) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleViewTopicSubmission(row.submission)}
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
+            >
+              View
+            </button>
+            <button
+              type="button"
+              onClick={() => openSubmissionReview(row.submission)}
+              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-200"
+            >
+              Review
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [topicSubmissionRows]
   );
 
   const pendingCourseCompletionRequests = useMemo(
@@ -748,9 +964,12 @@ const ActivitiesSection = () => {
         <button
           type="button"
           onClick={openCreate}
-          className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90"
+          className="btn-primary flex items-center gap-2"
         >
-          New activity
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          New Activity
         </button>
       </div>
 
@@ -766,6 +985,99 @@ const ActivitiesSection = () => {
             emptyMessage="No submissions yet."
           />
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <h3 className="font-display text-xl text-white">Topic submissions</h3>
+          <p className="text-sm text-slate-400">
+            Review learner-uploaded certificates and mark completion status.
+          </p>
+        </div>
+        <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300 md:grid-cols-5">
+          <label className="flex flex-col gap-2">
+            Status
+            <select
+              value={submissionFilters.status}
+              onChange={(event) =>
+                setSubmissionFilters((prev) => ({ ...prev, status: event.target.value }))
+              }
+              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+            >
+              <option value="">All</option>
+              <option value="pending">pending</option>
+              <option value="in_progress">in_progress</option>
+              <option value="completed">completed</option>
+              <option value="rejected">rejected</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-2">
+            Topic
+            <select
+              value={submissionFilters.topicId}
+              onChange={(event) =>
+                setSubmissionFilters((prev) => ({ ...prev, topicId: event.target.value }))
+              }
+              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+            >
+              <option value="">All topics</option>
+              {topics.map((topic) => (
+                <option key={topic.id} value={topic.id}>
+                  {topic.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-2">
+            User
+            <select
+              value={submissionFilters.userId}
+              onChange={(event) =>
+                setSubmissionFilters((prev) => ({ ...prev, userId: event.target.value }))
+              }
+              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+            >
+              <option value="">All users</option>
+              {users.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.email ?? entry.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-2">
+            From
+            <input
+              type="date"
+              value={submissionFilters.from}
+              onChange={(event) =>
+                setSubmissionFilters((prev) => ({ ...prev, from: event.target.value }))
+              }
+              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            To
+            <input
+              type="date"
+              value={submissionFilters.to}
+              onChange={(event) =>
+                setSubmissionFilters((prev) => ({ ...prev, to: event.target.value }))
+              }
+              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+            />
+          </label>
+        </div>
+        {submissionsLoading ? (
+          <p className="text-sm text-slate-400">Loading submissions...</p>
+        ) : (
+          <DataTable
+            columns={topicSubmissionColumns}
+            data={topicSubmissionRows}
+            emptyMessage="No topic submissions yet."
+          />
+        )}
+        {submissionError && <p className="text-xs text-rose-200">{submissionError}</p>}
       </div>
 
       <div className="space-y-3">
@@ -794,7 +1106,7 @@ const ActivitiesSection = () => {
             <button
               type="button"
               onClick={() => setIsFormOpen(false)}
-              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
+              className="btn-secondary"
             >
               Cancel
             </button>
@@ -802,9 +1114,19 @@ const ActivitiesSection = () => {
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90 disabled:opacity-60"
+              className="btn-primary flex items-center gap-2"
             >
-              {saving ? "Saving..." : "Save"}
+              {saving ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                "Save Activity"
+              )}
             </button>
           </>
         }
@@ -875,6 +1197,97 @@ const ActivitiesSection = () => {
           </label>
         </div>
         {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(selectedSubmission)}
+        title="Review topic submission"
+        description="Verify the learner's proof and update their completion status."
+        onClose={() => (reviewingSubmission ? null : setSelectedSubmission(null))}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setSelectedSubmission(null)}
+              className="btn-secondary"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSubmissionAction("in_progress")}
+              disabled={reviewingSubmission}
+              className="btn-ghost"
+            >
+              {reviewingSubmission ? "Saving..." : "Request info"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSubmissionAction("rejected")}
+              disabled={reviewingSubmission}
+              className="btn-danger"
+            >
+              Reject
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSubmissionAction("completed")}
+              disabled={reviewingSubmission}
+              className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-2.5 text-xs font-semibold uppercase tracking-widest text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-60"
+            >
+              Mark completed
+            </button>
+          </>
+        }
+      >
+        {selectedSubmission && (
+          <div className="space-y-4 text-sm text-slate-300">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Topic</p>
+                <p className="font-semibold text-white">
+                  {topics.find((t) => t.id === selectedSubmission.topic_id)?.title ??
+                    selectedSubmission.topic_id}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleViewTopicSubmission(selectedSubmission)}
+                className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-xs uppercase tracking-[0.2em] text-white"
+              >
+                View file
+              </button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">User</p>
+                <p>
+                  {users.find((u) => u.id === selectedSubmission.user_id)?.email ??
+                    selectedSubmission.user_id}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Submitted</p>
+                <p>{formatDate(selectedSubmission.submitted_at ?? selectedSubmission.created_at)}</p>
+              </div>
+            </div>
+            {selectedSubmission.message && (
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Message</p>
+                <p>{selectedSubmission.message}</p>
+              </div>
+            )}
+            <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+              Review notes
+              <textarea
+                rows={3}
+                value={reviewNotes}
+                onChange={(event) => setReviewNotes(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white"
+              />
+            </label>
+          </div>
+        )}
       </Modal>
     </div>
   );
