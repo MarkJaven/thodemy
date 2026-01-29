@@ -1,4 +1,5 @@
-import { supabase, supabaseAdmin } from "../lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
+import { apiClient, getApiErrorMessage } from "../lib/apiClient";
 import type {
   Activity,
   ActivitySubmission,
@@ -9,7 +10,7 @@ import type {
   LessonSubmission,
   LessonTopic,
   Topic,
-  TopicCompletionRequest,
+  TopicSubmission,
   CourseCompletionRequest,
   TopicProgress,
   Enrollment,
@@ -32,13 +33,6 @@ const requireSupabase = () => {
     throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
   }
   return supabase;
-};
-
-const requireSupabaseAdmin = () => {
-  if (!supabaseAdmin) {
-    throw new Error("Supabase Admin is not configured. Set VITE_SUPABASE_SERVICE_ROLE_KEY.");
-  }
-  return supabaseAdmin;
 };
 
 const parseOptions = (value: unknown): string[] => {
@@ -114,88 +108,38 @@ export const superAdminService = {
     password: string;
     role: Role;
   }): Promise<void> {
-    const admin = requireSupabaseAdmin();
-
-    // Create auth user
-    const { data: authData, error: authError } = await admin.auth.admin.createUser({
-      email: payload.email,
-      password: payload.password,
-      email_confirm: true,
-      user_metadata: { username: payload.username },
-    });
-
-    if (authError) throw new Error(authError.message);
-    if (!authData.user) throw new Error("Failed to create user");
-
-    const userId = authData.user.id;
-
-    // Create or sync profile (some projects auto-create profiles via triggers)
-    const { error: profileError } = await admin
-      .from("profiles")
-      .upsert(
-        {
-          id: userId,
-          email: payload.email,
-          username: payload.username,
-        },
-        { onConflict: "id" }
-      );
-
-    if (profileError) {
-      // Rollback: delete auth user if profile creation fails
-      await admin.auth.admin.deleteUser(userId);
-      throw new Error(profileError.message);
-    }
-
-    // Create or sync user role
-    const { error: roleError } = await admin
-      .from("user_roles")
-      .upsert({ user_id: userId, role: payload.role }, { onConflict: "user_id" });
-
-    if (roleError) {
-      // Rollback: delete auth user and profile if role creation fails
-      await admin.auth.admin.deleteUser(userId);
-      throw new Error(roleError.message);
+    try {
+      await apiClient.post("/api/admin/users", payload);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
     }
   },
 
   async deleteUser(userId: string): Promise<void> {
-    const admin = requireSupabaseAdmin();
-
-    // Delete auth user (cascade will handle profiles and roles)
-    const { error } = await admin.auth.admin.deleteUser(userId);
-    if (error) throw new Error(error.message);
+    try {
+      await apiClient.delete(`/api/admin/users/${userId}`);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async updateUserAccount(
     userId: string,
     payload: { username?: string; password?: string; role?: Role }
   ): Promise<void> {
-    const admin = requireSupabaseAdmin();
+    const updatePayload: { username?: string; password?: string; role?: Role } = {};
+    if (payload.username) updatePayload.username = payload.username;
+    if (payload.password) updatePayload.password = payload.password;
+    if (payload.role) updatePayload.role = payload.role;
 
-    // Update password if provided
-    if (payload.password) {
-      const { error: pwError } = await admin.auth.admin.updateUserById(userId, {
-        password: payload.password,
-      });
-      if (pwError) throw new Error(pwError.message);
+    if (Object.keys(updatePayload).length === 0) {
+      return;
     }
 
-    // Update username if provided
-    if (payload.username) {
-      const { error: profileError } = await admin
-        .from("profiles")
-        .update({ username: payload.username })
-        .eq("id", userId);
-      if (profileError) throw new Error(profileError.message);
-    }
-
-    // Update role if provided
-    if (payload.role) {
-      const { error: roleError } = await admin
-        .from("user_roles")
-        .upsert({ user_id: userId, role: payload.role });
-      if (roleError) throw new Error(roleError.message);
+    try {
+      await apiClient.patch(`/api/admin/users/${userId}`, updatePayload);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
     }
   },
 
@@ -339,15 +283,12 @@ export const superAdminService = {
   },
 
   async listTopics(): Promise<Topic[]> {
-    const client = requireSupabase();
-    const { data, error } = await client
-      .from("topics")
-      .select(
-        "id, title, description, link_url, time_allocated, time_unit, pre_requisites, co_requisites, created_at, updated_at, created_by, updated_by"
-      )
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as Topic[];
+    try {
+      const { data } = await apiClient.get("/api/topics");
+      return (data?.topics ?? []) as Topic[];
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async listTopicProgress(): Promise<TopicProgress[]> {
@@ -375,25 +316,25 @@ export const superAdminService = {
     if (error) throw new Error(error.message);
   },
 
-  async listTopicCompletionRequests(): Promise<TopicCompletionRequest[]> {
+  async listTopicCompletionRequests(): Promise<TopicSubmission[]> {
     const client = requireSupabase();
     const { data, error } = await client
-      .from("topic_completion_requests")
+      .from("topic_submissions")
       .select(
-        "id, topic_id, user_id, course_id, storage_path, file_name, file_type, status, created_at, updated_at, reviewed_at, reviewed_by"
+        "id, topic_id, user_id, file_url, message, status, submitted_at, created_at, updated_at, reviewed_at, reviewed_by, review_notes"
       )
-      .order("created_at", { ascending: false });
+      .order("submitted_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return (data ?? []) as TopicCompletionRequest[];
+    return (data ?? []) as TopicSubmission[];
   },
 
   async updateTopicCompletionRequest(
     requestId: string,
-    payload: Partial<TopicCompletionRequest>
+    payload: Partial<TopicSubmission>
   ): Promise<void> {
     const client = requireSupabase();
     const { error } = await client
-      .from("topic_completion_requests")
+      .from("topic_submissions")
       .update(payload)
       .eq("id", requestId);
     if (error) throw new Error(error.message);
@@ -453,30 +394,35 @@ export const superAdminService = {
       | "time_unit"
       | "pre_requisites"
       | "co_requisites"
+      | "certificate_file_url"
+      | "start_date"
+      | "end_date"
+      | "author_id"
+      | "status"
     >
   ): Promise<Topic> {
-    const client = requireSupabase();
-    const { data, error } = await client
-      .from("topics")
-      .insert(payload)
-      .select(
-        "id, title, description, link_url, time_allocated, time_unit, pre_requisites, co_requisites, created_at, updated_at, created_by, updated_by"
-      )
-      .single();
-    if (error) throw new Error(error.message);
-    return data as Topic;
+    try {
+      const { data } = await apiClient.post("/api/topics", payload);
+      return data?.topic as Topic;
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async updateTopic(topicId: string, payload: Partial<Topic>): Promise<void> {
-    const client = requireSupabase();
-    const { error } = await client.from("topics").update(payload).eq("id", topicId);
-    if (error) throw new Error(error.message);
+    try {
+      await apiClient.patch(`/api/topics/${topicId}`, payload);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async deleteTopic(topicId: string): Promise<void> {
-    const client = requireSupabase();
-    const { error } = await client.from("topics").delete().eq("id", topicId);
-    if (error) throw new Error(error.message);
+    try {
+      await apiClient.delete(`/api/topics/${topicId}`);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async listLessonAssignments(): Promise<LessonAssignment[]> {

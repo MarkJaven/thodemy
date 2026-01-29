@@ -15,7 +15,7 @@ import type {
   LessonSubmission,
   LessonTopic,
   Topic,
-  TopicCompletionRequest,
+  TopicSubmission,
   CourseCompletionRequest,
   TopicProgress,
   TopicsData,
@@ -354,7 +354,7 @@ const buildMockTopicsData = (userId: string): TopicsData => ({
       created_at: new Date().toISOString(),
     },
   ],
-  topicCompletionRequests: [],
+  topicSubmissions: [],
 });
 
 const readTable = async <T,>(
@@ -382,18 +382,32 @@ export const dashboardApi = {
     const mockData = buildMockTopicsData(effectiveUserId);
 
     const userFilter = userId ? { user_id: userId } : undefined;
-    const [topics, topicProgress] = await Promise.all([
-      readTable<Topic>("topics", mockData.topics),
-      readTable<TopicProgress>("topic_progress", mockData.topicProgress, userFilter),
-    ]);
+    let topics = mockData.topics;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("topics")
+        .select("*")
+        .eq("status", "active")
+        .is("deleted_at", null);
+      if (error) {
+        throw new Error(error.message);
+      }
+      topics = (data ?? []) as Topic[];
+    }
 
-    const topicCompletionRequests = await readTable<TopicCompletionRequest>(
-      "topic_completion_requests",
-      mockData.topicCompletionRequests,
+    const topicProgress = await readTable<TopicProgress>(
+      "topic_progress",
+      mockData.topicProgress,
       userFilter
     );
 
-    return { topics, topicProgress, topicCompletionRequests };
+    const topicSubmissions = await readTable<TopicSubmission>(
+      "topic_submissions",
+      mockData.topicSubmissions,
+      userFilter
+    );
+
+    return { topics, topicProgress, topicSubmissions };
   },
 
   async startTopic(payload: {
@@ -447,64 +461,30 @@ export const dashboardApi = {
       throw new Error(error.message);
     }
   },
-  async submitTopicCompletionProof(payload: {
+  async submitTopicSubmission(payload: {
     topicId: string;
-    courseId?: string | null;
     userId: string;
     file: File;
-  }): Promise<TopicCompletionRequest> {
-    if (!supabase) {
-      throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-    }
-    const allowedTypes = ["image/jpeg", "image/png"];
-    if (!allowedTypes.includes(payload.file.type)) {
-      throw new Error("Proof file must be a JPG or PNG image.");
-    }
-
-    const { data: existing, error: existingError } = await supabase
-      .from("topic_completion_requests")
-      .select("id, status")
-      .eq("topic_id", payload.topicId)
-      .eq("user_id", payload.userId)
-      .eq("status", "pending")
-      .maybeSingle();
-    if (existingError) {
-      throw new Error(existingError.message);
-    }
-    if (existing) {
-      throw new Error("A completion proof is already pending review.");
+    message?: string | null;
+  }): Promise<TopicSubmission> {
+    const formData = new FormData();
+    formData.append("file", payload.file);
+    if (payload.message) {
+      formData.append("message", payload.message);
     }
 
-    const timestamp = Date.now();
-    const safeName = payload.file.name.replace(/\s+/g, "_");
-    const filePath = `${payload.userId}/${payload.topicId}/${timestamp}-${safeName}`;
-    const upload = await supabase.storage.from("topic-proofs").upload(filePath, payload.file, {
-      contentType: payload.file.type,
-      upsert: false,
-    });
-    if (upload.error) {
-      throw new Error(upload.error.message);
+    try {
+      const { data } = await apiClient.post(
+        `/api/topics/${payload.topicId}/submissions`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+      return data?.submission as TopicSubmission;
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
     }
-
-    const { data, error } = await supabase
-      .from("topic_completion_requests")
-      .insert({
-        topic_id: payload.topicId,
-        user_id: payload.userId,
-        course_id: payload.courseId ?? null,
-        storage_path: filePath,
-        file_name: payload.file.name,
-        file_type: payload.file.type,
-        status: "pending",
-      })
-      .select(
-        "id, topic_id, user_id, course_id, storage_path, file_name, file_type, status, created_at, updated_at, reviewed_at, reviewed_by"
-      )
-      .single();
-    if (error) {
-      throw new Error(error.message);
-    }
-    return data as TopicCompletionRequest;
   },
 
   async getDashboardData(userId?: string): Promise<DashboardData> {

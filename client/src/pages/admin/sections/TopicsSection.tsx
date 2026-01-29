@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
 import { superAdminService } from "../../../services/superAdminService";
 import type { Topic } from "../../../types/superAdmin";
+
+type TopicsSectionProps = {
+  role?: "admin" | "superadmin";
+};
 
 type TopicFormState = {
   title: string;
@@ -10,11 +13,9 @@ type TopicFormState = {
   link_url: string;
   time_allocated: number;
   time_unit: "hours" | "days";
-  pre_requisites: string[];
-  co_requisites: string[];
 };
 
-const TopicsSection = () => {
+const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,14 +23,17 @@ const TopicsSection = () => {
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const isSuperAdmin = role === "superadmin";
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [pageSize, setPageSize] = useState(6);
+  const [currentPage, setCurrentPage] = useState(1);
   const [formState, setFormState] = useState<TopicFormState>({
     title: "",
     description: "",
     link_url: "",
     time_allocated: 1,
     time_unit: "days",
-    pre_requisites: [],
-    co_requisites: [],
   });
 
   const loadData = async () => {
@@ -49,9 +53,41 @@ const TopicsSection = () => {
     loadData();
   }, []);
 
-  const topicMap = useMemo(() => {
-    return new Map(topics.map((topic) => [topic.id, topic.title]));
-  }, [topics]);
+  const filteredTopics = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return topics.filter((topic) => {
+      const status = topic.status ?? "active";
+      if (statusFilter !== "all" && status !== statusFilter) {
+        return false;
+      }
+      if (!normalizedQuery) return true;
+      const author =
+        topic.author?.username ||
+        topic.author?.email ||
+        topic.author_id ||
+        topic.created_by ||
+        "";
+      const haystack = `${topic.title} ${topic.description ?? ""} ${author}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [topics, searchQuery, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTopics.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedTopics = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredTopics.slice(start, start + pageSize);
+  }, [filteredTopics, pageSize, safePage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, pageSize]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const openCreate = () => {
     setSelectedTopic(null);
@@ -61,8 +97,6 @@ const TopicsSection = () => {
       link_url: "",
       time_allocated: 1,
       time_unit: "days",
-      pre_requisites: [],
-      co_requisites: [],
     });
     setActionError(null);
     setIsFormOpen(true);
@@ -76,8 +110,6 @@ const TopicsSection = () => {
       link_url: topic.link_url ?? "",
       time_allocated: Number(topic.time_allocated ?? 1),
       time_unit: topic.time_unit === "hours" ? "hours" : "days",
-      pre_requisites: topic.pre_requisites ?? [],
-      co_requisites: topic.co_requisites ?? [],
     });
     setActionError(null);
     setIsFormOpen(true);
@@ -101,8 +133,6 @@ const TopicsSection = () => {
       link_url: formState.link_url.trim() || null,
       time_allocated: formState.time_allocated,
       time_unit: formState.time_unit,
-      pre_requisites: Array.from(new Set(formState.pre_requisites)),
-      co_requisites: Array.from(new Set(formState.co_requisites)),
     };
 
     try {
@@ -121,7 +151,9 @@ const TopicsSection = () => {
   };
 
   const handleDelete = async (topic: Topic) => {
-    const confirmed = window.confirm(`Delete "${topic.title}"? This cannot be undone.`);
+    const confirmed = window.confirm(
+      `Deactivate "${topic.title}"? Learners will no longer see this topic.`
+    );
     if (!confirmed) return;
     setActionError(null);
     try {
@@ -132,88 +164,9 @@ const TopicsSection = () => {
     }
   };
 
-  const getRelation = (topicId: string) => {
-    if (formState.pre_requisites.includes(topicId)) return "pre";
-    if (formState.co_requisites.includes(topicId)) return "co";
-    return "none";
-  };
-
-  const handleRelationChange = (topicId: string, value: "none" | "pre" | "co") => {
-    setFormState((prev) => {
-      const pre = new Set(prev.pre_requisites);
-      const co = new Set(prev.co_requisites);
-      pre.delete(topicId);
-      co.delete(topicId);
-      if (value === "pre") pre.add(topicId);
-      if (value === "co") co.add(topicId);
-      return {
-        ...prev,
-        pre_requisites: Array.from(pre),
-        co_requisites: Array.from(co),
-      };
-    });
-  };
-
-  const columns = [
-    {
-      key: "title",
-      header: "Topic",
-      render: (topic: Topic) => (
-        <div>
-          <p className="text-white">{topic.title}</p>
-          <p className="text-xs text-slate-400">{topic.description || "No description"}</p>
-        </div>
-      ),
-    },
-    {
-      key: "time",
-      header: "Time",
-      render: (topic: Topic) => (
-        <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
-          {topic.time_allocated} {topic.time_unit === "hours" ? "hours" : "days"}
-        </span>
-      ),
-    },
-    {
-      key: "reqs",
-      header: "Requirements",
-      render: (topic: Topic) => {
-        const preList = topic.pre_requisites ?? [];
-        const coList = topic.co_requisites ?? [];
-        const preNames = preList.map((id) => topicMap.get(id) || "Unknown");
-        const coNames = coList.map((id) => topicMap.get(id) || "Unknown");
-        return (
-          <div className="text-xs text-slate-300">
-            <p>Pre: {preNames.length ? preNames.join(", ") : "None"}</p>
-            <p>Co: {coNames.length ? coNames.join(", ") : "None"}</p>
-          </div>
-        );
-      },
-    },
-    {
-      key: "actions",
-      header: "Actions",
-      align: "right" as const,
-      render: (topic: Topic) => (
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => openEdit(topic)}
-            className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200"
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDelete(topic)}
-            className="rounded-full border border-rose-500/40 px-3 py-1 text-xs uppercase tracking-[0.2em] text-rose-200"
-          >
-            Delete
-          </button>
-        </div>
-      ),
-    },
-  ];
+  const gridTemplate = isSuperAdmin
+    ? "lg:grid-cols-[2.4fr_1fr_0.7fr_0.9fr_1.4fr]"
+    : "lg:grid-cols-[2.6fr_1fr_0.7fr_0.9fr]";
 
   return (
     <div className="space-y-6">
@@ -227,11 +180,40 @@ const TopicsSection = () => {
         <button
           type="button"
           onClick={openCreate}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl text-white transition hover:bg-white/20"
-          aria-label="Create topic"
+          className="rounded-full bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-violet px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-purple-glow transition hover:shadow-purple-glow-lg"
         >
-          +
+          + New Topic
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-[220px]">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search topics, authors, descriptions..."
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-slate-500"
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value as "all" | "active" | "inactive")}
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+        >
+          <option value="all">All status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select
+          value={String(pageSize)}
+          onChange={(event) => setPageSize(Number(event.target.value))}
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+        >
+          <option value="6">6 per page</option>
+          <option value="9">9 per page</option>
+          <option value="12">12 per page</option>
+        </select>
       </div>
 
       {error && (
@@ -246,22 +228,239 @@ const TopicsSection = () => {
       )}
 
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, index) => (
             <div
               key={`topic-skeleton-${index}`}
-              className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/5"
+              className="h-20 animate-pulse rounded-xl border border-white/10 bg-white/5"
             />
           ))}
         </div>
+      ) : filteredTopics.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/5 px-6 py-10 text-center text-sm text-slate-400">
+          No topics match your filters.
+        </div>
+      ) : isSuperAdmin ? (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {paginatedTopics.map((topic) => {
+              return (
+                <div
+                  key={topic.id}
+                  className="flex h-full flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-card transition hover:border-white/20 hover:bg-white/[0.05]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{topic.title}</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {topic.description || "No description"}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] ${
+                        topic.status === "inactive"
+                          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                      }`}
+                    >
+                      {topic.status ?? "active"}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-3 text-xs text-slate-300">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Author</span>
+                      <span>
+                        {topic.author?.username ||
+                          topic.author?.email ||
+                          topic.author_id ||
+                          topic.created_by ||
+                          "Unknown"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Time</span>
+                      <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">
+                        {topic.time_allocated} {topic.time_unit === "hours" ? "hours" : "days"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(topic)}
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const nextStatus = topic.status === "inactive" ? "active" : "inactive";
+                        const confirmed = window.confirm(
+                          `${nextStatus === "active" ? "Activate" : "Deactivate"} "${topic.title}"?`
+                        );
+                        if (!confirmed) return;
+                        setActionError(null);
+                        try {
+                          await superAdminService.updateTopic(topic.id, { status: nextStatus });
+                          await loadData();
+                        } catch (toggleError) {
+                          setActionError(
+                            toggleError instanceof Error
+                              ? toggleError.message
+                              : "Unable to update topic status."
+                          );
+                        }
+                      }}
+                      className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/20"
+                    >
+                      {topic.status === "inactive" ? "Activate" : "Deactivate"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(topic)}
+                      className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20"
+                    >
+                      Archive
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+            <span>
+              Showing {paginatedTopics.length} of {filteredTopics.length} topics
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={safePage <= 1}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <span className="text-slate-300">
+                Page {safePage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={safePage >= totalPages}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
       ) : (
-        <DataTable columns={columns} data={topics} emptyMessage="No topics yet." />
+        <div className="space-y-4">
+          <div
+            className={`hidden text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 lg:grid ${gridTemplate}`}
+          >
+            <span>Topic</span>
+            <span>Author</span>
+            <span>Time</span>
+            <span>Status</span>
+            {isSuperAdmin && <span className="text-right">Actions</span>}
+          </div>
+
+          <div className="divide-y divide-white/10 border-y border-white/10">
+            {filteredTopics.map((topic) => {
+              return (
+                <div
+                  key={topic.id}
+                  className={`grid gap-4 py-4 lg:items-center ${gridTemplate}`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">{topic.title}</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {topic.description || "No description"}
+                    </p>
+                  </div>
+                  <div className="text-xs text-slate-300">
+                    {topic.author?.username ||
+                      topic.author?.email ||
+                      topic.author_id ||
+                      topic.created_by ||
+                      "Unknown"}
+                  </div>
+                  <div>
+                    <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                      {topic.time_allocated} {topic.time_unit === "hours" ? "hours" : "days"}
+                    </span>
+                  </div>
+                  <div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] ${
+                        topic.status === "inactive"
+                          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                      }`}
+                    >
+                      {topic.status ?? "active"}
+                    </span>
+                  </div>
+                  {isSuperAdmin && (
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(topic)}
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const nextStatus = topic.status === "inactive" ? "active" : "inactive";
+                          const confirmed = window.confirm(
+                            `${nextStatus === "active" ? "Activate" : "Deactivate"} "${topic.title}"?`
+                          );
+                          if (!confirmed) return;
+                          setActionError(null);
+                          try {
+                            await superAdminService.updateTopic(topic.id, { status: nextStatus });
+                            await loadData();
+                          } catch (toggleError) {
+                            setActionError(
+                              toggleError instanceof Error
+                                ? toggleError.message
+                                : "Unable to update topic status."
+                            );
+                          }
+                        }}
+                        className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/20"
+                      >
+                        {topic.status === "inactive" ? "Activate" : "Deactivate"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(topic)}
+                        className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20"
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="text-xs text-slate-500">Showing {filteredTopics.length} items</p>
+        </div>
       )}
 
       <Modal
         isOpen={isFormOpen}
         title={selectedTopic ? "Edit topic" : "Create topic"}
-        description="Set the core details and relationships for this topic."
+        description="Set the core details for this topic."
         onClose={() => (saving ? null : setIsFormOpen(false))}
         footer={
           <>
@@ -347,42 +546,7 @@ const TopicsSection = () => {
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
           </label>
-          <div className="md:col-span-2 text-xs uppercase tracking-[0.25em] text-slate-400">
-            Topic relationships
-            <div className="mt-2 space-y-2 rounded-xl border border-white/10 bg-white/5 p-3">
-              {topics
-                .filter((topic) => topic.id !== selectedTopic?.id)
-                .map((topic) => (
-                  <div
-                    key={`rel-${topic.id}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2"
-                  >
-                    <span className="text-sm text-white">{topic.title}</span>
-                    <select
-                      value={getRelation(topic.id)}
-                      onChange={(event) =>
-                        handleRelationChange(
-                          topic.id,
-                          event.target.value as "none" | "pre" | "co"
-                        )
-                      }
-                      className="rounded-lg border border-white/10 bg-white/10 px-3 py-1 text-xs text-white"
-                    >
-                      <option value="none">None</option>
-                      <option value="pre">Prerequisite</option>
-                      <option value="co">Corequisite</option>
-                    </select>
-                  </div>
-                ))}
-              {topics.filter((topic) => topic.id !== selectedTopic?.id).length === 0 && (
-                <p className="text-xs text-slate-400">No other topics available.</p>
-              )}
-            </div>
-          </div>
         </div>
-        <p className="mt-3 text-xs text-slate-400">
-          Set each topic as prerequisite, corequisite, or none.
-        </p>
       </Modal>
     </div>
   );
