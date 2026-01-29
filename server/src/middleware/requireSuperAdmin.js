@@ -33,6 +33,7 @@ const requireSuperAdmin = async (req, _res, next) => {
     return next(new ForbiddenError("Superadmin access required."));
   }
 
+  req.userRole = "superadmin";
   return next();
 };
 
