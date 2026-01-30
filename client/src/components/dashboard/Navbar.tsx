@@ -1,9 +1,10 @@
 type NavbarProps = {
   userEmail?: string | null;
   onSignOut?: () => void | Promise<void>;
+  onProfileClick?: () => void;
 };
 
-const Navbar = ({ userEmail, onSignOut }: NavbarProps) => {
+const Navbar = ({ userEmail, onSignOut, onProfileClick }: NavbarProps) => {
   return (
     <nav className="flex flex-wrap items-center justify-between gap-4">
       {/* Logo & Brand */}
@@ -30,6 +31,28 @@ const Navbar = ({ userEmail, onSignOut }: NavbarProps) => {
             {userEmail || "Guest"}
           </span>
         </div>
+
+        {/* Profile Button */}
+        <button
+          type="button"
+          onClick={onProfileClick}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-slate-400 transition-all duration-200 hover:bg-white/10 hover:text-white"
+          title="Profile"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        </button>
 
         {/* Sign Out Button */}
         <button
