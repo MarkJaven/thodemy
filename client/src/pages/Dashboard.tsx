@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FormList from "../components/dashboard/FormList";
 import Navbar from "../components/dashboard/Navbar";
+import ProfileSetupModal from "../components/auth/ProfileSetupModal";
 import QuizList from "../components/dashboard/QuizList";
 import TabShell, { TabDefinition, TabKey } from "../components/dashboard/TabShell";
 import UploadWidget from "../components/dashboard/UploadWidget";
@@ -9,6 +10,7 @@ import { useAuth } from "../context/AuthContext";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useTopicsData } from "../hooks/useTopicsData";
 import { useUser } from "../hooks/useUser";
+import { supabase } from "../lib/supabaseClient";
 import { dashboardApi } from "../services/dashboardApi";
 import type {
   Activity,
@@ -133,6 +135,30 @@ const Dashboard = () => {
     }
   }, [user, userLoading, navigate]);
 
+  // Fetch profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user || !supabase) return;
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        if (error) throw error;
+        setProfile(data);
+        if (!data.profile_setup_completed) {
+          setIsProfileSetupOpen(true);
+        }
+      } catch (err) {
+        console.error('Error fetching profile:', err);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+    fetchProfile();
+  }, [user]);
+
   const [activityEntries, setActivityEntries] = useState<Activity[]>([]);
   const [quizScoreEntries, setQuizScoreEntries] = useState<QuizScore[]>([]);
   const [quizAttemptEntries, setQuizAttemptEntries] = useState<QuizAttempt[]>([]);
@@ -166,6 +192,9 @@ const Dashboard = () => {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofError, setProofError] = useState<string | null>(null);
   const [submittingProof, setSubmittingProof] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [isProfileSetupOpen, setIsProfileSetupOpen] = useState(false);
 
   useEffect(() => {
     setActivityEntries(data.activities);
@@ -1231,6 +1260,22 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      <ProfileSetupModal
+        isOpen={isProfileSetupOpen}
+        onComplete={() => {
+          setIsProfileSetupOpen(false);
+          // Refresh profile
+          if (user && supabase) {
+            supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', user.id)
+              .single()
+              .then(({ data }) => setProfile(data));
+          }
+        }}
+      />
     </div>
   );
 };
