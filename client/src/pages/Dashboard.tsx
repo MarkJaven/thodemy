@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FormList from "../components/dashboard/FormList";
 import Navbar from "../components/dashboard/Navbar";
+import ProfileModal from "../components/auth/ProfileModal";
 import ProfileSetupModal from "../components/auth/ProfileSetupModal";
 import QuizList from "../components/dashboard/QuizList";
 import TabShell, { TabDefinition, TabKey } from "../components/dashboard/TabShell";
@@ -195,6 +196,7 @@ const Dashboard = () => {
   const [profile, setProfile] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [isProfileSetupOpen, setIsProfileSetupOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     setActivityEntries(data.activities);
@@ -1131,7 +1133,11 @@ const Dashboard = () => {
     <div className="min-h-screen bg-ink-900 text-slate-100">
       <div className="min-h-screen bg-gradient-to-br from-[#bda6ff]/20 via-[#5f3dc4]/20 to-[#140c2c] px-4 py-6 sm:px-8">
         <div className="mx-auto flex min-h-[90vh] w-full max-w-7xl flex-col gap-10">
-          <Navbar userEmail={user?.email} onSignOut={handleOpenSignOut} />
+          <Navbar
+            userEmail={user?.email}
+            onSignOut={handleOpenSignOut}
+            onProfileClick={() => setIsProfileModalOpen(true)}
+          />
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
@@ -1275,6 +1281,11 @@ const Dashboard = () => {
               .then(({ data }) => setProfile(data));
           }
         }}
+      />
+
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
       />
     </div>
   );
