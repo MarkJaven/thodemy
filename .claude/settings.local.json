@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(git restore:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npm run lint)"
     ]
   }
 }
