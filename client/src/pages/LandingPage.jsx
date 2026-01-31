@@ -644,7 +644,7 @@ const LandingPage = () => {
             <p className="text-center text-[10px] font-medium uppercase tracking-[0.15em] text-slate-500 sm:text-xs sm:tracking-[0.2em]">
               Top Projects & Recent Activity
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-3 text-xs font-medium uppercase tracking-[0.1em] text-slate-500 sm:gap-x-10 sm:gap-y-4 sm:text-sm sm:tracking-[0.15em]">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-3 text-sm font-semibold uppercase tracking-[0.08em] text-slate-300 sm:gap-x-10 sm:gap-y-4 sm:text-base sm:tracking-[0.12em]">
               {[
                 "UDEMY",
                 "PORTFOLIO",
@@ -654,7 +654,7 @@ const LandingPage = () => {
               ].map((name) => (
                 <span
                   key={name}
-                  className="transition-colors duration-200 hover:text-slate-300"
+                  className="select-none"
                 >
                   {name}
                 </span>
@@ -1085,10 +1085,6 @@ const LandingPage = () => {
                   index === testimonials.length - 1 ? "lg:col-span-2" : ""
                 }`}
               >
-                {/* Decorative quote mark */}
-                <div className="absolute -right-4 -top-4 text-6xl font-serif text-accent-purple/5 sm:-right-2 sm:-top-2 sm:text-8xl">
-                  "
-                </div>
                 <div className="relative">
                   <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-accent-purple/20 bg-accent-purple/5 px-3 py-1">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-accent-purple sm:text-xs sm:tracking-[0.2em]">
@@ -1110,29 +1106,95 @@ const LandingPage = () => {
 
       <FAQSection />
 
-      <section className="relative overflow-hidden bg-[#101326]">
-        {/* Decorative elements */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-accent-purple/10 via-transparent to-transparent" />
-        <div className="pointer-events-none absolute -left-20 bottom-0 h-[300px] w-[300px] rounded-full bg-accent-purple/10 blur-[100px]" />
+      <section className="relative overflow-hidden bg-[#0B0D18]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(124,92,255,0.18),_transparent_55%)]" />
+        <div className="pointer-events-none absolute -left-16 top-10 h-56 w-56 rounded-full bg-accent-purple/20 blur-[120px]" />
+        <div className="pointer-events-none absolute -right-10 bottom-0 h-72 w-72 rounded-full bg-cyan-400/10 blur-[140px]" />
 
-        <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-12 text-center sm:gap-6 sm:px-6 sm:py-20 sm:text-left lg:max-w-7xl lg:px-24">
-          <h2 className="font-display text-2xl font-semibold text-white sm:text-3xl md:text-4xl">
-            Try Thodemy now before the next{" "}
-            <span className="bg-gradient-to-r from-accent-purple to-white bg-clip-text text-transparent">
-              regularization cycle.
-            </span>
-          </h2>
-          <p className="mx-auto max-w-3xl text-base leading-relaxed text-slate-300 sm:mx-0 sm:text-lg">
-            Align training, verification, and audit records early so decisions
-            stay clear and defensible.
-          </p>
-          <a
-            href="/auth/login"
-            className="mx-auto inline-flex w-full justify-center rounded-xl bg-gradient-to-r from-accent-purple to-white px-6 py-3 text-sm font-bold uppercase tracking-[0.15em] text-ink-900 shadow-[0_12px_30px_rgba(124,92,255,0.35)] transition-all duration-200 hover:scale-[1.02] hover:brightness-105 sm:mx-0 sm:w-fit sm:px-8 sm:py-4"
-          >
-            Try It Now
-          </a>
-          <p className="text-sm uppercase tracking-[0.1em] text-slate-400 sm:text-base sm:tracking-[0.15em]">
+        <div className="relative mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-20 lg:max-w-7xl lg:px-24">
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#151A36] via-[#0F1326] to-[#0B0E1A] px-6 py-10 sm:px-10 sm:py-12">
+            <div className="pointer-events-none absolute -left-20 -top-20 h-48 w-48 rounded-full bg-accent-purple/25 blur-[110px]" />
+            <div className="pointer-events-none absolute right-0 bottom-0 h-64 w-64 rounded-full bg-white/5 blur-[120px]" />
+
+            <div className="relative grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+              <div className="space-y-5 text-center sm:text-left">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300 sm:text-xs">
+                  Launch in days, not months
+                </div>
+                <h2 className="font-display text-2xl font-semibold text-white sm:text-3xl md:text-4xl">
+                  Try Thodemy now before the next{" "}
+                  <span className="bg-gradient-to-r from-accent-purple to-white bg-clip-text text-transparent">
+                    regularization cycle.
+                  </span>
+                </h2>
+                <p className="mx-auto max-w-3xl text-base leading-relaxed text-slate-300 sm:mx-0 sm:text-lg">
+                  Align training, verification, and audit records early so
+                  decisions stay clear and defensible.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-4 sm:justify-start">
+                  <a
+                    href="/auth/login"
+                    className="inline-flex w-full justify-center rounded-xl bg-gradient-to-r from-accent-purple to-white px-6 py-3 text-sm font-bold uppercase tracking-[0.15em] text-ink-900 shadow-[0_12px_30px_rgba(124,92,255,0.35)] transition-all duration-200 hover:scale-[1.02] hover:brightness-105 sm:w-fit sm:px-8 sm:py-4"
+                  >
+                    Try It Now
+                  </a>
+                  <a
+                    href="#how-it-works"
+                    className="inline-flex w-full justify-center rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition-colors duration-200 hover:border-white/30 hover:text-white sm:w-fit sm:px-8 sm:py-4"
+                  >
+                    See the Flow
+                  </a>
+                </div>
+                <div className="flex flex-wrap justify-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 sm:justify-start sm:text-xs">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    Privacy-first
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    Audit-ready
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    Trainer verified
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-[#0B0E1D]/80 p-5 backdrop-blur sm:p-6">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                    Launch checklist
+                  </p>
+                  <span className="text-xs font-semibold text-slate-500">
+                    Week 1
+                  </span>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {[
+                    "Import training matrix",
+                    "Assign learning paths",
+                    "Verify milestone completion",
+                    "Ready for evaluation",
+                  ].map((item) => (
+                    <div
+                      key={item}
+                      className="flex items-center gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      <p className="text-sm text-slate-200">{item}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 rounded-xl border border-accent-purple/20 bg-gradient-to-r from-accent-purple/15 to-transparent px-4 py-3">
+                  <p className="text-sm text-slate-200">
+                    <span className="font-semibold text-white">
+                      Audit-ready
+                    </span>{" "}
+                    records auto-logged with soft delete.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p className="mt-6 text-center text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">
             Quick setup for internal teams. Privacy-first and audit-ready.
           </p>
         </div>
