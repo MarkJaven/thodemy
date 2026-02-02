@@ -150,19 +150,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
     }
   };
 
-  const handleDelete = async (topic: Topic) => {
-    const confirmed = window.confirm(
-      `Deactivate "${topic.title}"? Learners will no longer see this topic.`
-    );
-    if (!confirmed) return;
-    setActionError(null);
-    try {
-      await superAdminService.deleteTopic(topic.id);
-      await loadData();
-    } catch (deleteError) {
-      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete topic.");
-    }
-  };
+
 
   const gridTemplate = isSuperAdmin
     ? "lg:grid-cols-[2.4fr_1fr_0.7fr_0.9fr_1.4fr]"
@@ -318,13 +306,6 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                     >
                       {topic.status === "inactive" ? "Activate" : "Deactivate"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(topic)}
-                      className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20"
-                    >
-                      Archive
-                    </button>
                   </div>
                 </div>
               );
@@ -438,13 +419,6 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                         className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/20"
                       >
                         {topic.status === "inactive" ? "Activate" : "Deactivate"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(topic)}
-                        className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20"
-                      >
-                        Archive
                       </button>
                     </div>
                   )}
