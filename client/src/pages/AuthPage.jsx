@@ -14,7 +14,6 @@ const AuthPage = () => {
   const navigate = useNavigate();
   const resolvedMode = "login";
   const isRegister = false;
-
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -44,6 +43,7 @@ const AuthPage = () => {
     () => (isRegister ? "Create an account" : "Welcome back"),
     [isRegister]
   );
+
 
   /**
    * Track changes to form fields.
@@ -291,16 +291,6 @@ const AuthPage = () => {
                       <span>{error || info}</span>
                     </div>
                   )}
-
-                  <div className="flex items-center justify-between text-sm text-slate-300">
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" className="h-4 w-4 rounded border-white/20 bg-white/10 text-accent-purple" />
-                      <span>Remember me</span>
-                    </label>
-                    <button type="button" className="text-sm text-accent-purple transition-colors hover:text-white">
-                      Forgot password?
-                    </button>
-                  </div>
 
                   <button
                     type="submit"
