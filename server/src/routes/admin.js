@@ -15,6 +15,8 @@ const {
 
 const router = express.Router();
 
+router.get("/users", generalLimiter, requireAuth, requireAdmin, adminController.listUsers);
+
 router.post(
   "/users",
   generalLimiter,

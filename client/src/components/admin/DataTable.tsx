@@ -14,6 +14,10 @@ type DataTableProps<T> = {
   emptyMessage?: string;
   emptyIcon?: ReactNode;
   onRowClick?: (row: T, index: number) => void;
+  striped?: boolean;
+  rowClassName?: (row: T, index: number) => string;
+  compact?: boolean;
+  fitContent?: boolean;
 };
 
 const EmptyIcon = () => (
@@ -36,6 +40,10 @@ const DataTable = <T,>({
   emptyMessage,
   emptyIcon,
   onRowClick,
+  striped = true,
+  rowClassName,
+  compact = false,
+  fitContent = false,
 }: DataTableProps<T>) => {
   if (data.length === 0) {
     return (
@@ -50,7 +58,9 @@ const DataTable = <T,>({
   return (
     <div className="w-full">
       <div className="overflow-x-auto scrollbar-thin">
-        <table className="min-w-full border-collapse text-left text-sm">
+        <table
+          className={`${fitContent ? "w-max mx-auto" : "min-w-full"} border-collapse text-left text-sm`}
+        >
           {/* Table Header */}
           <thead>
             <tr className="border-b border-white/10">
@@ -58,7 +68,7 @@ const DataTable = <T,>({
                 <th
                   key={column.key}
                   style={column.width ? { width: column.width } : undefined}
-                  className={`px-5 py-4 text-[11px] font-semibold uppercase tracking-widest text-slate-400 ${
+                  className={`${compact ? "px-3 py-3" : "px-5 py-4"} text-[11px] font-semibold uppercase tracking-widest text-slate-400 ${
                     column.align === "right"
                       ? "text-right"
                       : column.align === "center"
@@ -82,12 +92,14 @@ const DataTable = <T,>({
                   onRowClick
                     ? "cursor-pointer hover:bg-white/[0.03]"
                     : "hover:bg-white/[0.02]"
-                } ${index % 2 === 1 ? "bg-white/[0.01]" : ""}`}
+                } ${striped && index % 2 === 1 ? "bg-white/[0.01]" : ""} ${
+                  rowClassName ? rowClassName(row, index) : ""
+                }`}
               >
                 {columns.map((column) => (
                   <td
                     key={`${column.key}-${index}`}
-                    className={`px-5 py-4 text-slate-200 ${
+                    className={`${compact ? "px-3 py-3" : "px-5 py-4"} text-slate-200 ${
                       column.align === "right"
                         ? "text-right"
                         : column.align === "center"
