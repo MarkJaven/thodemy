@@ -249,15 +249,20 @@ const CoursesSection = () => {
     }
   };
 
-  const handleDelete = async (courseId: string) => {
-    const confirmed = window.confirm("Delete this course? This cannot be undone.");
+  const handleArchiveToggle = async (course: CourseSummary) => {
+    const nextStatus = course.status === "archived" ? "draft" : "archived";
+    const confirmed = window.confirm(
+      `${nextStatus === "archived" ? "Deactivate" : "Activate"} "${course.title}"?`
+    );
     if (!confirmed) return;
     setActionError(null);
     try {
-      await adminCourseService.deleteCourse(courseId);
+      await adminCourseService.updateCourse(course.id, { status: nextStatus });
       await loadData();
-    } catch (deleteError) {
-      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete course.");
+    } catch (toggleError) {
+      setActionError(
+        toggleError instanceof Error ? toggleError.message : "Unable to update course status."
+      );
     }
   };
 
@@ -427,10 +432,10 @@ const CoursesSection = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDelete(course.id)}
-                        className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20"
+                        onClick={() => handleArchiveToggle(course)}
+                        className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/20"
                       >
-                        Delete
+                        {course.status === "archived" ? "Activate" : "Deactivate"}
                       </button>
                     </div>
                   </div>
