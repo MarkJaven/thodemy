@@ -62,4 +62,21 @@ const updateUser = async (req, res, next) => {
   }
 };
 
-module.exports = { adminController: { createUser, updateUser, deleteUser } };
+/**
+ * List users (admin sees users only, superadmin sees all).
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ * @returns {Promise<void>}
+ */
+const listUsers = async (req, res, next) => {
+  try {
+    const roleFilter = req.userRole === "admin" ? "user" : undefined;
+    const users = await adminUserService.listUsers({ roleFilter });
+    res.status(200).json({ users });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { adminController: { createUser, updateUser, deleteUser, listUsers } };
