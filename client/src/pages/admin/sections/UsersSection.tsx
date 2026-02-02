@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
 import { superAdminService } from "../../../services/superAdminService";
-import type { AdminUser, Role } from "../../../types/superAdmin";
+import type { AdminUser, Role, UserProfile } from "../../../types/superAdmin";
 
 const roleOptions: Role[] = ["user", "admin", "superadmin"];
 
@@ -36,6 +36,8 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileEditing, setIsProfileEditing] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
 
   const [formState, setFormState] = useState({
@@ -44,8 +46,17 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     password: "",
     role: "user" as Role,
   });
+  const [profileForm, setProfileForm] = useState({
+    firstName: "",
+    lastName: "",
+    username: "",
+    email: "",
+    role: "user" as Role,
+  });
   const [actionError, setActionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -63,6 +74,30 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "Not set";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Not set";
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(parsed);
+  };
+
+  const getUserInitial = (user: AdminUser | null) => {
+    const label = user?.username || user?.email || "U";
+    return label.charAt(0).toUpperCase();
+  };
+
+  const getDisplayName = (user: AdminUser | null, draft = profileForm) => {
+    if (!user) return "User Profile";
+    const first = draft.firstName?.trim() || user.first_name || "";
+    const last = draft.lastName?.trim() || user.last_name || "";
+    const combined = `${first} ${last}`.trim();
+    if (combined) return combined;
+    return draft.username?.trim() || user.username || user.email || "User Profile";
+  };
 
   const resetForm = () => {
     setFormState({ email: "", username: "", password: "", role: "user" });
@@ -90,6 +125,75 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     setSelectedUser(user);
     setActionError(null);
     setIsDeleteOpen(true);
+  };
+
+  const openProfile = (user: AdminUser) => {
+    setSelectedUser(user);
+    setProfileForm({
+      firstName: user.first_name ?? "",
+      lastName: user.last_name ?? "",
+      username: user.username ?? "",
+      email: user.email ?? "",
+      role: user.role,
+    });
+    setProfileError(null);
+    setIsProfileEditing(false);
+    setIsProfileOpen(true);
+  };
+
+  const closeProfile = () => {
+    setIsProfileOpen(false);
+    setIsProfileEditing(false);
+    setProfileError(null);
+  };
+
+  const handleProfileSave = async () => {
+    if (!selectedUser) return;
+
+    const trimmedUsername = profileForm.username.trim();
+    const existingUsername = (selectedUser.username ?? "").trim();
+
+    if (!trimmedUsername && existingUsername) {
+      setProfileError("Username cannot be empty.");
+      return;
+    }
+
+    const profileUpdates: Partial<UserProfile> = {};
+    if (profileForm.firstName !== (selectedUser.first_name ?? "")) {
+      profileUpdates.first_name = profileForm.firstName.trim() || null;
+    }
+    if (profileForm.lastName !== (selectedUser.last_name ?? "")) {
+      profileUpdates.last_name = profileForm.lastName.trim() || null;
+    }
+    if (profileForm.username !== (selectedUser.username ?? "")) {
+      profileUpdates.username = trimmedUsername || null;
+    }
+
+    const shouldUpdateRole = !readOnly && profileForm.role !== selectedUser.role;
+
+    if (Object.keys(profileUpdates).length === 0 && !shouldUpdateRole) {
+      setIsProfileEditing(false);
+      return;
+    }
+
+    setProfileSaving(true);
+    setProfileError(null);
+    try {
+      if (Object.keys(profileUpdates).length > 0) {
+        await superAdminService.updateUserProfile(selectedUser.id, profileUpdates);
+      }
+      if (shouldUpdateRole) {
+        await superAdminService.updateUserAccount(selectedUser.id, { role: profileForm.role });
+      }
+      setIsProfileEditing(false);
+      await loadUsers();
+    } catch (profileSaveError) {
+      setProfileError(
+        profileSaveError instanceof Error ? profileSaveError.message : "Unable to update user profile."
+      );
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   const handleCreate = async () => {
@@ -170,7 +274,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
         render: (user: AdminUser) => (
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent-purple/20 to-accent-violet/10 text-sm font-semibold text-white ring-1 ring-white/10">
-              {(user.username || user.email || "U").charAt(0).toUpperCase()}
+              {getUserInitial(user)}
             </div>
             <div>
               <p className="font-medium text-white">{user.username || "No username"}</p>
@@ -182,6 +286,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       {
         key: "role",
         header: "Role",
+        width: readOnly ? "120px" : undefined,
         render: (user: AdminUser) => {
           const config = roleConfig[user.role] || roleConfig.user;
           return (
@@ -193,45 +298,80 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       },
     ];
 
-    if (readOnly) {
-      return baseColumns;
-    }
-
     return [
       ...baseColumns,
       {
         key: "actions",
         header: "Actions",
-        align: "right" as const,
+        align: readOnly ? ("left" as const) : ("right" as const),
+        width: readOnly ? "120px" : undefined,
         render: (user: AdminUser) => (
-          <div className="flex items-center justify-end gap-2">
+          <div className={`flex items-center gap-2 ${readOnly ? "justify-start" : "justify-end"}`}>
             <button
               type="button"
-              onClick={() => openEdit(user)}
-              className="btn-secondary py-1.5 px-3"
+              onClick={() => openProfile(user)}
+              className={
+                readOnly
+                  ? "group flex flex-col items-center gap-1 rounded-xl px-4 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-slate-300 transition-colors duration-200 hover:text-white"
+                  : "btn-ghost py-1.5 px-3"
+              }
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className={readOnly ? "h-4 w-4 text-slate-400 group-hover:text-white" : "mr-1.5"}
+              >
+                <circle cx="12" cy="7" r="4" />
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               </svg>
-              Edit
+              Profile
             </button>
-            <button
-              type="button"
-              onClick={() => openDelete(user)}
-              className="btn-danger py-1.5 px-3"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-              </svg>
-              Delete
-            </button>
+            {!readOnly && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openEdit(user)}
+                  className="btn-secondary py-1.5 px-3"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openDelete(user)}
+                  className="btn-danger py-1.5 px-3"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  </svg>
+                  Delete
+                </button>
+              </>
+            )}
           </div>
         ),
       },
     ];
   }, [readOnly]);
+
+  const visibleUsers = readOnly ? users.filter((user) => user.role === "user") : users;
+  const profileDisplayName = getDisplayName(selectedUser);
+  const profileInitial = getUserInitial(selectedUser);
+  const profileRoleConfig = selectedUser ? roleConfig[selectedUser.role] || roleConfig.user : roleConfig.user;
+  const profileHasChanges = !!selectedUser && (
+    profileForm.firstName !== (selectedUser.first_name ?? "") ||
+    profileForm.lastName !== (selectedUser.last_name ?? "") ||
+    profileForm.username !== (selectedUser.username ?? "") ||
+    (!readOnly && profileForm.role !== selectedUser.role)
+  );
 
   if (loading) {
     return (
@@ -298,7 +438,231 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       </div>
 
       {/* Data Table */}
-      <DataTable columns={columns} data={users} emptyMessage="No users found." />
+      <DataTable
+        columns={columns}
+        data={visibleUsers}
+        emptyMessage="No users found."
+        striped={!readOnly}
+        rowClassName={readOnly ? () => "hover:bg-transparent" : undefined}
+        compact={readOnly}
+      />
+
+      {/* Profile Modal */}
+      <Modal
+        isOpen={isProfileOpen}
+        title="User Profile"
+        description="Review account details, update personal info, and keep profiles accurate."
+        onClose={closeProfile}
+        variant="user"
+        size="lg"
+        footer={
+          isProfileEditing ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setIsProfileEditing(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleProfileSave}
+                disabled={profileSaving || !profileHasChanges}
+                className="btn-primary flex items-center gap-2"
+              >
+                {profileSaving ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Saving...
+                  </>
+                ) : (
+                  "Save Profile"
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={closeProfile}
+                className="btn-secondary"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsProfileEditing(true)}
+                className="btn-primary"
+              >
+                Edit Profile
+              </button>
+            </>
+          )
+        }
+      >
+        <div className="space-y-6">
+          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-ink-900 p-6">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-accent-purple/20 via-transparent to-accent-violet/20" />
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-purple/35 to-accent-indigo/20 text-2xl font-semibold text-white ring-1 ring-white/10">
+                {profileInitial}
+              </div>
+              <div className="flex-1">
+                <p className="text-2xs uppercase tracking-widest text-slate-400">Profile overview</p>
+                <h4 className="mt-1 font-display text-2xl text-white">{profileDisplayName}</h4>
+                <p className="text-sm text-slate-400">{profileForm.email || "No email on file"}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest ${profileRoleConfig.color} ${profileRoleConfig.bgColor} ${profileRoleConfig.borderColor}`}>
+                  {selectedUser?.role ?? "user"}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-white/10 bg-ink-900 px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest text-slate-300">
+                  ID {selectedUser?.id?.slice(0, 8) || "N/A"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-white/10 bg-ink-800 p-5">
+                <p className="text-2xs uppercase tracking-widest text-slate-400">Personal details</p>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="label">First Name</label>
+                    {isProfileEditing ? (
+                      <input
+                        type="text"
+                        value={profileForm.firstName}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, firstName: e.target.value }))}
+                        placeholder="First name"
+                        className="input"
+                      />
+                    ) : (
+                      <div className="rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white">
+                        {profileForm.firstName || "Not set"}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="label">Last Name</label>
+                    {isProfileEditing ? (
+                      <input
+                        type="text"
+                        value={profileForm.lastName}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, lastName: e.target.value }))}
+                        placeholder="Last name"
+                        className="input"
+                      />
+                    ) : (
+                      <div className="rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white">
+                        {profileForm.lastName || "Not set"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-ink-800 p-5">
+                <p className="text-2xs uppercase tracking-widest text-slate-400">Account</p>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="label">Username</label>
+                    {isProfileEditing ? (
+                      <input
+                        type="text"
+                        value={profileForm.username}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, username: e.target.value }))}
+                        placeholder="Username"
+                        className="input"
+                      />
+                    ) : (
+                      <div className="rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white">
+                        {profileForm.username || "Not set"}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="label">
+                      Email Address
+                      <span className="ml-2 text-2xs font-normal normal-case text-slate-500">(read-only)</span>
+                    </label>
+                    <div className="rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-slate-300">
+                      {profileForm.email || "Not set"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-white/10 bg-ink-850 p-5">
+                <p className="text-2xs uppercase tracking-widest text-slate-400">Timeline</p>
+                <div className="mt-4 space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Created</span>
+                    <span className="font-medium text-white">{formatDateTime(selectedUser?.created_at)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Last updated</span>
+                    <span className="font-medium text-white">{formatDateTime(selectedUser?.updated_at)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Role updated</span>
+                    <span className="font-medium text-white">{formatDateTime(selectedUser?.role_updated_at)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-ink-850 p-5">
+                <p className="text-2xs uppercase tracking-widest text-slate-400">Role & access</p>
+                <div className="mt-4 space-y-3">
+                  {!readOnly && isProfileEditing ? (
+                    <div className="space-y-2">
+                      <label className="label">Role</label>
+                      <select
+                        value={profileForm.role}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, role: e.target.value as Role }))}
+                        className="input"
+                      >
+                        {roleOptions.map((role) => (
+                          <option key={role} value={role}>
+                            {role.charAt(0).toUpperCase() + role.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-400">Assigned role</span>
+                      <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest ${profileRoleConfig.color} ${profileRoleConfig.bgColor} ${profileRoleConfig.borderColor}`}>
+                        {selectedUser?.role ?? "user"}
+                      </span>
+                    </div>
+                  )}
+                  {readOnly && (
+                    <p className="text-xs text-slate-500">Role updates are restricted to superadmins.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {profileError && (
+            <div className="flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" />
+              </svg>
+              {profileError}
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* Modals */}
       {!readOnly && (

@@ -64,30 +64,12 @@ export const superAdminService = {
   },
 
   async listUsers(): Promise<AdminUser[]> {
-    const client = requireSupabase();
-    const { data: profiles, error: profileError } = await client
-      .from("profiles")
-      .select("id, first_name, last_name, username, email, created_at, updated_at")
-      .order("created_at", { ascending: false });
-    if (profileError) throw new Error(profileError.message);
-
-    const { data: roles, error: roleError } = await client
-      .from("user_roles")
-      .select("user_id, role, updated_at");
-    if (roleError) throw new Error(roleError.message);
-
-    const roleMap = new Map(
-      (roles ?? []).map((entry) => [entry.user_id, { role: entry.role, updated_at: entry.updated_at }])
-    );
-
-    return (profiles ?? []).map((profile: UserProfile) => {
-      const roleEntry = roleMap.get(profile.id);
-      return {
-        ...profile,
-        role: (roleEntry?.role as Role) ?? "user",
-        role_updated_at: roleEntry?.updated_at ?? null,
-      };
-    });
+    try {
+      const { data } = await apiClient.get("/api/admin/users");
+      return (data?.users ?? []) as AdminUser[];
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async upsertUserRole(userId: string, role: Role): Promise<void> {

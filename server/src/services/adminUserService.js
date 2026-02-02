@@ -211,4 +211,53 @@ const deleteUser = async (userId) => {
   }
 };
 
-module.exports = { adminUserService: { createUser, updateUser, deleteUser } };
+/**
+ * List users with their roles.
+ * @param {{ roleFilter?: string }} options
+ * @returns {Promise<Array<object>>}
+ */
+const listUsers = async ({ roleFilter } = {}) => {
+  const { data: profiles, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("id, first_name, last_name, username, email, created_at, updated_at")
+    .order("created_at", { ascending: false });
+
+  if (profileError) {
+    throw new DatabaseError("Unable to load user profiles", {
+      code: profileError.code,
+      details: profileError.message,
+    });
+  }
+
+  const { data: roles, error: roleError } = await supabaseAdmin
+    .from("user_roles")
+    .select("user_id, role, updated_at");
+
+  if (roleError) {
+    throw new DatabaseError("Unable to load user roles", {
+      code: roleError.code,
+      details: roleError.message,
+    });
+  }
+
+  const roleMap = new Map(
+    (roles ?? []).map((entry) => [entry.user_id, { role: entry.role, updated_at: entry.updated_at }])
+  );
+
+  const users = (profiles ?? []).map((profile) => {
+    const roleEntry = roleMap.get(profile.id);
+    return {
+      ...profile,
+      role: roleEntry?.role ?? "user",
+      role_updated_at: roleEntry?.updated_at ?? null,
+    };
+  });
+
+  if (roleFilter) {
+    return users.filter((user) => user.role === roleFilter);
+  }
+
+  return users;
+};
+
+module.exports = { adminUserService: { createUser, updateUser, deleteUser, listUsers } };

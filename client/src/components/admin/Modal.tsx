@@ -128,7 +128,7 @@ const Modal = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
-      className={`fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm animate-fade-in ${
+      className={`fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm animate-fade-in ${
         topAligned ? "pt-4 pb-8" : "flex items-center justify-center p-4"
       }`}
       onClick={(e) => e.target === e.currentTarget && onClose()}
@@ -136,7 +136,7 @@ const Modal = ({
       <div
         className={`${topAligned ? "mx-auto" : ""} w-full ${sizeClasses[size]} ${
           topAligned ? "max-h-[calc(100vh-3rem)]" : "max-h-[90vh]"
-        } flex flex-col rounded-2xl border border-white/10 bg-gradient-to-br from-ink-750/98 via-ink-800/98 to-ink-900/98 shadow-2xl shadow-purple-900/20 animate-slide-up ${
+        } flex flex-col rounded-2xl border border-white/10 bg-gradient-to-br from-ink-700 via-ink-800 to-ink-900 shadow-2xl shadow-purple-900/20 animate-slide-up ${
           topAligned ? "mx-4 sm:mx-auto" : ""
         }`}
       >
@@ -185,7 +185,7 @@ const Modal = ({
 
         {/* Footer */}
         {footer && (
-          <div className="flex-shrink-0 border-t border-white/10 bg-white/[0.01] px-6 py-4 sm:px-8">
+          <div className="flex-shrink-0 border-t border-white/10 bg-ink-850 px-6 py-4 sm:px-8">
             <div className="flex flex-wrap items-center justify-end gap-3">{footer}</div>
           </div>
         )}
