@@ -215,20 +215,21 @@ const LearningPathsSection = () => {
     }
   };
 
-  const handleDelete = async (pathId: string) => {
+  const handleArchiveToggle = async (path: LearningPathSummary) => {
+    const nextStatus = path.status === "archived" ? "draft" : "archived";
     const confirmed = window.confirm(
-      "Delete this learning path? This cannot be undone."
+      `${nextStatus === "archived" ? "Deactivate" : "Activate"} "${path.title}"?`
     );
     if (!confirmed) return;
     setActionError(null);
     try {
-      await adminLearningPathService.deleteLearningPath(pathId);
+      await adminLearningPathService.updateLearningPath(path.id, { status: nextStatus });
       await loadData();
-    } catch (deleteError) {
+    } catch (toggleError) {
       setActionError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "Unable to delete learning path."
+        toggleError instanceof Error
+          ? toggleError.message
+          : "Unable to update learning path status."
       );
     }
   };
@@ -464,10 +465,10 @@ const LearningPathsSection = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(path.id)}
-                      className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20"
+                      onClick={() => handleArchiveToggle(path)}
+                      className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/20"
                     >
-                      Delete
+                      {path.status === "archived" ? "Activate" : "Deactivate"}
                     </button>
                   </div>
                 </div>
