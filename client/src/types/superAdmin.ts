@@ -22,6 +22,7 @@ export type UserRole = {
 export type AdminUser = UserProfile & {
   role: Role;
   role_updated_at?: string | null;
+  is_active?: boolean;
 };
 
 export type Course = {

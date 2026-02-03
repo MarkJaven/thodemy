@@ -256,11 +256,13 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     setSaving(true);
     setActionError(null);
     try {
-      await superAdminService.deleteUser(selectedUser.id);
+      // Toggle active status
+      const newActiveStatus = !selectedUser.is_active;
+      await superAdminService.updateUserAccount(selectedUser.id, { is_active: newActiveStatus });
       setIsDeleteOpen(false);
       await loadUsers();
     } catch (deleteError) {
-      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete user.");
+      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to update user status.");
     } finally {
       setSaving(false);
     }
@@ -272,13 +274,18 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
         key: "name",
         header: "User",
         render: (user: AdminUser) => (
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent-purple/20 to-accent-violet/10 text-sm font-semibold text-white ring-1 ring-white/10">
+          <div className={`flex items-center gap-3 ${user.is_active === false ? "opacity-60" : ""}`}>
+            <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent-purple/20 to-accent-violet/10 text-sm font-semibold text-white ring-1 ring-white/10 ${user.is_active === false ? "grayscale" : ""}`}>
               {getUserInitial(user)}
             </div>
             <div>
               <p className="font-medium text-white">{user.username || "No username"}</p>
               <p className="text-xs text-slate-400">{user.email}</p>
+              {user.is_active === false && (
+                <span className="inline-flex items-center rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest text-red-300 mt-1">
+                  Inactive
+                </span>
+              )}
             </div>
           </div>
         ),
@@ -313,8 +320,9 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               className={
                 readOnly
                   ? "group flex flex-col items-center gap-1 rounded-xl px-4 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-slate-300 transition-colors duration-200 hover:text-white"
-                  : "btn-ghost py-1.5 px-3"
+                  : "btn-ghost p-2"
               }
+              title="Profile"
             >
               <svg
                 width="14"
@@ -323,36 +331,44 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
-                className={readOnly ? "h-4 w-4 text-slate-400 group-hover:text-white" : "mr-1.5"}
+                className={readOnly ? "h-4 w-4 text-slate-400 group-hover:text-white" : ""}
               >
                 <circle cx="12" cy="7" r="4" />
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               </svg>
-              Profile
+              {readOnly && "Profile"}
             </button>
             {!readOnly && (
               <>
                 <button
                   type="button"
                   onClick={() => openEdit(user)}
-                  className="btn-secondary py-1.5 px-3"
+                  className="btn-secondary p-2"
+                  title="Edit"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                     <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
-                  Edit
                 </button>
                 <button
                   type="button"
                   onClick={() => openDelete(user)}
-                  className="btn-danger py-1.5 px-3"
+                  className={`p-2 ${user.is_active === false ? "btn-secondary" : "btn-danger"}`}
+                  title={user.is_active === false ? "Activate" : "Deactivate"}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                  </svg>
-                  Delete
+                  {user.is_active === false ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M9 12l2 2 4-4" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                      <line x1="18" y1="8" x2="6" y2="20" />
+                    </svg>
+                  )}
                 </button>
               </>
             )}
@@ -859,13 +875,13 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
             )}
           </Modal>
 
-          {/* Delete User Modal */}
+          {/* Delete/Deactivate User Modal */}
           <Modal
             isOpen={isDeleteOpen}
-            title="Delete User"
-            description="This action cannot be undone."
+            title={selectedUser?.is_active === false ? "Activate User" : "Deactivate User"}
+            description={selectedUser?.is_active === false ? "Restore this user's access to the system." : "This user will lose access to the system but their data will be preserved."}
             onClose={() => setIsDeleteOpen(false)}
-            variant="danger"
+            variant={selectedUser?.is_active === false ? "user" : "danger"}
             size="sm"
             footer={
               <>
@@ -880,7 +896,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   type="button"
                   onClick={handleDelete}
                   disabled={saving}
-                  className="btn-danger flex items-center gap-2"
+                  className={`flex items-center gap-2 ${selectedUser?.is_active === false ? "btn-primary" : "btn-danger"}`}
                 >
                   {saving ? (
                     <>
@@ -888,10 +904,10 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      Deleting...
+                      {selectedUser?.is_active === false ? "Activating..." : "Deactivating..."}
                     </>
                   ) : (
-                    "Delete User"
+                    selectedUser?.is_active === false ? "Activate User" : "Deactivate User"
                   )}
                 </button>
               </>
@@ -908,7 +924,9 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 </div>
               </div>
               <p className="text-sm text-slate-400">
-                This user will lose access immediately and all their associated data will be removed from the system.
+                {selectedUser?.is_active === false
+                  ? "This user will regain access to the system and all their previous data."
+                  : "This user will lose access immediately but all their associated data will be preserved and can be restored later."}
               </p>
             </div>
             {actionError && (
