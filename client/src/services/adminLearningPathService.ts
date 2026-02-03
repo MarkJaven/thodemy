@@ -1,5 +1,6 @@
 import { apiClient, getApiErrorMessage } from "../lib/apiClient";
 import { supabase } from "../lib/supabaseClient";
+import { auditLogService } from "./auditLogService";
 
 const requireSupabase = () => {
   if (!supabase) {
@@ -139,6 +140,12 @@ export const adminLearningPathService = {
       .update({ status })
       .eq("id", enrollmentId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "learning_path_enrollment",
+      entityId: enrollmentId,
+      action: "status_changed",
+      details: { status },
+    });
   },
 
   async deleteLPEnrollment(enrollmentId: string): Promise<void> {

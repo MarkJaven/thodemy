@@ -295,3 +295,25 @@ export type LearningPathEnrollment = {
   created_at?: string | null;
   updated_at?: string | null;
 };
+
+export type AuditLog = {
+  id: string;
+  entity_type: string;
+  entity_id?: string | null;
+  action: string;
+  actor_id?: string | null;
+  timestamp?: string | null;
+  details?: Record<string, unknown> | null;
+};
+
+export type AdminTask = {
+  id: string;
+  title: string;
+  description?: string | null;
+  priority?: "low" | "medium" | "high" | null;
+  status?: "pending" | "completed" | null;
+  created_by?: string | null;
+  completed_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};

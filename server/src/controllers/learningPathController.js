@@ -5,6 +5,7 @@ const {
   ExternalServiceError,
   NotFoundError,
 } = require("../utils/errors");
+const { auditLogService } = require("../services/auditLogService");
 const { calculateCourseEndDate, generateCourseCode } = require("../utils/courseUtils");
 
 const ensureUniqueLPCode = async (attempts = 6) => {
@@ -257,6 +258,21 @@ const upsertLearningPath = async (req, res, next) => {
     };
 
     const { learningPathId } = req.params;
+    let existingPath = null;
+    if (learningPathId) {
+      const { data, error: existingError } = await supabaseAdmin
+        .from("learning_paths")
+        .select("id, title, status")
+        .eq("id", learningPathId)
+        .maybeSingle();
+      if (existingError) {
+        throw new ExternalServiceError("Unable to load learning path", {
+          code: existingError.code,
+          details: existingError.message,
+        });
+      }
+      existingPath = data ?? null;
+    }
     if (learningPathId) {
       if (userId) {
         lpPayload.updated_by = userId;
@@ -274,6 +290,23 @@ const upsertLearningPath = async (req, res, next) => {
           details: error.message,
         });
       }
+      const previousStatus = existingPath?.status ?? null;
+      const nextStatus = lpPayload.status ?? previousStatus;
+      const action =
+        previousStatus && nextStatus && previousStatus !== nextStatus
+          ? "status_changed"
+          : "updated";
+      await auditLogService.recordAuditLog({
+        entityType: "learning_path",
+        entityId: learningPathId,
+        action,
+        actorId: userId,
+        details: {
+          title: lpPayload.title,
+          from: previousStatus,
+          to: nextStatus,
+        },
+      });
       return res.json({ learningPathId });
     }
 
@@ -295,6 +328,17 @@ const upsertLearningPath = async (req, res, next) => {
         details: error.message,
       });
     }
+    await auditLogService.recordAuditLog({
+      entityType: "learning_path",
+      entityId: data.id,
+      action: "created",
+      actorId: userId,
+      details: {
+        title: data.title,
+        status: data.status,
+        courses: data.course_ids?.length ?? 0,
+      },
+    });
     return res.status(201).json({ learningPath: data });
   } catch (error) {
     return next(error);
@@ -304,6 +348,18 @@ const upsertLearningPath = async (req, res, next) => {
 const deleteLearningPath = async (req, res, next) => {
   try {
     const { learningPathId } = req.params;
+    const userId = req.auth?.sub;
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from("learning_paths")
+      .select("id, title, status")
+      .eq("id", learningPathId)
+      .maybeSingle();
+    if (existingError) {
+      throw new ExternalServiceError("Unable to load learning path", {
+        code: existingError.code,
+        details: existingError.message,
+      });
+    }
     const { error } = await supabaseAdmin
       .from("learning_paths")
       .delete()
@@ -314,6 +370,16 @@ const deleteLearningPath = async (req, res, next) => {
         details: error.message,
       });
     }
+    await auditLogService.recordAuditLog({
+      entityType: "learning_path",
+      entityId: learningPathId,
+      action: "deleted",
+      actorId: userId,
+      details: {
+        title: existing?.title ?? null,
+        status: existing?.status ?? null,
+      },
+    });
     return res.status(204).send();
   } catch (error) {
     return next(error);
@@ -323,6 +389,7 @@ const deleteLearningPath = async (req, res, next) => {
 const deleteLPEnrollment = async (req, res, next) => {
   try {
     const { enrollmentId } = req.params;
+    const userId = req.auth?.sub;
     const { error } = await supabaseAdmin
       .from("learning_path_enrollments")
       .delete()
@@ -333,6 +400,12 @@ const deleteLPEnrollment = async (req, res, next) => {
         details: error.message,
       });
     }
+    await auditLogService.recordAuditLog({
+      entityType: "learning_path_enrollment",
+      entityId: enrollmentId,
+      action: "removed",
+      actorId: userId,
+    });
     return res.status(204).send();
   } catch (error) {
     return next(error);

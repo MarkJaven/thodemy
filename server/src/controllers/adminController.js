@@ -1,4 +1,5 @@
 const { adminUserService } = require("../services/adminUserService");
+const { auditLogService } = require("../services/auditLogService");
 
 /**
  * Create a new user (superadmin only).
@@ -17,6 +18,13 @@ const createUser = async (req, res, next) => {
       role,
       createdBy: req.auth?.sub,
     });
+    await auditLogService.recordAuditLog({
+      entityType: "user",
+      entityId: result.id,
+      action: "created",
+      actorId: req.auth?.sub ?? null,
+      details: { email, username, role },
+    });
     res.status(201).json({ id: result.id });
   } catch (error) {
     next(error);
@@ -33,6 +41,12 @@ const createUser = async (req, res, next) => {
 const deleteUser = async (req, res, next) => {
   try {
     await adminUserService.deleteUser(req.params.userId);
+    await auditLogService.recordAuditLog({
+      entityType: "user",
+      entityId: req.params.userId,
+      action: "deactivated",
+      actorId: req.auth?.sub ?? null,
+    });
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -56,6 +70,18 @@ const updateUser = async (req, res, next) => {
       role,
       is_active,
       updatedBy: req.auth?.sub,
+    });
+    await auditLogService.recordAuditLog({
+      entityType: "user",
+      entityId: req.params.userId,
+      action: "updated",
+      actorId: req.auth?.sub ?? null,
+      details: {
+        username: username ?? null,
+        role: role ?? null,
+        is_active: typeof is_active === "boolean" ? is_active : null,
+        password_reset: Boolean(password),
+      },
     });
     res.status(204).send();
   } catch (error) {

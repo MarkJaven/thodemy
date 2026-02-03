@@ -3,7 +3,10 @@
     "allow": [
       "Bash(git restore:*)",
       "Bash(curl:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(npx tsc:*)",
+      "Bash(npx --no-install tsc:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

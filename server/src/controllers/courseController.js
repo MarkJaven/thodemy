@@ -4,6 +4,7 @@ const {
   ExternalServiceError,
   NotFoundError,
 } = require("../utils/errors");
+const { auditLogService } = require("../services/auditLogService");
 const {
   calculateCourseTotals,
   calculateCourseEndDate,
@@ -282,6 +283,21 @@ const upsertCourse = async (req, res, next) => {
     };
 
     const { courseId } = req.params;
+    let existingCourse = null;
+    if (courseId) {
+      const { data, error: existingError } = await supabaseAdmin
+        .from("courses")
+        .select("id, title, status")
+        .eq("id", courseId)
+        .maybeSingle();
+      if (existingError) {
+        throw new ExternalServiceError("Unable to load course", {
+          code: existingError.code,
+          details: existingError.message,
+        });
+      }
+      existingCourse = data ?? null;
+    }
     if (courseId) {
       if (userId) {
         coursePayload.updated_by = userId;
@@ -293,6 +309,23 @@ const upsertCourse = async (req, res, next) => {
           details: error.message,
         });
       }
+      const previousStatus = existingCourse?.status ?? null;
+      const nextStatus = coursePayload.status ?? previousStatus;
+      const action =
+        previousStatus && nextStatus && previousStatus !== nextStatus
+          ? "status_changed"
+          : "updated";
+      await auditLogService.recordAuditLog({
+        entityType: "course",
+        entityId: courseId,
+        action,
+        actorId: userId,
+        details: {
+          title: coursePayload.title,
+          from: previousStatus,
+          to: nextStatus,
+        },
+      });
       return res.json({ courseId });
     }
 
@@ -313,6 +346,17 @@ const upsertCourse = async (req, res, next) => {
         details: error.message,
       });
     }
+    await auditLogService.recordAuditLog({
+      entityType: "course",
+      entityId: data.id,
+      action: "created",
+      actorId: userId,
+      details: {
+        title: data.title,
+        status: data.status,
+        topics: data.topic_ids?.length ?? 0,
+      },
+    });
     return res.status(201).json({ course: data });
   } catch (error) {
     return next(error);
@@ -322,6 +366,18 @@ const upsertCourse = async (req, res, next) => {
 const deleteCourse = async (req, res, next) => {
   try {
     const { courseId } = req.params;
+    const userId = req.auth?.sub;
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from("courses")
+      .select("id, title, status")
+      .eq("id", courseId)
+      .maybeSingle();
+    if (existingError) {
+      throw new ExternalServiceError("Unable to load course", {
+        code: existingError.code,
+        details: existingError.message,
+      });
+    }
     const { error } = await supabaseAdmin.from("courses").delete().eq("id", courseId);
     if (error) {
       throw new ExternalServiceError("Unable to delete course", {
@@ -329,6 +385,16 @@ const deleteCourse = async (req, res, next) => {
         details: error.message,
       });
     }
+    await auditLogService.recordAuditLog({
+      entityType: "course",
+      entityId: courseId,
+      action: "deleted",
+      actorId: userId,
+      details: {
+        title: existing?.title ?? null,
+        status: existing?.status ?? null,
+      },
+    });
     return res.status(204).send();
   } catch (error) {
     return next(error);
@@ -338,6 +404,7 @@ const deleteCourse = async (req, res, next) => {
 const deleteEnrollment = async (req, res, next) => {
   try {
     const { enrollmentId } = req.params;
+    const userId = req.auth?.sub;
     const { error } = await supabaseAdmin.from("enrollments").delete().eq("id", enrollmentId);
     if (error) {
       throw new ExternalServiceError("Unable to remove enrollment", {
@@ -345,6 +412,12 @@ const deleteEnrollment = async (req, res, next) => {
         details: error.message,
       });
     }
+    await auditLogService.recordAuditLog({
+      entityType: "enrollment",
+      entityId: enrollmentId,
+      action: "removed",
+      actorId: userId,
+    });
     return res.status(204).send();
   } catch (error) {
     return next(error);
