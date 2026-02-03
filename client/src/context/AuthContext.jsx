@@ -242,11 +242,8 @@ export const AuthProvider = ({ children }) => {
       pollingStopRef.current = false;
     }
     const currentUserId = user?.id;
-    setSession(null);
-    setUser(null);
-    setVerified(true);
 
-    // unsubscribe from realtime channel
+    // unsubscribe from realtime channel first
     if (pusherChannelRef.current) {
       const p = getPusher();
       pusherChannelRef.current.unbind_all();
@@ -254,18 +251,30 @@ export const AuthProvider = ({ children }) => {
       pusherChannelRef.current = null;
     }
 
+    // Deactivate sessions on server
     if (!skipServerDeactivation && currentUserId) {
       sessionService.deactivateAllSessions(currentUserId).catch(() => {});
       sessionService.deactivateCurrentSession(currentUserId).catch(() => {});
     }
+
+    // Sign out from Supabase
     try {
       await authService.signOut();
     } catch {
       // ignore
     }
-    if (!skipServerDeactivation) {
-      window.location.replace(redirectTo || "/");
+
+    // IMPORTANT: Redirect BEFORE clearing React state to avoid race condition
+    // with RoleProtectedRoute redirecting to /auth/login when it sees user = null
+    if (!skipServerDeactivation && redirectTo) {
+      window.location.replace(redirectTo);
+      return; // Page will navigate away, no need to clear state
     }
+
+    // Only clear state if not redirecting (e.g., forced sign out from another device)
+    setSession(null);
+    setUser(null);
+    setVerified(true);
   };
 
   // Polling removed to avoid repeated forced sign-outs; rely on realtime

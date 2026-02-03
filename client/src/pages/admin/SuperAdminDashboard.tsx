@@ -6,6 +6,7 @@ import { superAdminService } from "../../services/superAdminService";
 import { auditLogService } from "../../services/auditLogService";
 import { adminTaskService } from "../../services/adminTaskService";
 import type { AuditLog, AdminTask, AdminUser } from "../../types/superAdmin";
+import logoThodemy from "../../assets/images/logo-thodemy.png";
 import UsersSection from "./sections/UsersSection";
 import TopicsSection from "./sections/TopicsSection";
 import LearningPathsSection from "./sections/LearningPathsSection";
@@ -754,10 +755,12 @@ const SuperAdminDashboard = () => {
         >
           {/* Brand */}
           <div className="flex items-center gap-3 p-6 border-b border-white/5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-purple to-accent-violet flex items-center justify-center">
-              <span className="text-white font-bold text-sm">T</span>
-            </div>
-            <span className="text-white font-semibold">Thodemy</span>
+            <img
+              src={logoThodemy}
+              alt="Thodemy"
+              className="h-32 w-auto object-contain shrink-0"
+              loading="lazy"
+            />
             {/* Close button for mobile */}
             <button
               className="lg:hidden ml-auto p-1 text-slate-400 hover:text-white"
