@@ -65,6 +65,13 @@ apiClient.interceptors.response.use(
     const config = error.config || {};
     const retryCount = config.__retryCount || 0;
 
+    // Check for deactivated account
+    if (error?.response?.status === 403 && 
+        error?.response?.data?.message?.includes("Account is deactivated")) {
+      window.location.href = '/deactivated';
+      return Promise.reject(error);
+    }
+
     if (shouldRetry(error) && retryCount < MAX_RETRY_ATTEMPTS) {
       config.__retryCount = retryCount + 1;
       await delay(RETRY_DELAY_MS);

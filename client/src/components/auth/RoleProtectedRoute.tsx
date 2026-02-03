@@ -10,10 +10,10 @@ type RoleProtectedRouteProps = {
 };
 
 const RoleProtectedRoute = ({ allowedRoles, children }: RoleProtectedRouteProps) => {
-  const { user, isLoading } = useUser();
+  const { user, isLoading, verified } = useUser();
   const { role, loading, error } = useUserRole(user?.id);
 
-  if (isLoading || loading) {
+  if (isLoading || loading || !verified) {
     return (
       <div className="min-h-screen bg-ink-900 text-slate-100">
         <div className="mx-auto flex min-h-screen max-w-3xl items-center px-6">
