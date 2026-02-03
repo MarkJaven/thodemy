@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { authService } from "../services/authService";
+import { sessionService } from "../services/sessionService";
 import { superAdminService } from "../services/superAdminService";
 
 /**
@@ -8,7 +8,6 @@ import { superAdminService } from "../services/superAdminService";
  * @returns {JSX.Element}
  */
 const AuthCallback = () => {
-  const navigate = useNavigate();
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -20,13 +19,17 @@ const AuthCallback = () => {
       try {
         await authService.exchangeCodeForSession(window.location.href);
         const session = await authService.getSession();
+        if (session?.user?.id) {
+          await sessionService.createSession(session.user.id);
+          await sessionService.announceSession();
+        }
         const role = await superAdminService.getCurrentRole(session?.user?.id);
         if (role === "superadmin") {
-          navigate("/super-admin", { replace: true });
+          window.location.replace("/super-admin");
         } else if (role === "admin") {
-          navigate("/admin", { replace: true });
+          window.location.replace("/admin");
         } else {
-          navigate("/dashboard", { replace: true });
+          window.location.replace("/dashboard");
         }
       } catch (exchangeError) {
         setError(exchangeError.message);
@@ -34,7 +37,7 @@ const AuthCallback = () => {
     };
 
     finishAuth();
-  }, [navigate]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-ink-900 text-slate-100">

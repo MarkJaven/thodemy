@@ -1,15 +1,42 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { authService } from "../services/authService";
 import { supabase } from "../lib/supabaseClient";
 import { apiClient } from "../lib/apiClient";
+import { sessionService, getDeviceId } from "../services/sessionService";
+import { getPusher } from "../lib/pusherClient";
 
 const AuthContext = createContext(null);
 
-/**
- * Fetch the username from the profiles table.
- * @param {string} userId
- * @returns {Promise<string|null>}
- */
+const VERIFY_COOLDOWN_MS = 15000;
+const forcedSignOutLock = { value: false };
+
+const verifyAccountActive = async (lastCheckedRef, inFlightRef) => {
+  if (inFlightRef.current) return true;
+  const now = Date.now();
+  if (now - lastCheckedRef.current < VERIFY_COOLDOWN_MS) return true;
+  lastCheckedRef.current = now;
+  inFlightRef.current = true;
+
+  try {
+    await apiClient.get("/me");
+    return true;
+  } catch (error) {
+    if (
+      error?.response?.status === 403 &&
+      error?.response?.data?.message?.includes("Account is deactivated")
+    ) {
+      window.location.href = "/deactivated";
+      return false;
+    }
+    if (error?.response?.status === 429) {
+      return true;
+    }
+    return true;
+  } finally {
+    inFlightRef.current = false;
+  }
+};
+
 const fetchUsername = async (userId) => {
   if (!supabase || !userId) return null;
   const { data, error } = await supabase
@@ -21,43 +48,113 @@ const fetchUsername = async (userId) => {
   return data?.username ?? null;
 };
 
-/**
- * Verify if the user account is active.
- * @returns {Promise<boolean>}
- */
-const verifyAccountActive = async () => {
-  try {
-    await apiClient.get("/me");
-    return true;
-  } catch (error) {
-    if (error?.response?.status === 403 && 
-        error?.response?.data?.message?.includes("Account is deactivated")) {
-      window.location.href = '/deactivated';
-      return false;
-    }
-    return true; // Other errors don't prevent access
-  }
-};
-
-/**
- * Provide auth state to child components.
- * @param {{children: React.ReactNode}} props
- * @returns {JSX.Element}
- */
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [verified, setVerified] = useState(false);
+  const [forcedSignOutOpen, setForcedSignOutOpen] = useState(false);
+
+  const forcedSignOutRef = useRef(false);
+  const lastVerifyRef = useRef(0);
+  const verifyInFlightRef = useRef(false);
+  const pusherChannelRef = useRef(null);
+  const pollingStopRef = useRef(false);
+  const pollingIntervalRef = useRef(null);
+
+  const clearForcedSignOut = () => {
+    forcedSignOutRef.current = false;
+    forcedSignOutLock.value = false;
+    pollingStopRef.current = false;
+    setForcedSignOutOpen(false);
+  };
+
+  const stopSessionPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  };
+
+  const startSessionPolling = (userId) => {
+    stopSessionPolling();
+    if (!userId || pollingStopRef.current || forcedSignOutLock.value) return;
+    const checkSession = async () => {
+      if (pollingStopRef.current || forcedSignOutLock.value) {
+        stopSessionPolling();
+        return;
+      }
+      try {
+        const isActive = await sessionService.isCurrentSessionActive(userId);
+        if (!isActive && !forcedSignOutLock.value) {
+          forcedSignOutLock.value = true;
+          forcedSignOutRef.current = true;
+          pollingStopRef.current = true;
+          stopSessionPolling();
+          setAuthError("Your account was signed in on another device.");
+          setForcedSignOutOpen(true);
+          signOut({ redirectTo: null, skipServerDeactivation: true });
+        }
+      } catch {
+        // ignore polling errors
+      }
+    };
+    pollingIntervalRef.current = setInterval(checkSession, 10000);
+  };
+
+  const subscribeToPusher = (userId) => {
+    const pusher = getPusher();
+    if (!pusher || !userId) {
+      startSessionPolling(userId);
+      return;
+    }
+    const deviceToken = getDeviceId();
+    if (pusherChannelRef.current) {
+      pusherChannelRef.current.unbind_all();
+      pusher.unsubscribe(pusherChannelRef.current.name);
+    }
+
+    const setupChannel = () => {
+      const channel = pusher.subscribe(`user-${userId}`);
+      channel.bind("pusher:subscription_succeeded", () => {
+        stopSessionPolling();
+      });
+      channel.bind("pusher:subscription_error", () => {
+        startSessionPolling(userId);
+      });
+      channel.bind("force_logout", (payload) => {
+        const token = payload?.deviceId;
+        const isActive = payload?.isActive !== false;
+        if (token && token !== deviceToken && isActive && !forcedSignOutLock.value) {
+          forcedSignOutLock.value = true;
+          forcedSignOutRef.current = true;
+          pollingStopRef.current = true;
+          stopSessionPolling();
+          setAuthError("Your account was signed in on another device.");
+          setForcedSignOutOpen(true);
+          signOut({ redirectTo: null, skipServerDeactivation: true });
+        }
+      });
+      pusherChannelRef.current = channel;
+    };
+
+    // If already connected, subscribe immediately
+    if (pusher.connection.state === "connected") {
+      setupChannel();
+    } else {
+      // Wait for connection then subscribe
+      pusher.connection.bind("connected", () => {
+        setupChannel();
+      });
+      // Start polling as fallback while waiting
+      startSessionPolling(userId);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
 
-    /**
-     * Initialize the current auth session.
-     * @returns {Promise<void>}
-     */
     const init = async () => {
       try {
         const currentSession = await authService.getSession();
@@ -65,14 +162,15 @@ export const AuthProvider = ({ children }) => {
         setSession(currentSession);
         const authUser = currentSession?.user ?? null;
         if (authUser) {
+          clearForcedSignOut();
           const username = await fetchUsername(authUser.id);
           if (!isMounted) return;
           setUser({ ...authUser, username });
-          // Verify account is active
-          const isActive = await verifyAccountActive();
+          const isActive = await verifyAccountActive(lastVerifyRef, verifyInFlightRef);
           if (isActive && isMounted) {
             setVerified(true);
           }
+          subscribeToPusher(authUser.id);
         } else {
           setUser(null);
           setVerified(true);
@@ -92,21 +190,26 @@ export const AuthProvider = ({ children }) => {
       setSession(nextSession);
       const authUser = nextSession?.user ?? null;
       if (authUser) {
-        // Fetch username asynchronously but don't block state update
+        clearForcedSignOut();
         setUser({ ...authUser, username: null });
         fetchUsername(authUser.id).then((username) => {
           if (isMounted) {
             setUser({ ...authUser, username });
           }
         });
-        // Verify account is active
-        const isActive = await verifyAccountActive();
+        const isActive = await verifyAccountActive(lastVerifyRef, verifyInFlightRef);
         if (isMounted) {
           setVerified(isActive);
         }
+        subscribeToPusher(authUser.id);
       } else {
         setUser(null);
         setVerified(true);
+        if (pusherChannelRef.current) {
+          const p = getPusher();
+          pusherChannelRef.current.unbind_all();
+          p?.unsubscribe(pusherChannelRef.current.name);
+        }
       }
     };
 
@@ -122,41 +225,104 @@ export const AuthProvider = ({ children }) => {
     return () => {
       isMounted = false;
       subscription?.unsubscribe?.();
+      stopSessionPolling();
+      if (pusherChannelRef.current) {
+        const p = getPusher();
+        pusherChannelRef.current.unbind_all();
+        p?.unsubscribe(pusherChannelRef.current.name);
+      }
     };
   }, []);
 
-  /**
-   * Sign the current user out.
-   * @returns {Promise<void>}
-   */
-  const signOut = async () => {
+  const signOut = async ({ redirectTo = "/", skipServerDeactivation = false } = {}) => {
     setAuthError(null);
+    if (!skipServerDeactivation) {
+      setForcedSignOutOpen(false);
+      forcedSignOutLock.value = false;
+      pollingStopRef.current = false;
+    }
+    const currentUserId = user?.id;
+    setSession(null);
+    setUser(null);
+    setVerified(true);
+
+    // unsubscribe from realtime channel
+    if (pusherChannelRef.current) {
+      const p = getPusher();
+      pusherChannelRef.current.unbind_all();
+      p?.unsubscribe(pusherChannelRef.current.name);
+      pusherChannelRef.current = null;
+    }
+
+    if (!skipServerDeactivation && currentUserId) {
+      sessionService.deactivateAllSessions(currentUserId).catch(() => {});
+      sessionService.deactivateCurrentSession(currentUserId).catch(() => {});
+    }
     try {
       await authService.signOut();
-    } catch (error) {
-      setAuthError(error.message);
+    } catch {
+      // ignore
+    }
+    if (!skipServerDeactivation) {
+      window.location.replace(redirectTo || "/");
     }
   };
 
+  // Polling removed to avoid repeated forced sign-outs; rely on realtime
+
   const value = useMemo(
-    () => ({ session, user, loading: loading || (user && !verified), authError, signOut, verified }),
-    [session, user, loading, authError, verified]
+    () => ({
+      session,
+      user,
+      loading: loading || (user && !verified),
+      authError,
+      signOut,
+      verified,
+      forcedSignOutOpen,
+    }),
+    [session, user, loading, authError, verified, forcedSignOutOpen]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {forcedSignOutOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-6 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Signed in elsewhere</h3>
+                <p className="text-sm text-slate-400">
+                  Your account was logged in on another device.
+                </p>
+              </div>
+            </div>
+            <p className="mt-4 text-sm text-slate-300">
+              For your security, this session has been signed out.
+            </p>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => window.location.replace("/")}
+                className="rounded-xl bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-violet px-4 py-2 text-sm font-semibold text-white"
+              >
+                Return to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </AuthContext.Provider>
+  );
 };
 
-/**
- * Access the auth context.
- * @returns {{
- *  session: object|null,
- *  user: object|null,
- *  loading: boolean,
- *  authError: string|null,
- *  signOut: () => Promise<void>,
- *  verified: boolean
- * }}
- */
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

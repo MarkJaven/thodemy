@@ -565,8 +565,7 @@ const Dashboard = () => {
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate("/auth/login", { replace: true });
+    await signOut({ redirectTo: "/" });
   };
 
   const handleOpenSignOut = () => {

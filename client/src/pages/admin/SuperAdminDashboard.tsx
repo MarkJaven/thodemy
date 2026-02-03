@@ -358,8 +358,7 @@ const SuperAdminDashboard = () => {
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate("/auth/login", { replace: true });
+    await signOut({ redirectTo: "/" });
   };
 
   const getStatusColor = (status: string) => {

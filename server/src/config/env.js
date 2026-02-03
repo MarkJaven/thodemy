@@ -78,6 +78,10 @@ const env = {
     20,
     "RATE_LIMIT_AUTH_MAX"
   ),
+  pusherAppId: process.env.PUSHER_APP_ID || null,
+  pusherKey: process.env.PUSHER_KEY || null,
+  pusherSecret: process.env.PUSHER_SECRET || null,
+  pusherCluster: process.env.PUSHER_CLUSTER || null,
 };
 
 if (env.frontendOrigins.length === 0) {
