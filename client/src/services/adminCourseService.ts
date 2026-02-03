@@ -1,5 +1,6 @@
 import { apiClient, getApiErrorMessage } from "../lib/apiClient";
 import { supabase } from "../lib/supabaseClient";
+import { auditLogService } from "./auditLogService";
 import type { Topic, UserProfile } from "../types/superAdmin";
 
 const requireSupabase = () => {
@@ -239,6 +240,12 @@ const createCourseViaSupabase = async (payload: {
     .single();
 
   if (error) throw new Error(error.message);
+  await auditLogService.recordAuditLog({
+    entityType: "course",
+    entityId: data.id,
+    action: "created",
+    details: { title: data.title, status: data.status },
+  });
   return data as CourseSummary;
 };
 
@@ -315,12 +322,23 @@ const updateCourseViaSupabase = async (
 
   const { error } = await client.from("courses").update(updates).eq("id", courseId);
   if (error) throw new Error(error.message);
+  await auditLogService.recordAuditLog({
+    entityType: "course",
+    entityId: courseId,
+    action: "updated",
+    details: { title: payload.title ?? null, status: payload.status ?? null },
+  });
 };
 
 const deleteCourseViaSupabase = async (courseId: string): Promise<void> => {
   const client = requireSupabase();
   const { error } = await client.from("courses").delete().eq("id", courseId);
   if (error) throw new Error(error.message);
+  await auditLogService.recordAuditLog({
+    entityType: "course",
+    entityId: courseId,
+    action: "deleted",
+  });
 };
 
 export type CourseSummary = {
@@ -504,5 +522,11 @@ export const adminCourseService = {
       .update({ status })
       .eq("id", enrollmentId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "enrollment",
+      entityId: enrollmentId,
+      action: "status_changed",
+      details: { status },
+    });
   },
 };

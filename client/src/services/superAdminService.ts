@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 import { apiClient, getApiErrorMessage } from "../lib/apiClient";
+import { auditLogService } from "./auditLogService";
 import type {
   Activity,
   ActivitySubmission,
@@ -172,6 +173,12 @@ export const superAdminService = {
       .update({ status })
       .eq("id", enrollmentId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "learning_path_enrollment",
+      entityId: enrollmentId,
+      action: "status_changed",
+      details: { status },
+    });
   },
 
   async createCourse(payload: Pick<Course, "title" | "description" | "status">): Promise<Course> {
@@ -182,6 +189,12 @@ export const superAdminService = {
       .select("id, title, description, status, created_by, created_at, updated_at")
       .single();
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "course",
+      entityId: data.id,
+      action: "created",
+      details: { title: data.title, status: data.status },
+    });
     return data as Course;
   },
 
@@ -189,12 +202,23 @@ export const superAdminService = {
     const client = requireSupabase();
     const { error } = await client.from("courses").update(payload).eq("id", courseId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "course",
+      entityId: courseId,
+      action: "updated",
+      details: { title: payload.title ?? null, status: payload.status ?? null },
+    });
   },
 
   async deleteCourse(courseId: string): Promise<void> {
     const client = requireSupabase();
     const { error } = await client.from("courses").delete().eq("id", courseId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "course",
+      entityId: courseId,
+      action: "deleted",
+    });
   },
 
   async listLessons(): Promise<Lesson[]> {
@@ -355,6 +379,12 @@ export const superAdminService = {
       .update(payload)
       .eq("id", requestId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "course_completion_request",
+      entityId: requestId,
+      action: payload.status ? "status_changed" : "updated",
+      details: { status: payload.status ?? null },
+    });
   },
 
   async getCourseProofUrl(storagePath?: string | null): Promise<string | null> {
@@ -478,6 +508,12 @@ export const superAdminService = {
     const client = requireSupabase();
     const { error } = await client.from("enrollments").update(payload).eq("id", enrollmentId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "enrollment",
+      entityId: enrollmentId,
+      action: "status_changed",
+      details: { status: payload.status },
+    });
   },
 
   async listActivities(): Promise<Activity[]> {
@@ -500,6 +536,12 @@ export const superAdminService = {
       .select("id, course_id, user_id, title, description, status, created_at, updated_at")
       .single();
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "activity",
+      entityId: data.id,
+      action: "created",
+      details: { title: data.title, status: data.status },
+    });
     return data as Activity;
   },
 
@@ -507,12 +549,23 @@ export const superAdminService = {
     const client = requireSupabase();
     const { error } = await client.from("activities").update(payload).eq("id", activityId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "activity",
+      entityId: activityId,
+      action: "updated",
+      details: { title: payload.title ?? null, status: payload.status ?? null },
+    });
   },
 
   async deleteActivity(activityId: string): Promise<void> {
     const client = requireSupabase();
     const { error } = await client.from("activities").delete().eq("id", activityId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "activity",
+      entityId: activityId,
+      action: "deleted",
+    });
   },
 
   async listActivitySubmissions(): Promise<ActivitySubmission[]> {
@@ -540,6 +593,11 @@ export const superAdminService = {
     const client = requireSupabase();
     const { error } = await client.from("activity_submissions").delete().eq("id", submissionId);
     if (error) throw new Error(error.message);
+    await auditLogService.recordAuditLog({
+      entityType: "activity_submission",
+      entityId: submissionId,
+      action: "deleted",
+    });
   },
 
   async listQuizzes(): Promise<Quiz[]> {
