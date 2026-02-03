@@ -9,24 +9,62 @@ const {
   calculateCourseEndDate,
 } = require("../utils/courseUtils");
 
-const normalizeRelationMap = (value) => {
+const dedupeIds = (ids) =>
+  Array.from(
+    new Set((Array.isArray(ids) ? ids : []).map((id) => String(id)).filter(Boolean))
+  );
+
+const normalizeRelationMap = (value, keepIds) => {
   if (!value || typeof value !== "object") return {};
   return Object.entries(value).reduce((acc, [key, list]) => {
-    if (Array.isArray(list)) {
-      acc[key] = Array.from(new Set(list.map(String)));
-    }
+    if (keepIds && !keepIds.has(String(key))) return acc;
+    const filtered = Array.isArray(list)
+      ? list.map(String).filter((id) => (keepIds ? keepIds.has(id) : true))
+      : [];
+    acc[key] = Array.from(new Set(filtered));
     return acc;
   }, {});
 };
 
+const normalizeTopicTitle = (value) =>
+  String(value || "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+const normalizeTopicIdsByTitle = (topicIds, topicsById) => {
+  const seenIds = new Set();
+  const seenTitles = new Set();
+  const orderedIds = [];
+  const orderedTopics = [];
+
+  topicIds.forEach((id) => {
+    if (seenIds.has(id)) return;
+    const topic = topicsById.get(id);
+    if (!topic) return;
+    const titleKey = normalizeTopicTitle(topic.title);
+    if (titleKey && seenTitles.has(titleKey)) return;
+    if (titleKey) {
+      seenTitles.add(titleKey);
+    }
+    seenIds.add(id);
+    orderedIds.push(id);
+    orderedTopics.push(topic);
+  });
+
+  return { topicIds: orderedIds, topics: orderedTopics };
+};
+
 const resolveCourseTotals = async (topicIds) => {
-  if (!Array.isArray(topicIds) || topicIds.length === 0) {
-    return { totalHours: 0, totalDays: 0, topics: [] };
+  const uniqueIds = dedupeIds(topicIds);
+  if (!Array.isArray(uniqueIds) || uniqueIds.length === 0) {
+    return { totalHours: 0, totalDays: 0, topics: [], topicIds: [] };
   }
   const { data, error } = await supabaseAdmin
     .from("topics")
-    .select("id, time_allocated, time_unit")
-    .in("id", topicIds);
+    .select("id, title, time_allocated, time_unit")
+    .in("id", uniqueIds);
   if (error) {
     throw new ExternalServiceError("Unable to load topics", {
       code: error.code,
@@ -34,11 +72,13 @@ const resolveCourseTotals = async (topicIds) => {
     });
   }
   const topics = data ?? [];
-  if (topics.length !== topicIds.length) {
+  if (topics.length !== uniqueIds.length) {
     throw new BadRequestError("One or more selected topics could not be found.");
   }
-  const totals = calculateCourseTotals(topics);
-  return { ...totals, topics };
+  const topicsById = new Map(topics.map((topic) => [topic.id, topic]));
+  const normalized = normalizeTopicIdsByTitle(uniqueIds, topicsById);
+  const totals = calculateCourseTotals(normalized.topics);
+  return { ...totals, topics: normalized.topics, topicIds: normalized.topicIds };
 };
 
 const listCourses = async (_req, res, next) => {
@@ -113,6 +153,10 @@ const getCourseDetail = async (req, res, next) => {
       });
     }
 
+    const topicsById = new Map((topics ?? []).map((topic) => [topic.id, topic]));
+    const normalized = normalizeTopicIdsByTitle(dedupeIds(topicIds), topicsById);
+    const normalizedTopicIds = normalized.topicIds;
+
     const { data: enrollments, error: enrollmentError } = await supabaseAdmin
       .from("enrollments")
       .select("id, user_id, status, enrolled_at")
@@ -145,8 +189,13 @@ const getCourseDetail = async (req, res, next) => {
       .from("topic_progress")
       .select("id, user_id, topic_id, status, start_date, end_date")
       .in("user_id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"])
-      .in("topic_id", topicIds.length ? topicIds : ["00000000-0000-0000-0000-000000000000"]);
-    if (progressError && userIds.length && topicIds.length) {
+      .in(
+        "topic_id",
+        normalizedTopicIds.length
+          ? normalizedTopicIds
+          : ["00000000-0000-0000-0000-000000000000"]
+      );
+    if (progressError && userIds.length && normalizedTopicIds.length) {
       throw new ExternalServiceError("Unable to load topic progress", {
         code: progressError.code,
         details: progressError.message,
@@ -159,8 +208,8 @@ const getCourseDetail = async (req, res, next) => {
     }));
 
     return res.json({
-      course,
-      topics: topics ?? [],
+      course: { ...course, topic_ids: normalizedTopicIds },
+      topics: normalized.topics,
       enrollments: enrichedEnrollments,
       topicProgress: topicProgress ?? [],
     });
@@ -206,9 +255,12 @@ const upsertCourse = async (req, res, next) => {
       parsedEnrollmentLimit = limitValue;
     }
 
-    const { totalHours, totalDays } = await resolveCourseTotals(topicIds);
-    const normalizedPrereqs = normalizeRelationMap(topic_prerequisites);
-    const normalizedCoreqs = normalizeRelationMap(topic_corequisites);
+    const uniqueTopicIds = dedupeIds(topicIds);
+    const { totalHours, totalDays, topicIds: normalizedTopicIds } =
+      await resolveCourseTotals(uniqueTopicIds);
+    const keepIds = new Set(normalizedTopicIds);
+    const normalizedPrereqs = normalizeRelationMap(topic_prerequisites, keepIds);
+    const normalizedCoreqs = normalizeRelationMap(topic_corequisites, keepIds);
 
     const startDate = start_at ? new Date(start_at) : null;
     const endDate =
@@ -217,7 +269,7 @@ const upsertCourse = async (req, res, next) => {
     const coursePayload = {
       title: title.trim(),
       description: description.trim(),
-      topic_ids: topicIds,
+      topic_ids: normalizedTopicIds,
       topic_prerequisites: normalizedPrereqs,
       topic_corequisites: normalizedCoreqs,
       total_hours: totalHours,
