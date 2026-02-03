@@ -86,8 +86,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate("/auth/login", { replace: true });
+    await signOut({ redirectTo: "/" });
   };
 
   const renderTab = () => {

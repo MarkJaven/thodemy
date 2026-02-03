@@ -9016,7 +9016,8 @@
                           "content": "See Thodemy in action with a focused demo tailored to your training workflow.",
                           "lineHeight": 1.6,
                           "fontFamily": "Rubik",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "frame",
@@ -9539,12 +9540,12 @@
     {
       "type": "frame",
       "id": "oj9ts",
-      "name": "Thodemy Login Page",
       "x": 8962,
       "y": -2871,
+      "name": "Thodemy Login Page",
+      "clip": true,
       "width": 1440,
       "height": 900,
-      "clip": true,
       "fill": "#0B0D14",
       "layout": "vertical",
       "children": [
@@ -9693,26 +9694,26 @@
                   "id": "hbwg4",
                   "name": "authHead",
                   "fill": "#FFFFFF",
+                  "textGrowth": "fixed-width",
+                  "width": 520,
                   "content": "Welcome back to your learning hub",
+                  "lineHeight": 1.1,
                   "fontFamily": "Funnel Display",
                   "fontSize": 44,
-                  "fontWeight": "600",
-                  "width": 520,
-                  "textGrowth": "fixed-width",
-                  "lineHeight": 1.1
+                  "fontWeight": "600"
                 },
                 {
                   "type": "text",
                   "id": "p8r0q",
                   "name": "authSub",
                   "fill": "#B7BCD6",
+                  "textGrowth": "fixed-width",
+                  "width": 520,
                   "content": "Sign in to continue tracking training, verification, and regularization status in one secure space.",
+                  "lineHeight": 1.6,
                   "fontFamily": "Rubik",
                   "fontSize": 15,
-                  "fontWeight": "normal",
-                  "width": 520,
-                  "textGrowth": "fixed-width",
-                  "lineHeight": 1.6
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -10204,10 +10205,1693 @@
                   "name": "footerNote",
                   "fill": "#8F95B2",
                   "content": "No account? Request access from HR or your manager.",
+                  "lineHeight": 1.6,
                   "fontFamily": "Rubik",
                   "fontSize": 11,
-                  "fontWeight": "normal",
-                  "lineHeight": 1.6
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "noFYN",
+      "x": 10522,
+      "y": -2871,
+      "name": "Thodemy Superadmin Dashboard",
+      "clip": true,
+      "width": 1440,
+      "height": 1024,
+      "fill": "#0B0B16",
+      "layout": "none",
+      "children": [
+        {
+          "type": "frame",
+          "id": "PXXo3",
+          "x": 80,
+          "y": 70,
+          "name": "Glow A",
+          "width": 320,
+          "height": 320,
+          "fill": "#2E2A6A10",
+          "cornerRadius": 999,
+          "effect": {
+            "type": "shadow",
+            "shadowType": "outer",
+            "color": "#5E4BFF33",
+            "blur": 70
+          }
+        },
+        {
+          "type": "frame",
+          "id": "wxmH4",
+          "x": 900,
+          "y": 140,
+          "name": "Glow B",
+          "width": 420,
+          "height": 420,
+          "fill": "#1B3B6A0A",
+          "cornerRadius": 999,
+          "effect": {
+            "type": "shadow",
+            "shadowType": "outer",
+            "color": "#3D7CFF22",
+            "blur": 90
+          }
+        },
+        {
+          "type": "frame",
+          "id": "XL5Oa",
+          "x": 24,
+          "y": 32,
+          "name": "Sidebar",
+          "clip": true,
+          "width": 260,
+          "height": 960,
+          "fill": "#101226",
+          "cornerRadius": 24,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "#FFFFFF12"
+          },
+          "layout": "vertical",
+          "gap": 20,
+          "padding": 24,
+          "children": [
+            {
+              "type": "frame",
+              "id": "DVaLN",
+              "name": "Brand",
+              "height": 40,
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "5Hyd7",
+                  "name": "Logo",
+                  "width": 120,
+                  "height": 32,
+                  "fill": {
+                    "type": "image",
+                    "enabled": true,
+                    "url": "./logo-thodemy.png",
+                    "mode": "fill"
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "7WgS1",
+                  "name": "Brand Text",
+                  "fill": "#F5F6FF",
+                  "content": "Thodemy",
+                  "fontFamily": "Geist",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "rJnc6",
+              "name": "Nav Label",
+              "fill": "#6D7092",
+              "content": "NAVIGATION",
+              "fontFamily": "JetBrains Mono",
+              "fontSize": 10,
+              "fontWeight": "600",
+              "letterSpacing": 2
+            },
+            {
+              "type": "frame",
+              "id": "eiz0N",
+              "name": "Nav List",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "lMlby",
+                  "name": "Nav Item Active",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#1C2040",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#5E4BFF33"
+                  },
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "NjCcL",
+                      "name": "Icon",
+                      "width": 8,
+                      "height": 8,
+                      "fill": "#7C5CFF",
+                      "cornerRadius": 4
+                    },
+                    {
+                      "type": "text",
+                      "id": "P3O9z",
+                      "name": "Label",
+                      "fill": "#F2F3FF",
+                      "content": "Overview",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "d1svQ",
+                  "name": "Nav Item",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#13162B",
+                  "cornerRadius": 12,
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "uxftj",
+                      "name": "Icon",
+                      "width": 8,
+                      "height": 8,
+                      "fill": "#5F6382",
+                      "cornerRadius": 4
+                    },
+                    {
+                      "type": "text",
+                      "id": "3eyR5",
+                      "name": "Label",
+                      "fill": "#B8BBD6",
+                      "content": "Courses",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MsklZ",
+                  "name": "Nav Item",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#13162B",
+                  "cornerRadius": 12,
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "brK8p",
+                      "name": "Icon",
+                      "width": 8,
+                      "height": 8,
+                      "fill": "#5F6382",
+                      "cornerRadius": 4
+                    },
+                    {
+                      "type": "text",
+                      "id": "xudXJ",
+                      "name": "Label",
+                      "fill": "#B8BBD6",
+                      "content": "Learning Paths",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "hQAHQ",
+                  "name": "Nav Item",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#13162B",
+                  "cornerRadius": 12,
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "NJlsw",
+                      "name": "Icon",
+                      "width": 8,
+                      "height": 8,
+                      "fill": "#5F6382",
+                      "cornerRadius": 4
+                    },
+                    {
+                      "type": "text",
+                      "id": "Zrcor",
+                      "name": "Label",
+                      "fill": "#B8BBD6",
+                      "content": "Topics",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Wif9p",
+                  "name": "Nav Item",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#13162B",
+                  "cornerRadius": 12,
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "BN07Y",
+                      "name": "Icon",
+                      "width": 8,
+                      "height": 8,
+                      "fill": "#5F6382",
+                      "cornerRadius": 4
+                    },
+                    {
+                      "type": "text",
+                      "id": "yzbmf",
+                      "name": "Label",
+                      "fill": "#B8BBD6",
+                      "content": "Users",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "uvAnS",
+                  "name": "Nav Item",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#13162B",
+                  "cornerRadius": 12,
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "7eOL8",
+                      "name": "Icon",
+                      "width": 8,
+                      "height": 8,
+                      "fill": "#5F6382",
+                      "cornerRadius": 4
+                    },
+                    {
+                      "type": "text",
+                      "id": "HijEU",
+                      "name": "Label",
+                      "fill": "#B8BBD6",
+                      "content": "Approvals",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "jPL94",
+                  "name": "Nav Item",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "#13162B",
+                  "cornerRadius": 12,
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "piuF4",
+                      "name": "Icon",
+                      "width": 8,
+                      "height": 8,
+                      "fill": "#5F6382",
+                      "cornerRadius": 4
+                    },
+                    {
+                      "type": "text",
+                      "id": "VGyZL",
+                      "name": "Label",
+                      "fill": "#B8BBD6",
+                      "content": "Reports",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "gTpy1",
+          "x": 308,
+          "y": 32,
+          "name": "Content",
+          "width": 1108,
+          "height": 960,
+          "layout": "vertical",
+          "gap": 24,
+          "children": [
+            {
+              "type": "frame",
+              "id": "rK72E",
+              "name": "Header",
+              "width": "fill_container",
+              "height": 72,
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "51qpp",
+                  "name": "Header Left",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "EketQ",
+                      "name": "Kicker",
+                      "fill": "#7B7FA3",
+                      "content": "SUPERADMIN WORKSPACE",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "600",
+                      "letterSpacing": 2
+                    },
+                    {
+                      "type": "text",
+                      "id": "ZwgCf",
+                      "name": "Title",
+                      "fill": "#F5F6FF",
+                      "content": "Learning Management Overview",
+                      "fontFamily": "Geist",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "6iPLe",
+                  "name": "Header Right",
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "EzQzE",
+                      "name": "Search",
+                      "width": 320,
+                      "height": 40,
+                      "fill": "#12142B",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#FFFFFF14"
+                      },
+                      "gap": 8,
+                      "padding": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "nA6LK",
+                          "name": "Icon",
+                          "width": 12,
+                          "height": 12,
+                          "fill": "#70759C",
+                          "cornerRadius": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "wt9Iq",
+                          "name": "Placeholder",
+                          "fill": "#8A8FB3",
+                          "content": "Search courses, users...",
+                          "fontFamily": "Geist",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "YyFMK",
+                      "name": "New Course",
+                      "width": 140,
+                      "height": 40,
+                      "fill": "#7C5CFF",
+                      "cornerRadius": 999,
+                      "gap": 8,
+                      "padding": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ItagP",
+                          "name": "Label",
+                          "fill": "#0B0B16",
+                          "content": "+ New Course",
+                          "fontFamily": "Geist",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uyNDY",
+                      "name": "Avatar",
+                      "width": 36,
+                      "height": 36,
+                      "fill": "#1C2040",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#FFFFFF1A"
+                      },
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "iKtqC",
+                          "name": "Initials",
+                          "fill": "#C4C7E8",
+                          "content": "SA",
+                          "fontFamily": "Geist",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Oul9m",
+              "name": "Stats Row",
+              "width": "fill_container",
+              "height": 120,
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "yMQAb",
+                  "name": "Stat Card",
+                  "width": "fill_container",
+                  "height": 120,
+                  "fill": "#12142B",
+                  "cornerRadius": 18,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FFFFFF14"
+                  },
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "2yWUH",
+                      "name": "Label",
+                      "fill": "#8A8FB3",
+                      "content": "Active Courses",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "600",
+                      "letterSpacing": 1.5
+                    },
+                    {
+                      "type": "text",
+                      "id": "RqBL9",
+                      "name": "Value",
+                      "fill": "#F5F6FF",
+                      "content": "48",
+                      "fontFamily": "Geist",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "O9kCr",
+                      "name": "Delta",
+                      "fill": "#5EEAD4",
+                      "content": "+6 this month",
+                      "fontFamily": "Geist",
+                      "fontSize": 11,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UxdaJ",
+                  "name": "Stat Card",
+                  "width": "fill_container",
+                  "height": 120,
+                  "fill": "#12142B",
+                  "cornerRadius": 18,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FFFFFF14"
+                  },
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "gxmIz",
+                      "name": "Label",
+                      "fill": "#8A8FB3",
+                      "content": "Topics Library",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "600",
+                      "letterSpacing": 1.5
+                    },
+                    {
+                      "type": "text",
+                      "id": "D3hU6",
+                      "name": "Value",
+                      "fill": "#F5F6FF",
+                      "content": "312",
+                      "fontFamily": "Geist",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "AlWLu",
+                      "name": "Delta",
+                      "fill": "#FBBF24",
+                      "content": "+12 awaiting review",
+                      "fontFamily": "Geist",
+                      "fontSize": 11,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "4Go0D",
+                  "name": "Stat Card",
+                  "width": "fill_container",
+                  "height": 120,
+                  "fill": "#12142B",
+                  "cornerRadius": 18,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FFFFFF14"
+                  },
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "TtXrc",
+                      "name": "Label",
+                      "fill": "#8A8FB3",
+                      "content": "Active Learners",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "600",
+                      "letterSpacing": 1.5
+                    },
+                    {
+                      "type": "text",
+                      "id": "44BCf",
+                      "name": "Value",
+                      "fill": "#F5F6FF",
+                      "content": "1,284",
+                      "fontFamily": "Geist",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "rajiM",
+                      "name": "Delta",
+                      "fill": "#7C5CFF",
+                      "content": "87% completion rate",
+                      "fontFamily": "Geist",
+                      "fontSize": 11,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "kbs6f",
+                  "name": "Stat Card",
+                  "width": "fill_container",
+                  "height": 120,
+                  "fill": "#12142B",
+                  "cornerRadius": 18,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FFFFFF14"
+                  },
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "95Q6d",
+                      "name": "Label",
+                      "fill": "#8A8FB3",
+                      "content": "Pending Approvals",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "600",
+                      "letterSpacing": 1.5
+                    },
+                    {
+                      "type": "text",
+                      "id": "sjoa3",
+                      "name": "Value",
+                      "fill": "#F5F6FF",
+                      "content": "19",
+                      "fontFamily": "Geist",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "p3xnh",
+                      "name": "Delta",
+                      "fill": "#F87171",
+                      "content": "5 require action today",
+                      "fontFamily": "Geist",
+                      "fontSize": 11,
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "sZctg",
+              "name": "Middle Row",
+              "width": "fill_container",
+              "height": 420,
+              "gap": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "lx6w7",
+                  "name": "Courses Card",
+                  "width": 760,
+                  "height": 420,
+                  "fill": "#12142B",
+                  "cornerRadius": 20,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FFFFFF14"
+                  },
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ya6Rh",
+                      "name": "Header",
+                      "width": "fill_container",
+                      "height": 40,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "2TMEj",
+                          "name": "Header Text",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "87uQc",
+                              "name": "Title",
+                              "fill": "#F5F6FF",
+                              "content": "Courses in Review",
+                              "fontFamily": "Geist",
+                              "fontSize": 16,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "4FADS",
+                              "name": "Sub",
+                              "fill": "#8A8FB3",
+                              "content": "Updated in the last 24 hours",
+                              "fontFamily": "Geist",
+                              "fontSize": 11,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "yayhp",
+                          "name": "Action",
+                          "fill": "#7C5CFF",
+                          "content": "View all",
+                          "fontFamily": "Geist",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "27vcU",
+                      "name": "Table",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "WZfn3",
+                          "name": "Table Header",
+                          "width": "fill_container",
+                          "height": 28,
+                          "gap": 12,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "FIerI",
+                              "name": "Head Course",
+                              "fill": "#7B7FA3",
+                              "content": "Course",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 10,
+                              "fontWeight": "600",
+                              "letterSpacing": 1.5
+                            },
+                            {
+                              "type": "text",
+                              "id": "qqeym",
+                              "name": "Head Topics",
+                              "fill": "#7B7FA3",
+                              "content": "Topics",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 10,
+                              "fontWeight": "600",
+                              "letterSpacing": 1.5
+                            },
+                            {
+                              "type": "text",
+                              "id": "O8cOX",
+                              "name": "Head Learners",
+                              "fill": "#7B7FA3",
+                              "content": "Learners",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 10,
+                              "fontWeight": "600",
+                              "letterSpacing": 1.5
+                            },
+                            {
+                              "type": "text",
+                              "id": "pfljx",
+                              "name": "Head Status",
+                              "fill": "#7B7FA3",
+                              "content": "Status",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 10,
+                              "fontWeight": "600",
+                              "letterSpacing": 1.5
+                            },
+                            {
+                              "type": "text",
+                              "id": "QF13D",
+                              "name": "Head Updated",
+                              "fill": "#7B7FA3",
+                              "content": "Updated",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 10,
+                              "fontWeight": "600",
+                              "letterSpacing": 1.5
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "anzyv",
+                          "name": "Row",
+                          "width": "fill_container",
+                          "height": 40,
+                          "fill": "#151733",
+                          "cornerRadius": 12,
+                          "gap": 12,
+                          "padding": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ljEXx",
+                              "name": "Course",
+                              "fill": "#E6E7F5",
+                              "content": "Basic Programming Fundamentals",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "KDhEL",
+                              "name": "Topics",
+                              "fill": "#C4C7E8",
+                              "content": "12",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "ILyHy",
+                              "name": "Learners",
+                              "fill": "#C4C7E8",
+                              "content": "340",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "1SRth",
+                              "name": "Status",
+                              "fill": "#FBBF24",
+                              "content": "In Review",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "wEGoG",
+                              "name": "Updated",
+                              "fill": "#C4C7E8",
+                              "content": "2h ago",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "srJ15",
+                          "name": "Row",
+                          "width": "fill_container",
+                          "height": 40,
+                          "fill": "#13162B",
+                          "cornerRadius": 12,
+                          "gap": 12,
+                          "padding": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "hbcCw",
+                              "name": "Course",
+                              "fill": "#E6E7F5",
+                              "content": "Service Excellence Foundations",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "D5LQ6",
+                              "name": "Topics",
+                              "fill": "#C4C7E8",
+                              "content": "8",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "QpqTl",
+                              "name": "Learners",
+                              "fill": "#C4C7E8",
+                              "content": "215",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "qTOEn",
+                              "name": "Status",
+                              "fill": "#5EEAD4",
+                              "content": "Published",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "kT4NW",
+                              "name": "Updated",
+                              "fill": "#C4C7E8",
+                              "content": "5h ago",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "piTDj",
+                          "name": "Row",
+                          "width": "fill_container",
+                          "height": 40,
+                          "fill": "#151733",
+                          "cornerRadius": 12,
+                          "gap": 12,
+                          "padding": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "wbvGI",
+                              "name": "Course",
+                              "fill": "#E6E7F5",
+                              "content": "Safety & Compliance 2025",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "pp1WZ",
+                              "name": "Topics",
+                              "fill": "#C4C7E8",
+                              "content": "15",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "pAEEK",
+                              "name": "Learners",
+                              "fill": "#C4C7E8",
+                              "content": "480",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "qitH1",
+                              "name": "Status",
+                              "fill": "#A5B4FC",
+                              "content": "Draft",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "vvxtc",
+                              "name": "Updated",
+                              "fill": "#C4C7E8",
+                              "content": "1d ago",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "TxQXI",
+                  "name": "Approvals",
+                  "width": 324,
+                  "height": 420,
+                  "fill": "#12142B",
+                  "cornerRadius": 20,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FFFFFF14"
+                  },
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "khed6",
+                      "name": "Header",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "QcCJe",
+                          "name": "Title",
+                          "fill": "#F5F6FF",
+                          "content": "Approvals Queue",
+                          "fontFamily": "Geist",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "bWbKh",
+                          "name": "Sub",
+                          "fill": "#8A8FB3",
+                          "content": "Pending verifications",
+                          "fontFamily": "Geist",
+                          "fontSize": 11,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "nqjcs",
+                      "name": "Approval List",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "wl3te",
+                          "name": "Approval Item",
+                          "width": "fill_container",
+                          "height": 58,
+                          "fill": "#151733",
+                          "cornerRadius": 16,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#FFFFFF0F"
+                          },
+                          "padding": 12,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Wpsqy",
+                              "name": "Details",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "SEHvm",
+                                  "name": "Title",
+                                  "fill": "#F5F6FF",
+                                  "content": "Anna Santos",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "ekbfe",
+                                  "name": "Sub",
+                                  "fill": "#8A8FB3",
+                                  "content": "Topic completion · Intro to Programming",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 10,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "MPCwh",
+                              "name": "Review",
+                              "fill": "#1C2040",
+                              "cornerRadius": 999,
+                              "padding": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Xo5Vs",
+                                  "name": "Label",
+                                  "fill": "#7C5CFF",
+                                  "content": "Review",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "cdeLw",
+                          "name": "Approval Item",
+                          "width": "fill_container",
+                          "height": 58,
+                          "fill": "#151733",
+                          "cornerRadius": 16,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#FFFFFF0F"
+                          },
+                          "padding": 12,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Kyqge",
+                              "name": "Details",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "wNwj2",
+                                  "name": "Title",
+                                  "fill": "#F5F6FF",
+                                  "content": "Miguel Cruz",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "fx0CZ",
+                                  "name": "Sub",
+                                  "fill": "#8A8FB3",
+                                  "content": "Course completion · Safety & Compliance",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 10,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Kt4MQ",
+                              "name": "Review",
+                              "fill": "#1C2040",
+                              "cornerRadius": 999,
+                              "padding": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "JT6SU",
+                                  "name": "Label",
+                                  "fill": "#7C5CFF",
+                                  "content": "Review",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ECwEP",
+                          "name": "Approval Item",
+                          "width": "fill_container",
+                          "height": 58,
+                          "fill": "#151733",
+                          "cornerRadius": 16,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#FFFFFF0F"
+                          },
+                          "padding": 12,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "8VgnF",
+                              "name": "Details",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Du9pD",
+                                  "name": "Title",
+                                  "fill": "#F5F6FF",
+                                  "content": "Lia Ramos",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "3npdy",
+                                  "name": "Sub",
+                                  "fill": "#8A8FB3",
+                                  "content": "Quiz review · Service Excellence",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 10,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "jXOGH",
+                              "name": "Review",
+                              "fill": "#1C2040",
+                              "cornerRadius": 999,
+                              "padding": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "jBDeM",
+                                  "name": "Label",
+                                  "fill": "#7C5CFF",
+                                  "content": "Review",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "apnSD",
+              "name": "Bottom Row",
+              "width": "fill_container",
+              "height": 260,
+              "gap": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "9dTL7",
+                  "name": "Activity Feed",
+                  "width": 760,
+                  "height": 260,
+                  "fill": "#12142B",
+                  "cornerRadius": 20,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FFFFFF14"
+                  },
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "nEZr8",
+                      "name": "Header",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "2HnlP",
+                          "name": "Title",
+                          "fill": "#F5F6FF",
+                          "content": "Recent Activity",
+                          "fontFamily": "Geist",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PmvWV",
+                          "name": "Sub",
+                          "fill": "#7C5CFF",
+                          "content": "Today",
+                          "fontFamily": "Geist",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "cDfaN",
+                      "name": "Activity List",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "YKIiN",
+                          "name": "Activity Item",
+                          "width": "fill_container",
+                          "height": 44,
+                          "fill": "#151733",
+                          "cornerRadius": 12,
+                          "gap": 12,
+                          "padding": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "zrYi2",
+                              "name": "Icon",
+                              "width": 28,
+                              "height": 28,
+                              "fill": "#1C2040",
+                              "cornerRadius": 10
+                            },
+                            {
+                              "type": "frame",
+                              "id": "v31Bp",
+                              "name": "Text",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "E71kn",
+                                  "name": "Title",
+                                  "fill": "#E6E7F5",
+                                  "content": "New course drafted: Advanced Sales",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "5yBQh",
+                                  "name": "Sub",
+                                  "fill": "#8A8FB3",
+                                  "content": "2 minutes ago",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 10,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "wHiQc",
+                          "name": "Activity Item",
+                          "width": "fill_container",
+                          "height": 44,
+                          "fill": "#151733",
+                          "cornerRadius": 12,
+                          "gap": 12,
+                          "padding": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "pjWXp",
+                              "name": "Icon",
+                              "width": 28,
+                              "height": 28,
+                              "fill": "#1C2040",
+                              "cornerRadius": 10
+                            },
+                            {
+                              "type": "frame",
+                              "id": "aXQnn",
+                              "name": "Text",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "5Zbh4",
+                                  "name": "Title",
+                                  "fill": "#E6E7F5",
+                                  "content": "Topic approved: Safety Drill",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "lXSor",
+                                  "name": "Sub",
+                                  "fill": "#8A8FB3",
+                                  "content": "1 hour ago",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 10,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IAc6y",
+                          "name": "Activity Item",
+                          "width": "fill_container",
+                          "height": 44,
+                          "fill": "#151733",
+                          "cornerRadius": 12,
+                          "gap": 12,
+                          "padding": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "9wZMG",
+                              "name": "Icon",
+                              "width": 28,
+                              "height": 28,
+                              "fill": "#1C2040",
+                              "cornerRadius": 10
+                            },
+                            {
+                              "type": "frame",
+                              "id": "T6pO8",
+                              "name": "Text",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "A9dxV",
+                                  "name": "Title",
+                                  "fill": "#E6E7F5",
+                                  "content": "Enrollment surge: Onboarding Path",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "uyZwt",
+                                  "name": "Sub",
+                                  "fill": "#8A8FB3",
+                                  "content": "Today at 9:40 AM",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 10,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "f383G",
+                  "name": "Insights",
+                  "width": 324,
+                  "height": 260,
+                  "fill": "#12142B",
+                  "cornerRadius": 20,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FFFFFF14"
+                  },
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ZfecD",
+                      "name": "Title",
+                      "fill": "#F5F6FF",
+                      "content": "Next Actions",
+                      "fontFamily": "Geist",
+                      "fontSize": 16,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "z9Adn",
+                      "name": "Insights List",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 10,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "i5nk7",
+                          "name": "Insight Item",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "J3CVA",
+                              "name": "Dot",
+                              "width": 8,
+                              "height": 8,
+                              "fill": "#7C5CFF",
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "text",
+                              "id": "zOu45",
+                              "name": "Text",
+                              "fill": "#E6E7F5",
+                              "content": "Review 5 topic submissions",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "yv8to",
+                          "name": "Insight Item",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "5k5Oc",
+                              "name": "Dot",
+                              "width": 8,
+                              "height": 8,
+                              "fill": "#5EEAD4",
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "text",
+                              "id": "imt9m",
+                              "name": "Text",
+                              "fill": "#E6E7F5",
+                              "content": "Publish 2 draft courses",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "aVjEr",
+                          "name": "Insight Item",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "knMSe",
+                              "name": "Dot",
+                              "width": 8,
+                              "height": 8,
+                              "fill": "#FBBF24",
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "text",
+                              "id": "I06fJ",
+                              "name": "Text",
+                              "fill": "#E6E7F5",
+                              "content": "Send weekly report to HR",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
