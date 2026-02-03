@@ -107,12 +107,13 @@ export const superAdminService = {
 
   async updateUserAccount(
     userId: string,
-    payload: { username?: string; password?: string; role?: Role }
+    payload: { username?: string; password?: string; role?: Role; is_active?: boolean }
   ): Promise<void> {
-    const updatePayload: { username?: string; password?: string; role?: Role } = {};
-    if (payload.username) updatePayload.username = payload.username;
-    if (payload.password) updatePayload.password = payload.password;
-    if (payload.role) updatePayload.role = payload.role;
+    const updatePayload: { username?: string; password?: string; role?: Role; is_active?: boolean } = {};
+    if (payload.username !== undefined) updatePayload.username = payload.username;
+    if (payload.password !== undefined) updatePayload.password = payload.password;
+    if (payload.role !== undefined) updatePayload.role = payload.role;
+    if (payload.is_active !== undefined) updatePayload.is_active = payload.is_active;
 
     if (Object.keys(updatePayload).length === 0) {
       return;

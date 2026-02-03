@@ -48,12 +48,13 @@ const deleteUser = async (req, res, next) => {
  */
 const updateUser = async (req, res, next) => {
   try {
-    const { username, password, role } = req.body;
+    const { username, password, role, is_active } = req.body;
     await adminUserService.updateUser({
       userId: req.params.userId,
       username,
       password,
       role,
+      is_active,
       updatedBy: req.auth?.sub,
     });
     res.status(204).send();

@@ -14,23 +14,39 @@ const requireSuperAdmin = async (req, _res, next) => {
     return next(new AuthError("Unauthorized"));
   }
 
-  const { data, error } = await supabaseAdmin
+  // Check user role
+  const { data: roleData, error: roleError } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) {
+  if (roleError) {
     return next(
       new ExternalServiceError("Unable to verify user role", {
-        code: error.code,
-        details: error.message,
+        code: roleError.code,
+        details: roleError.message,
       })
     );
   }
 
-  if (data?.role !== "superadmin") {
+  if (roleData?.role !== "superadmin") {
     return next(new ForbiddenError("Superadmin access required."));
+  }
+
+  // Check if user is active
+  const { data: profileData, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("is_active")
+    .eq("id", userId)
+    .single();
+
+  if (profileError) {
+    return next(new ExternalServiceError("Unable to verify account status"));
+  }
+
+  if (!profileData || profileData.is_active === false) {
+    return next(new ForbiddenError("Account is deactivated. Please contact your trainer."));
   }
 
   req.userRole = "superadmin";

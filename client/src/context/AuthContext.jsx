@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { authService } from "../services/authService";
 import { supabase } from "../lib/supabaseClient";
+import { apiClient } from "../lib/apiClient";
 
 const AuthContext = createContext(null);
 
@@ -21,6 +22,24 @@ const fetchUsername = async (userId) => {
 };
 
 /**
+ * Verify if the user account is active.
+ * @returns {Promise<boolean>}
+ */
+const verifyAccountActive = async () => {
+  try {
+    await apiClient.get("/me");
+    return true;
+  } catch (error) {
+    if (error?.response?.status === 403 && 
+        error?.response?.data?.message?.includes("Account is deactivated")) {
+      window.location.href = '/deactivated';
+      return false;
+    }
+    return true; // Other errors don't prevent access
+  }
+};
+
+/**
  * Provide auth state to child components.
  * @param {{children: React.ReactNode}} props
  * @returns {JSX.Element}
@@ -30,6 +49,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const [verified, setVerified] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -48,8 +68,14 @@ export const AuthProvider = ({ children }) => {
           const username = await fetchUsername(authUser.id);
           if (!isMounted) return;
           setUser({ ...authUser, username });
+          // Verify account is active
+          const isActive = await verifyAccountActive();
+          if (isActive && isMounted) {
+            setVerified(true);
+          }
         } else {
           setUser(null);
+          setVerified(true);
         }
       } catch (error) {
         if (!isMounted) return;
@@ -61,13 +87,7 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    /**
-     * Handle Supabase auth state changes.
-     * @param {string} _event
-     * @param {object|null} nextSession
-     * @returns {void}
-     */
-    const handleAuthChange = (_event, nextSession) => {
+    const handleAuthChange = async (_event, nextSession) => {
       if (!isMounted) return;
       setSession(nextSession);
       const authUser = nextSession?.user ?? null;
@@ -79,8 +99,14 @@ export const AuthProvider = ({ children }) => {
             setUser({ ...authUser, username });
           }
         });
+        // Verify account is active
+        const isActive = await verifyAccountActive();
+        if (isMounted) {
+          setVerified(isActive);
+        }
       } else {
         setUser(null);
+        setVerified(true);
       }
     };
 
@@ -113,8 +139,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const value = useMemo(
-    () => ({ session, user, loading, authError, signOut }),
-    [session, user, loading, authError]
+    () => ({ session, user, loading: loading || (user && !verified), authError, signOut, verified }),
+    [session, user, loading, authError, verified]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -127,7 +153,8 @@ export const AuthProvider = ({ children }) => {
  *  user: object|null,
  *  loading: boolean,
  *  authError: string|null,
- *  signOut: () => Promise<void>
+ *  signOut: () => Promise<void>,
+ *  verified: boolean
  * }}
  */
 export const useAuth = () => {

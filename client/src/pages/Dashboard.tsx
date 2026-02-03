@@ -117,7 +117,7 @@ const formatDate = (value?: string | null) => {
 };
 
 const Dashboard = () => {
-  const { user, isLoading: userLoading } = useUser();
+  const { user, isLoading: userLoading, verified } = useUser();
   const { signOut } = useAuth();
   const navigate = useNavigate();
   const { data, loading, error, refresh } = useDashboardData(user?.id);
@@ -129,12 +129,12 @@ const Dashboard = () => {
   } = useTopicsData(user?.id);
   const [activeTab, setActiveTab] = useState<TabKey>("enroll");
 
-  // Redirect to auth page if not logged in
+  // Redirect to auth page if not logged in or not verified
   useEffect(() => {
-    if (!userLoading && !user) {
+    if (!userLoading && (!user || !verified)) {
       navigate("/auth/login", { replace: true });
     }
-  }, [user, userLoading, navigate]);
+  }, [user, userLoading, verified, navigate]);
 
   // Fetch profile
   useEffect(() => {

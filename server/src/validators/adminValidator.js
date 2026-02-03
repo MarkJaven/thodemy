@@ -28,8 +28,12 @@ const validateUpdateUser = [
     .optional()
     .isIn(["user", "admin", "superadmin"])
     .withMessage("Role must be user, admin, or superadmin."),
+  body("is_active")
+    .optional()
+    .isBoolean()
+    .withMessage("is_active must be a boolean."),
   body().custom((value) => {
-    if (!value || (!value.username && !value.password && !value.role)) {
+    if (!value || (!value.username && !value.password && !value.role && value.is_active === undefined)) {
       throw new Error("Provide at least one field to update.");
     }
     return true;

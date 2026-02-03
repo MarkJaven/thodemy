@@ -146,7 +146,7 @@ const createUser = async ({ email, username, password, role, createdBy }) => {
  * @param {{userId: string, username?: string, password?: string, role?: string, updatedBy?: string}} payload
  * @returns {Promise<void>}
  */
-const updateUser = async ({ userId, username, password, role, updatedBy }) => {
+const updateUser = async ({ userId, username, password, role, is_active, updatedBy }) => {
   if (role === "superadmin") {
     await ensureSingleSuperAdmin(userId);
   }
@@ -192,20 +192,36 @@ const updateUser = async ({ userId, username, password, role, updatedBy }) => {
       });
     }
   }
+
+  if (is_active !== undefined) {
+    const { error: activeError } = await supabaseAdmin
+      .from("profiles")
+      .update({ is_active })
+      .eq("id", userId);
+
+    if (activeError) {
+      throw new DatabaseError("Unable to update user status", {
+        code: activeError.code,
+        details: activeError.message,
+      });
+    }
+  }
 };
 
 /**
- * Delete an auth user.
+ * Deactivate a user (soft delete).
  * @param {string} userId
  * @returns {Promise<void>}
  */
 const deleteUser = async (userId) => {
-  await nullifyUserReferences(userId);
+  const { error } = await supabaseAdmin
+    .from("profiles")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("id", userId);
 
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
   if (error) {
-    throw new ExternalServiceError("Unable to delete user", {
-      code: error.status,
+    throw new DatabaseError("Unable to deactivate user", {
+      code: error.code,
       details: error.message,
     });
   }
@@ -219,7 +235,7 @@ const deleteUser = async (userId) => {
 const listUsers = async ({ roleFilter } = {}) => {
   const { data: profiles, error: profileError } = await supabaseAdmin
     .from("profiles")
-    .select("id, first_name, last_name, username, email, created_at, updated_at")
+    .select("id, first_name, last_name, username, email, is_active, created_at, updated_at")
     .order("created_at", { ascending: false });
 
   if (profileError) {
