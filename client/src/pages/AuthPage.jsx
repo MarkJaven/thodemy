@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { authService } from "../services/authService";
+import { sessionService } from "../services/sessionService";
 import { superAdminService } from "../services/superAdminService";
 import logoThodemy from "../assets/images/logo-thodemy.png";
 
@@ -11,7 +11,6 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * @returns {JSX.Element}
  */
 const AuthPage = () => {
-  const navigate = useNavigate();
   const resolvedMode = "login";
   const isRegister = false;
   const [form, setForm] = useState({
@@ -96,13 +95,18 @@ const AuthPage = () => {
         password: form.password,
       });
       const session = await authService.getSession();
+      const userId = session?.user?.id;
+      if (userId) {
+        await sessionService.createSession(userId);
+        await sessionService.announceSession();
+      }
       const role = await superAdminService.getCurrentRole(session?.user?.id);
       if (role === "superadmin") {
-        navigate("/super-admin", { replace: true });
+        window.location.replace("/super-admin");
       } else if (role === "admin") {
-        navigate("/admin", { replace: true });
+        window.location.replace("/admin");
       } else {
-        navigate("/dashboard", { replace: true });
+        window.location.replace("/dashboard");
       }
     } catch (signInError) {
       setError(signInError.message);
