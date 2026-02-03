@@ -18,10 +18,51 @@ const buildTotals = (topics: Topic[]) => {
   return { totalHours, totalDays };
 };
 
-const normalizeRelationMap = (value?: Record<string, string[]> | null) => {
+const normalizeTitle = (value?: string | null) =>
+  (value ?? "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+const normalizeTopicIds = (
+  ids: Array<string | null | undefined>,
+  topicLookup: Map<string, Topic>
+) => {
+  const seenIds = new Set<string>();
+  const seenTitles = new Set<string>();
+  const result: string[] = [];
+  ids.forEach((rawId) => {
+    if (typeof rawId !== "string") return;
+    const id = rawId.trim();
+    if (!id || seenIds.has(id)) return;
+    const topic = topicLookup.get(id);
+    if (topic) {
+      const titleKey = normalizeTitle(topic.title);
+      if (titleKey && seenTitles.has(titleKey)) {
+        return;
+      }
+      if (titleKey) {
+        seenTitles.add(titleKey);
+      }
+    }
+    seenIds.add(id);
+    result.push(id);
+  });
+  return result;
+};
+
+const normalizeRelationMap = (
+  value?: Record<string, string[]> | null,
+  keepIds?: Set<string>
+) => {
   if (!value) return {};
   return Object.entries(value).reduce<Record<string, string[]>>((acc, [key, list]) => {
-    acc[key] = Array.isArray(list) ? Array.from(new Set(list)) : [];
+    if (keepIds && !keepIds.has(key)) return acc;
+    const filtered = Array.isArray(list)
+      ? list.filter((id) => typeof id === "string" && (!keepIds || keepIds.has(id)))
+      : [];
+    acc[key] = Array.from(new Set(filtered));
     return acc;
   }, {});
 };
@@ -33,6 +74,7 @@ const CoursesSection = () => {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published" | "archived">("all");
   const [pageSize, setPageSize] = useState(6);
@@ -54,15 +96,37 @@ const CoursesSection = () => {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const topicLookup = useMemo(() => new Map(topics.map((topic) => [topic.id, topic])), [topics]);
+  const topicLookup = useMemo(() => new Map(topics.map((topic) => [topic.id.trim(), topic])), [topics]);
 
   const selectedTopics = useMemo(
     () =>
       formState.topic_ids
-        .map((id) => topicLookup.get(id))
+        .map((id) => topicLookup.get(id.trim()))
         .filter(Boolean) as Topic[],
     [formState.topic_ids, topicLookup]
   );
+  const selectedTitleKeys = useMemo(
+    () => selectedTopics.map((topic) => normalizeTitle(topic.title)).filter(Boolean),
+    [selectedTopics]
+  );
+  const selectedIdSet = useMemo(
+    () => new Set(formState.topic_ids.map((id) => id.trim())),
+    [formState.topic_ids]
+  );
+  const availableTopics = useMemo(() => {
+    const selectedTitles = new Set(selectedTitleKeys);
+    const seenTitles = new Set<string>();
+    return topics.filter((topic) => {
+      if (selectedIdSet.has(topic.id.trim())) return false;
+      const titleKey = normalizeTitle(topic.title);
+      if (titleKey) {
+        if (selectedTitles.has(titleKey)) return false;
+        if (seenTitles.has(titleKey)) return false;
+        seenTitles.add(titleKey);
+      }
+      return true;
+    });
+  }, [topics, selectedIdSet, selectedTitleKeys]);
 
   const totals = useMemo(() => buildTotals(selectedTopics), [selectedTopics]);
   const orderedDetailTopics = useMemo(() => {
@@ -138,45 +202,71 @@ const CoursesSection = () => {
     setIsFormOpen(true);
   };
 
-  const openEdit = (course: CourseSummary) => {
+  const openEdit = async (course: CourseSummary) => {
+    const uniqueTopicIds = normalizeTopicIds(course.topic_ids ?? [], topicLookup);
+    const keepIds = new Set(uniqueTopicIds);
     setSelectedCourse(course);
     setFormState({
       title: course.title,
       description: course.description ?? "",
       status: course.status ?? "draft",
-      topic_ids: course.topic_ids ?? [],
-      topic_prerequisites: normalizeRelationMap(course.topic_prerequisites),
-      topic_corequisites: normalizeRelationMap(course.topic_corequisites),
+      topic_ids: uniqueTopicIds,
+      topic_prerequisites: normalizeRelationMap(course.topic_prerequisites, keepIds),
+      topic_corequisites: normalizeRelationMap(course.topic_corequisites, keepIds),
     });
     setActionError(null);
     setIsFormOpen(true);
+
+    setFormLoading(true);
+    try {
+      const detail = await adminCourseService.getCourseDetail(course.id);
+      const detailCourse = detail.course;
+      const detailTopicIds = normalizeTopicIds(detailCourse.topic_ids ?? [], topicLookup);
+      const detailKeepIds = new Set(detailTopicIds);
+      setSelectedCourse((prev) => ({
+        ...prev,
+        ...detailCourse,
+      }));
+      setFormState({
+        title: detailCourse.title,
+        description: detailCourse.description ?? "",
+        status: detailCourse.status ?? "draft",
+        topic_ids: detailTopicIds,
+        topic_prerequisites: normalizeRelationMap(detailCourse.topic_prerequisites, detailKeepIds),
+        topic_corequisites: normalizeRelationMap(detailCourse.topic_corequisites, detailKeepIds),
+      });
+    } catch (detailError) {
+      setActionError(
+        detailError instanceof Error ? detailError.message : "Unable to load course details."
+      );
+    } finally {
+      setFormLoading(false);
+    }
   };
 
   const updateTopicIds = (nextIds: string[]) => {
+    const uniqueIds = normalizeTopicIds(nextIds, topicLookup);
+    const keepIds = new Set(uniqueIds);
     setFormState((prev) => {
-      const keep = new Set(nextIds);
-      const prune = (map: Record<string, string[]>) =>
-        Object.entries(map).reduce<Record<string, string[]>>((acc, [key, list]) => {
-          if (!keep.has(key)) return acc;
-          acc[key] = list.filter((id) => keep.has(id));
-          return acc;
-        }, {});
       return {
         ...prev,
-        topic_ids: nextIds,
-        topic_prerequisites: prune(prev.topic_prerequisites),
-        topic_corequisites: prune(prev.topic_corequisites),
+        topic_ids: uniqueIds,
+        topic_prerequisites: normalizeRelationMap(prev.topic_prerequisites, keepIds),
+        topic_corequisites: normalizeRelationMap(prev.topic_corequisites, keepIds),
       };
     });
   };
 
   const handleAddTopic = (topicId: string) => {
-    if (formState.topic_ids.includes(topicId)) return;
-    updateTopicIds([...formState.topic_ids, topicId]);
+    const trimmedId = topicId.trim();
+    if (selectedIdSet.has(trimmedId)) return;
+    setActionError(null);
+    updateTopicIds([...formState.topic_ids, trimmedId]);
   };
 
   const handleRemoveTopic = (topicId: string) => {
-    updateTopicIds(formState.topic_ids.filter((id) => id !== topicId));
+    const trimmedId = topicId.trim();
+    updateTopicIds(formState.topic_ids.filter((id) => id.trim() !== trimmedId));
   };
 
   const handleDragStart = (topicId: string) => {
@@ -218,20 +308,25 @@ const CoursesSection = () => {
       setActionError("Course description is required.");
       return;
     }
-    if (formState.topic_ids.length === 0) {
+    const uniqueTopicIds = normalizeTopicIds(formState.topic_ids, topicLookup);
+    if (uniqueTopicIds.length === 0) {
       setActionError("Select at least one topic.");
       return;
     }
 
     setSaving(true);
     setActionError(null);
+    const keepIds = new Set(uniqueTopicIds);
     const payload = {
       title: formState.title.trim(),
       description: formState.description.trim(),
       status: formState.status,
-      topic_ids: formState.topic_ids,
-      topic_prerequisites: formState.topic_prerequisites,
-      topic_corequisites: formState.topic_corequisites,
+      topic_ids: uniqueTopicIds,
+      topic_prerequisites: normalizeRelationMap(formState.topic_prerequisites, keepIds),
+      topic_corequisites: normalizeRelationMap(formState.topic_corequisites, keepIds),
+      enrollment_enabled: selectedCourse?.enrollment_enabled ?? true,
+      enrollment_limit: selectedCourse?.enrollment_limit ?? null,
+      start_at: selectedCourse?.start_at ?? null,
     };
 
     try {
@@ -257,7 +352,19 @@ const CoursesSection = () => {
     if (!confirmed) return;
     setActionError(null);
     try {
-      await adminCourseService.updateCourse(course.id, { status: nextStatus });
+      const normalizedTopicIds = normalizeTopicIds(course.topic_ids ?? [], topicLookup);
+      const keepIds = new Set(normalizedTopicIds);
+      await adminCourseService.updateCourse(course.id, {
+        title: course.title,
+        description: course.description ?? "",
+        status: nextStatus,
+        topic_ids: normalizedTopicIds,
+        topic_prerequisites: normalizeRelationMap(course.topic_prerequisites, keepIds),
+        topic_corequisites: normalizeRelationMap(course.topic_corequisites, keepIds),
+        enrollment_enabled: course.enrollment_enabled ?? true,
+        enrollment_limit: course.enrollment_limit ?? null,
+        start_at: course.start_at ?? null,
+      });
       await loadData();
     } catch (toggleError) {
       setActionError(
@@ -491,16 +598,16 @@ const CoursesSection = () => {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={saving}
+                disabled={saving || formLoading}
                 className="btn-primary flex items-center gap-2"
               >
-                {saving ? (
+                {saving || formLoading ? (
                   <>
                     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Saving...
+                    {saving ? "Saving..." : "Loading..."}
                   </>
                 ) : (
                   "Save Course"
@@ -629,15 +736,13 @@ const CoursesSection = () => {
               </div>
 
               {/* Available Topics */}
-              {topics.filter((t) => !formState.topic_ids.includes(t.id)).length > 0 && (
+              {availableTopics.length > 0 && (
                 <div>
                   <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500">
                     Available Topics
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {topics
-                      .filter((topic) => !formState.topic_ids.includes(topic.id))
-                      .map((topic) => (
+                    {availableTopics.map((topic) => (
                         <button
                           key={`add-${topic.id}`}
                           type="button"
@@ -649,7 +754,7 @@ const CoursesSection = () => {
                           </svg>
                           {topic.title}
                         </button>
-                      ))}
+                    ))}
                   </div>
                 </div>
               )}
