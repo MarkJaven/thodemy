@@ -97,10 +97,14 @@ const AuthPage = () => {
       const session = await authService.getSession();
       const userId = session?.user?.id;
       if (userId) {
-        await sessionService.createSession(userId);
-        await sessionService.announceSession();
+        // Fire-and-forget to avoid blocking login on network delays.
+        sessionService.createSession(userId).catch(() => {});
+        sessionService.announceSession().catch(() => {});
       }
-      const role = await superAdminService.getCurrentRole(session?.user?.id);
+      const role = await Promise.race([
+        superAdminService.getCurrentRole(session?.user?.id),
+        new Promise((resolve) => setTimeout(() => resolve(null), 6000)),
+      ]);
       if (role === "superadmin") {
         window.location.replace("/super-admin");
       } else if (role === "admin") {
