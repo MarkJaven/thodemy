@@ -15,6 +15,12 @@ app.use(cors(buildCorsOptions()));
 app.use(express.json({ limit: "1mb" }));
 app.use(requestLogger);
 app.use(sanitizeRequest);
+
+// Health checks and basic root response for hosting providers
+app.get("/", (_req, res) => res.status(200).json({ status: "ok" }));
+app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
+app.get("/favicon.ico", (_req, res) => res.status(204).end());
+
 app.use(routes);
 
 /**
