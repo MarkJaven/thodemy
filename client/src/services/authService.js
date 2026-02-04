@@ -4,25 +4,6 @@ const isConfigured = Boolean(supabase);
 const AUTH_TIMEOUT_MS = 6000;
 
 /**
- * Enforce a timeout for auth calls to avoid hanging requests.
- * @param {Promise<any>} promise
- * @param {number} durationMs
- * @param {string} message
- * @returns {Promise<any>}
- */
-const withTimeout = (promise, durationMs, message) => {
-  let timeoutId;
-  const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), durationMs);
-  });
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  });
-};
-
-/**
  * Ensure Supabase client is configured.
  * @returns {import("@supabase/supabase-js").SupabaseClient}
  */
@@ -33,21 +14,79 @@ const requireSupabase = () => {
   return supabase;
 };
 
+let cachedSession = null;
+
 /**
- * Fetch the current Supabase session.
+ * Enforce a timeout for auth calls to avoid hanging requests.
+ * @param {Promise<any>} promise
+ * @param {number} durationMs
+ * @param {string} message
+ * @returns {Promise<any>}
+ */
+const withTimeout = (promise, durationMs, message) => {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error(message || "Session lookup timed out.")),
+      durationMs
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  });
+};
+
+const getStoredSession = () => {
+  if (typeof window === "undefined" || !supabase?.auth?.storageKey) return null;
+  const storageKey = supabase.auth.storageKey;
+  try {
+    const raw =
+      window.localStorage.getItem(storageKey) ||
+      window.sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.access_token ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const isSessionFresh = (session) => Boolean(session?.access_token);
+
+/**
+ * Fetch the current Supabase session with a timeout.
+ * Falls back to stored session to avoid hanging UI states.
  * @returns {Promise<object|null>}
  */
 const getSession = async () => {
   const client = requireSupabase();
-  const { data, error } = await withTimeout(
-    client.auth.getSession(),
-    AUTH_TIMEOUT_MS,
-    "Auth check timed out. Please refresh and sign in again."
-  );
-  if (error) {
-    throw new Error(error.message);
+  const stored = getStoredSession();
+  if (isSessionFresh(stored)) {
+    cachedSession = stored;
+    return stored;
   }
-  return data.session ?? null;
+  try {
+    const { data, error } = await withTimeout(
+      client.auth.getSession(),
+      AUTH_TIMEOUT_MS,
+      "Auth check timed out. Please refresh and sign in again."
+    );
+    if (error) {
+      throw new Error(error.message);
+    }
+    cachedSession = data.session ?? null;
+    return cachedSession;
+  } catch (err) {
+    if (cachedSession || stored) {
+      return cachedSession ?? stored ?? null;
+    }
+    if (err instanceof Error) {
+      throw err;
+    }
+    return null;
+  }
 };
 
 /**
@@ -131,6 +170,7 @@ const exchangeCodeForSession = async (url) => {
 const signOut = async () => {
   const client = requireSupabase();
   const { error } = await client.auth.signOut();
+  cachedSession = null;
   if (error) {
     throw new Error(error.message);
   }

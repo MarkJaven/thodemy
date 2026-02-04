@@ -25,6 +25,9 @@ const errorHandler = (err, req, res, _next) => {
   if (err && err.message === "Not allowed by CORS") {
     error = new ForbiddenError("CORS origin denied");
   }
+  if (err && err.type === "entity.too.large") {
+    error = new BadRequestError("Request body too large.");
+  }
   if (err && err.type === "entity.parse.failed") {
     error = new BadRequestError("Invalid JSON payload");
   }
