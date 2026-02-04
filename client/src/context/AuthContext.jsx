@@ -10,6 +10,23 @@ const AuthContext = createContext(null);
 const VERIFY_COOLDOWN_MS = 15000;
 const forcedSignOutLock = { value: false };
 
+const clearLocalAuthSession = () => {
+  if (typeof window === "undefined") return;
+  try {
+    const storageKey = supabase?.auth?.storageKey;
+    if (storageKey) {
+      window.localStorage.removeItem(storageKey);
+      window.localStorage.removeItem(`${storageKey}-code-verifier`);
+      window.localStorage.removeItem(`${storageKey}-user`);
+      window.sessionStorage.removeItem(storageKey);
+      window.sessionStorage.removeItem(`${storageKey}-code-verifier`);
+      window.sessionStorage.removeItem(`${storageKey}-user`);
+    }
+  } catch {
+    // ignore storage failures
+  }
+};
+
 const verifyAccountActive = async (lastCheckedRef, inFlightRef) => {
   if (inFlightRef.current) return true;
   const now = Date.now();
@@ -257,24 +274,19 @@ export const AuthProvider = ({ children }) => {
       sessionService.deactivateCurrentSession(currentUserId).catch(() => {});
     }
 
-    // Sign out from Supabase
-    try {
-      await authService.signOut();
-    } catch {
-      // ignore
-    }
+    // Fire-and-forget remote sign-out so UI doesn't hang if the network is slow.
+    authService.signOut().catch(() => {});
 
-    // IMPORTANT: Redirect BEFORE clearing React state to avoid race condition
-    // with RoleProtectedRoute redirecting to /auth/login when it sees user = null
-    if (!skipServerDeactivation && redirectTo) {
-      window.location.replace(redirectTo);
-      return; // Page will navigate away, no need to clear state
-    }
-
-    // Only clear state if not redirecting (e.g., forced sign out from another device)
+    // Clear local auth + React state immediately to avoid requiring a refresh.
+    clearLocalAuthSession();
     setSession(null);
     setUser(null);
     setVerified(true);
+
+    if (!skipServerDeactivation && redirectTo) {
+      window.location.replace(redirectTo);
+      return;
+    }
   };
 
   // Polling removed to avoid repeated forced sign-outs; rely on realtime
