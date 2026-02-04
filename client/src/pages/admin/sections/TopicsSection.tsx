@@ -142,7 +142,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
         await superAdminService.createTopic(payload);
       }
       setIsFormOpen(false);
-      await loadData();
+      void loadData();
     } catch (saveError) {
       setActionError(saveError instanceof Error ? saveError.message : "Unable to save topic.");
     } finally {
