@@ -6,9 +6,15 @@ const validateSubmissionIdParam = [
   param("submissionId").isUUID().withMessage("Invalid submission id."),
 ];
 
+const MAX_TOPIC_DESCRIPTION_LENGTH = 5000;
+
 const validateCreateTopic = [
   body("title").isString().notEmpty().withMessage("Title is required."),
-  body("description").optional().isString(),
+  body("description")
+    .optional()
+    .isString()
+    .isLength({ max: MAX_TOPIC_DESCRIPTION_LENGTH })
+    .withMessage(`Description must be ${MAX_TOPIC_DESCRIPTION_LENGTH} characters or fewer.`),
   body("link_url").optional().isString(),
   body("time_allocated")
     .isNumeric()
@@ -26,7 +32,11 @@ const validateCreateTopic = [
 
 const validateUpdateTopic = [
   body("title").optional().isString(),
-  body("description").optional().isString(),
+  body("description")
+    .optional()
+    .isString()
+    .isLength({ max: MAX_TOPIC_DESCRIPTION_LENGTH })
+    .withMessage(`Description must be ${MAX_TOPIC_DESCRIPTION_LENGTH} characters or fewer.`),
   body("link_url").optional().isString(),
   body("time_allocated")
     .optional()
