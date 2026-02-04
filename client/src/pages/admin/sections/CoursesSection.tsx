@@ -67,6 +67,8 @@ const normalizeRelationMap = (
   }, {});
 };
 
+const MAX_COURSE_DESCRIPTION_LENGTH = 5000;
+
 const CoursesSection = () => {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -306,6 +308,12 @@ const CoursesSection = () => {
     }
     if (!formState.description.trim()) {
       setActionError("Course description is required.");
+      return;
+    }
+    if (formState.description.trim().length > MAX_COURSE_DESCRIPTION_LENGTH) {
+      setActionError(
+        `Course description must be ${MAX_COURSE_DESCRIPTION_LENGTH} characters or fewer.`
+      );
       return;
     }
     const uniqueTopicIds = normalizeTopicIds(formState.topic_ids, topicLookup);
@@ -652,8 +660,12 @@ const CoursesSection = () => {
                     value={formState.description}
                     onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
                     placeholder="Brief description of what learners will achieve..."
+                    maxLength={MAX_COURSE_DESCRIPTION_LENGTH}
                     className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
+                  <span className="mt-2 block text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                    {formState.description.length}/{MAX_COURSE_DESCRIPTION_LENGTH} characters
+                  </span>
                 </div>
               </div>
             </div>
