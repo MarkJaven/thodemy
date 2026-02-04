@@ -48,6 +48,25 @@ const apiClient = axios.create({
   timeout: REQUEST_TIMEOUT_MS,
 });
 
+/**
+ * Enforce a timeout even if a request never resolves (e.g., awaiting auth).
+ * @param {Promise<any>} promise
+ * @param {number} durationMs
+ * @param {string} message
+ * @returns {Promise<any>}
+ */
+const withTimeout = (promise, durationMs, message = "Request timed out. Please try again.") => {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), durationMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  });
+};
+
 apiClient.interceptors.request.use(async (config) => {
   const token = await authService.getAccessToken();
   if (token) {
@@ -82,4 +101,4 @@ apiClient.interceptors.response.use(
   }
 );
 
-export { apiClient, getApiErrorMessage };
+export { apiClient, getApiErrorMessage, withTimeout };

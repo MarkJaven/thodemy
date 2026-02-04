@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
-import { apiClient, getApiErrorMessage } from "../lib/apiClient";
+import { apiClient, getApiErrorMessage, withTimeout } from "../lib/apiClient";
 import { auditLogService } from "./auditLogService";
 import type {
   Activity,
@@ -50,6 +50,8 @@ const parseOptions = (value: unknown): string[] => {
   }
   return [];
 };
+
+const REQUEST_HARD_TIMEOUT_MS = 20000;
 
 export const superAdminService = {
   async getCurrentRole(userId?: string): Promise<Role | null> {
@@ -415,7 +417,11 @@ export const superAdminService = {
     >
   ): Promise<Topic> {
     try {
-      const { data } = await apiClient.post("/api/topics", payload);
+      const { data } = await withTimeout(
+        apiClient.post("/api/topics", payload),
+        REQUEST_HARD_TIMEOUT_MS,
+        "Saving topic timed out. Please check the server connection."
+      );
       return data?.topic as Topic;
     } catch (error) {
       throw new Error(getApiErrorMessage(error));
@@ -424,7 +430,11 @@ export const superAdminService = {
 
   async updateTopic(topicId: string, payload: Partial<Topic>): Promise<void> {
     try {
-      await apiClient.patch(`/api/topics/${topicId}`, payload);
+      await withTimeout(
+        apiClient.patch(`/api/topics/${topicId}`, payload),
+        REQUEST_HARD_TIMEOUT_MS,
+        "Updating topic timed out. Please check the server connection."
+      );
     } catch (error) {
       throw new Error(getApiErrorMessage(error));
     }
