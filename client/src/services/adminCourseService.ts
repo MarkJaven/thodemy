@@ -1,4 +1,4 @@
-import { apiClient, getApiErrorMessage } from "../lib/apiClient";
+import { apiClient, getApiErrorMessage, withTimeout } from "../lib/apiClient";
 import { supabase } from "../lib/supabaseClient";
 import { auditLogService } from "./auditLogService";
 import type { Topic, UserProfile } from "../types/superAdmin";
@@ -24,6 +24,8 @@ const shouldFallbackToSupabase = (error: unknown) => {
   const status = (error as { response?: { status?: number } })?.response?.status;
   return !status || status === 404;
 };
+
+const REQUEST_HARD_TIMEOUT_MS = 20000;
 
 const calculateTotalsFromTopics = (
   topicIds: string[],
@@ -462,10 +464,14 @@ export const adminCourseService = {
     topic_corequisites?: Record<string, string[]>;
   }): Promise<CourseSummary> {
     try {
-      const { data } = await apiClient.post("/api/admin/courses", {
-        ...payload,
-        topic_ids: dedupeIds(payload.topic_ids),
-      });
+      const { data } = await withTimeout(
+        apiClient.post("/api/admin/courses", {
+          ...payload,
+          topic_ids: dedupeIds(payload.topic_ids),
+        }),
+        REQUEST_HARD_TIMEOUT_MS,
+        "Saving course timed out. Please check the server connection."
+      );
       return (data?.course ?? data) as CourseSummary;
     } catch (error) {
       if (shouldFallbackToSupabase(error)) {
@@ -490,10 +496,14 @@ export const adminCourseService = {
     }
   ): Promise<void> {
     try {
-      await apiClient.patch(`/api/admin/courses/${courseId}`, {
-        ...payload,
-        topic_ids: payload.topic_ids ? dedupeIds(payload.topic_ids) : payload.topic_ids,
-      });
+      await withTimeout(
+        apiClient.patch(`/api/admin/courses/${courseId}`, {
+          ...payload,
+          topic_ids: payload.topic_ids ? dedupeIds(payload.topic_ids) : payload.topic_ids,
+        }),
+        REQUEST_HARD_TIMEOUT_MS,
+        "Updating course timed out. Please check the server connection."
+      );
     } catch (error) {
       if (shouldFallbackToSupabase(error)) {
         await updateCourseViaSupabase(courseId, payload);
