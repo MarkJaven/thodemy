@@ -183,10 +183,11 @@ export const AuthProvider = ({ children }) => {
           const username = await fetchUsername(authUser.id);
           if (!isMounted) return;
           setUser({ ...authUser, username });
-          const isActive = await verifyAccountActive(lastVerifyRef, verifyInFlightRef);
-          if (isActive && isMounted) {
+          // Allow access immediately; verify account status in the background.
+          if (isMounted) {
             setVerified(true);
           }
+          verifyAccountActive(lastVerifyRef, verifyInFlightRef).catch(() => {});
           subscribeToPusher(authUser.id);
         } else {
           setUser(null);
@@ -209,15 +210,13 @@ export const AuthProvider = ({ children }) => {
       if (authUser) {
         clearForcedSignOut();
         setUser({ ...authUser, username: null });
+        setVerified(true);
         fetchUsername(authUser.id).then((username) => {
           if (isMounted) {
             setUser({ ...authUser, username });
           }
         });
-        const isActive = await verifyAccountActive(lastVerifyRef, verifyInFlightRef);
-        if (isMounted) {
-          setVerified(isActive);
-        }
+        verifyAccountActive(lastVerifyRef, verifyInFlightRef).catch(() => {});
         subscribeToPusher(authUser.id);
       } else {
         setUser(null);
