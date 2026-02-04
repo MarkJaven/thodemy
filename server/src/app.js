@@ -12,7 +12,7 @@ const app = express();
 
 app.use(helmet());
 app.use(cors(buildCorsOptions()));
-app.use(express.json({ limit: "100kb" }));
+app.use(express.json({ limit: "1mb" }));
 app.use(requestLogger);
 app.use(sanitizeRequest);
 app.use(routes);
