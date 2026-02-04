@@ -241,6 +241,9 @@ const upsertCourse = async (req, res, next) => {
     if (!description || typeof description !== "string") {
       throw new BadRequestError("Course description is required.");
     }
+    if (description.trim().length > 5000) {
+      throw new BadRequestError("Course description must be 5000 characters or fewer.");
+    }
     if (!Array.isArray(topicIds)) {
       throw new BadRequestError("Topics list is required.");
     }
