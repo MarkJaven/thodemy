@@ -127,7 +127,7 @@ const TopicsPage = () => {
         await superAdminService.createTopic(payload);
       }
       setIsModalOpen(false);
-      await refresh();
+      void refresh();
     } catch (saveError) {
       const message =
         saveError instanceof Error ? saveError.message : "Unable to save the topic.";

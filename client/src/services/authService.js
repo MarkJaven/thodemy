@@ -1,6 +1,26 @@
 import { supabase } from "../lib/supabaseClient";
 
 const isConfigured = Boolean(supabase);
+const AUTH_TIMEOUT_MS = 6000;
+
+/**
+ * Enforce a timeout for auth calls to avoid hanging requests.
+ * @param {Promise<any>} promise
+ * @param {number} durationMs
+ * @param {string} message
+ * @returns {Promise<any>}
+ */
+const withTimeout = (promise, durationMs, message) => {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), durationMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  });
+};
 
 /**
  * Ensure Supabase client is configured.
@@ -19,7 +39,11 @@ const requireSupabase = () => {
  */
 const getSession = async () => {
   const client = requireSupabase();
-  const { data, error } = await client.auth.getSession();
+  const { data, error } = await withTimeout(
+    client.auth.getSession(),
+    AUTH_TIMEOUT_MS,
+    "Auth check timed out. Please refresh and sign in again."
+  );
   if (error) {
     throw new Error(error.message);
   }

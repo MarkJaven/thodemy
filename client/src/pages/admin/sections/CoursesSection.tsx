@@ -336,7 +336,7 @@ const CoursesSection = () => {
         await adminCourseService.createCourse(payload);
       }
       setIsFormOpen(false);
-      await loadData();
+      void loadData();
     } catch (saveError) {
       setActionError(saveError instanceof Error ? saveError.message : "Unable to save course.");
     } finally {
