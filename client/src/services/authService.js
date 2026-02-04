@@ -43,12 +43,7 @@ const getStoredSession = () => {
   }
 };
 
-const isSessionFresh = (session) => {
-  if (!session?.access_token) return false;
-  if (!session.expires_at) return true;
-  const expiresAtMs = session.expires_at * 1000;
-  return expiresAtMs - Date.now() > 60 * 1000;
-};
+const isSessionFresh = (session) => Boolean(session?.access_token);
 
 /**
  * Fetch the current Supabase session with a timeout.
