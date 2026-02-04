@@ -15,6 +15,8 @@ type TopicFormState = {
   time_unit: "hours" | "days";
 };
 
+const MAX_TOPIC_DESCRIPTION_LENGTH = 5000;
+
 const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,6 +124,10 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
     }
     if (!Number.isFinite(formState.time_allocated) || formState.time_allocated <= 0) {
       setActionError("Time allocated must be a positive number.");
+      return;
+    }
+    if (formState.description.trim().length > MAX_TOPIC_DESCRIPTION_LENGTH) {
+      setActionError(`Description must be ${MAX_TOPIC_DESCRIPTION_LENGTH} characters or fewer.`);
       return;
     }
 
@@ -505,8 +511,12 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
               onChange={(event) =>
                 setFormState((prev) => ({ ...prev, description: event.target.value }))
               }
+              maxLength={MAX_TOPIC_DESCRIPTION_LENGTH}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
+            <span className="mt-2 block text-[10px] uppercase tracking-[0.2em] text-slate-500">
+              {formState.description.length}/{MAX_TOPIC_DESCRIPTION_LENGTH} characters
+            </span>
           </label>
           <label className="md:col-span-2 text-xs uppercase tracking-[0.25em] text-slate-400">
             Topic link (optional)
