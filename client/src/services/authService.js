@@ -125,7 +125,11 @@ const signUp = async ({ email, password, firstName, lastName }) => {
  */
 const signInWithPassword = async ({ email, password }) => {
   const client = requireSupabase();
-  const { error } = await client.auth.signInWithPassword({ email, password });
+  const { error } = await withTimeout(
+    client.auth.signInWithPassword({ email, password }),
+    AUTH_TIMEOUT_MS,
+    "Sign-in timed out. Please try again."
+  );
   if (error) {
     throw new Error(error.message);
   }
