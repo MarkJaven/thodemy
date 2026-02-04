@@ -13,17 +13,65 @@ const requireSupabase = () => {
   return supabase;
 };
 
+const SESSION_TIMEOUT_MS = 5000;
+let cachedSession = null;
+
+const withTimeout = (promise, timeoutMs) => {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error("Session lookup timed out."));
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+};
+
+const getStoredSession = () => {
+  if (typeof window === "undefined" || !supabase?.auth?.storageKey) return null;
+  const storageKey = supabase.auth.storageKey;
+  try {
+    const raw =
+      window.localStorage.getItem(storageKey) ||
+      window.sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.access_token ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const isSessionFresh = (session) => {
+  if (!session?.access_token) return false;
+  if (!session.expires_at) return true;
+  const expiresAtMs = session.expires_at * 1000;
+  return expiresAtMs - Date.now() > 60 * 1000;
+};
+
 /**
- * Fetch the current Supabase session.
+ * Fetch the current Supabase session with a timeout.
+ * Falls back to stored session to avoid hanging UI states.
  * @returns {Promise<object|null>}
  */
 const getSession = async () => {
   const client = requireSupabase();
-  const { data, error } = await client.auth.getSession();
-  if (error) {
-    throw new Error(error.message);
+  const stored = getStoredSession();
+  if (isSessionFresh(stored)) {
+    cachedSession = stored;
+    return stored;
   }
-  return data.session ?? null;
+  try {
+    const { data, error } = await withTimeout(client.auth.getSession(), SESSION_TIMEOUT_MS);
+    if (error) {
+      throw new Error(error.message);
+    }
+    cachedSession = data.session ?? null;
+    return cachedSession;
+  } catch {
+    return cachedSession ?? stored ?? null;
+  }
 };
 
 /**
@@ -107,6 +155,7 @@ const exchangeCodeForSession = async (url) => {
 const signOut = async () => {
   const client = requireSupabase();
   const { error } = await client.auth.signOut();
+  cachedSession = null;
   if (error) {
     throw new Error(error.message);
   }
