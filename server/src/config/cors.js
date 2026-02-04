@@ -21,6 +21,9 @@ const validateOrigin = (origin, callback) => {
       return callback(null, true);
     }
   }
+  if (env.frontendOrigins.includes("*")) {
+    return callback(null, true);
+  }
   if (env.frontendOrigins.includes(origin)) {
     return callback(null, true);
   }
