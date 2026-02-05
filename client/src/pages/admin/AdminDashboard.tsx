@@ -121,7 +121,12 @@ interface ApprovalItem {
   type: string;
   detail: string;
   entityId?: string;
-  entityType: "topic_submission" | "course_completion";
+  entityType:
+    | "topic_submission"
+    | "course_completion"
+    | "learning_path_enrollment"
+    | "course_enrollment";
+  createdAt?: string | null;
 }
 
 interface ActivityItem {
@@ -160,7 +165,12 @@ const AdminDashboard = () => {
   const [taskError, setTaskError] = useState<string | null>(null);
   const [approvalFocus, setApprovalFocus] = useState<{
     submissionId?: string | null;
-    section?: "topic_submissions" | "course_completion" | null;
+    section?:
+      | "topic_submissions"
+      | "course_completion"
+      | "learning_path_enrollments"
+      | "course_enrollments"
+      | null;
   } | null>(null);
 
   const { signOut } = useAuth();
@@ -220,12 +230,24 @@ const AdminDashboard = () => {
     const fetchDashboardData = async () => {
       try {
         setIsLoading(true);
-        const [courses, topics, users, topicSubmissions, courseCompletionRequests] = await Promise.all([
+        const [
+          courses,
+          topics,
+          users,
+          topicSubmissions,
+          courseCompletionRequests,
+          enrollments,
+          learningPathEnrollments,
+          learningPaths,
+        ] = await Promise.all([
           superAdminService.listCourses(),
           superAdminService.listTopics(),
           superAdminService.listUsers(),
           superAdminService.listTopicCompletionRequests(),
           superAdminService.listCourseCompletionRequests(),
+          superAdminService.listEnrollments(),
+          superAdminService.listLearningPathEnrollments(),
+          superAdminService.listLearningPaths(),
         ]);
 
         // Create a user lookup map
@@ -240,6 +262,10 @@ const AdminDashboard = () => {
         const courseMap = new Map<string, string>();
         courses.forEach(c => courseMap.set(c.id, c.title));
 
+        // Create a learning path lookup map
+        const learningPathMap = new Map<string, string>();
+        learningPaths.forEach((path) => learningPathMap.set(path.id, path.title));
+
         // Calculate stats
         const now = new Date();
         const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
@@ -247,7 +273,17 @@ const AdminDashboard = () => {
         const coursesThisMonth = courses.filter(c => new Date(c.created_at ?? "") >= monthAgo).length;
         const pendingTopicSubmissions = topicSubmissions.filter(s => s.status === "pending").length;
         const pendingCourseRequests = courseCompletionRequests.filter(r => r.status === "pending").length;
-        const totalPending = pendingTopicSubmissions + pendingCourseRequests;
+        const pendingCourseEnrollments = enrollments.filter(
+          (entry) => (entry.status ?? "pending") === "pending"
+        ).length;
+        const pendingLearningPathEnrollments = learningPathEnrollments.filter(
+          (entry) => (entry.status ?? "pending") === "pending"
+        ).length;
+        const totalPending =
+          pendingTopicSubmissions +
+          pendingCourseRequests +
+          pendingCourseEnrollments +
+          pendingLearningPathEnrollments;
 
         setStats({
           activeCourses,
@@ -273,7 +309,7 @@ const AdminDashboard = () => {
 
         // Approvals queue - with actual user names and details
         const approvalItems: ApprovalItem[] = [
-          ...topicSubmissions.filter(s => s.status === "pending").slice(0, 5).map(s => {
+          ...topicSubmissions.filter(s => s.status === "pending").map(s => {
             const submitter = userMap.get(s.user_id);
             const topicTitle = topicMap.get(s.topic_id) ?? "Unknown Topic";
             return {
@@ -284,9 +320,10 @@ const AdminDashboard = () => {
               detail: topicTitle,
               entityId: s.topic_id,
               entityType: "topic_submission" as const,
+              createdAt: s.submitted_at ?? s.created_at ?? null,
             };
           }),
-          ...courseCompletionRequests.filter(r => r.status === "pending").slice(0, 3).map(r => {
+          ...courseCompletionRequests.filter(r => r.status === "pending").map(r => {
             const submitter = userMap.get(r.user_id);
             const courseTitle = courseMap.get(r.course_id) ?? "Unknown Course";
             return {
@@ -297,10 +334,50 @@ const AdminDashboard = () => {
               detail: courseTitle,
               entityId: r.course_id,
               entityType: "course_completion" as const,
+              createdAt: r.created_at ?? null,
             };
           }),
+          ...learningPathEnrollments
+            .filter((entry) => (entry.status ?? "pending") === "pending")
+            .map((entry) => {
+              const submitter = userMap.get(entry.user_id);
+              const pathTitle = learningPathMap.get(entry.learning_path_id) ?? "Learning Path";
+              return {
+                id: entry.id,
+                userName: submitter?.username ?? submitter?.first_name ?? "Unknown User",
+                userEmail: submitter?.email ?? undefined,
+                type: "Learning path enrollment",
+                detail: pathTitle,
+                entityId: entry.learning_path_id,
+                entityType: "learning_path_enrollment" as const,
+                createdAt: entry.enrolled_at ?? entry.created_at ?? null,
+              };
+            }),
+          ...enrollments
+            .filter((entry) => (entry.status ?? "pending") === "pending")
+            .map((entry) => {
+              const submitter = userMap.get(entry.user_id);
+              const courseTitle = courseMap.get(entry.course_id) ?? "Course enrollment";
+              return {
+                id: entry.id,
+                userName: submitter?.username ?? submitter?.first_name ?? "Unknown User",
+                userEmail: submitter?.email ?? undefined,
+                type: "Course enrollment",
+                detail: courseTitle,
+                entityId: entry.course_id,
+                entityType: "course_enrollment" as const,
+                createdAt: entry.created_at ?? null,
+              };
+            }),
         ];
-        setApprovals(approvalItems.slice(0, 5));
+        const sortedApprovals = approvalItems
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt ?? 0).getTime() -
+              new Date(a.createdAt ?? 0).getTime()
+          )
+          .slice(0, 5);
+        setApprovals(sortedApprovals);
 
         // Fetch admin tasks
         try {
@@ -441,11 +518,21 @@ const AdminDashboard = () => {
     } else if (item.entityType === "course_completion") {
       setActiveNav("activity");
       setApprovalFocus({ section: "course_completion" });
+    } else if (item.entityType === "learning_path_enrollment") {
+      setActiveNav("activity");
+      setApprovalFocus({ section: "learning_path_enrollments" });
+    } else if (item.entityType === "course_enrollment") {
+      setActiveNav("activity");
+      setApprovalFocus({ section: "course_enrollments" });
     }
   };
 
   const handleOpenApprovals = (
-    section: "topic_submissions" | "course_completion" = "topic_submissions"
+    section:
+      | "topic_submissions"
+      | "course_completion"
+      | "learning_path_enrollments"
+      | "course_enrollments" = "learning_path_enrollments"
   ) => {
     setActiveNav("activity");
     setApprovalFocus({ section });
@@ -520,7 +607,7 @@ const AdminDashboard = () => {
           delta={`${stats.approvalsToday} require action today`}
           deltaColor="text-red-400"
           isLoading={isLoading}
-          onClick={() => handleOpenApprovals("topic_submissions")}
+          onClick={() => handleOpenApprovals("learning_path_enrollments")}
         />
       </div>
 
@@ -588,7 +675,7 @@ const AdminDashboard = () => {
             </div>
             <button
               type="button"
-              onClick={() => handleOpenApprovals("topic_submissions")}
+              onClick={() => handleOpenApprovals("learning_path_enrollments")}
               className="text-[10px] font-semibold uppercase tracking-widest text-accent-purple hover:text-accent-purple/80 transition-colors"
             >
               View all
