@@ -199,6 +199,7 @@ export type Quiz = {
   start_at?: string | null;
   end_at?: string | null;
   show_score: boolean;
+  max_score?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -219,6 +220,11 @@ export type QuizAttempt = {
   answers: Record<string, string>;
   score?: number | null;
   submitted_at?: string | null;
+  proof_url?: string | null;
+  proof_file_name?: string | null;
+  proof_file_type?: string | null;
+  proof_message?: string | null;
+  proof_submitted_at?: string | null;
 };
 
 export type QuizScore = {
