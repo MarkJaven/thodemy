@@ -160,7 +160,12 @@ create table if not exists public.quiz_attempts (
   user_id uuid not null references auth.users(id) on delete cascade,
   answers jsonb not null default '{}'::jsonb,
   score integer,
-  submitted_at timestamptz not null default now()
+  submitted_at timestamptz not null default now(),
+  proof_url text,
+  proof_file_name text,
+  proof_file_type text,
+  proof_message text,
+  proof_submitted_at timestamptz
 );
 
 create table if not exists public.forms (
@@ -332,15 +337,10 @@ create policy "Quizzes are readable by assignee"
   on public.quizzes
   for select
   using (
-    exists (
-      select 1
-      from public.enrollments
-      where user_id = auth.uid()
-        and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
-    )
-    and (
-      assigned_user_id = auth.uid()
-      or course_id in (
+    assigned_user_id = auth.uid()
+    or (
+      assigned_user_id is null
+      and course_id in (
         select course_id
         from public.enrollments
         where user_id = auth.uid()
@@ -390,6 +390,13 @@ drop policy if exists "Quiz attempts insertable by owner" on public.quiz_attempt
 create policy "Quiz attempts insertable by owner"
   on public.quiz_attempts
   for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Quiz attempts updatable by owner" on public.quiz_attempts;
+create policy "Quiz attempts updatable by owner"
+  on public.quiz_attempts
+  for update
+  using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
 drop policy if exists "Forms are readable by authenticated users" on public.forms;
@@ -626,5 +633,28 @@ create policy "Course proofs read by owner"
   for select
   using (
     bucket_id = 'course-proofs'
+    and auth.uid() = owner
+  );
+
+insert into storage.buckets (id, name, public)
+values ('quiz-proofs', 'quiz-proofs', false)
+on conflict (id) do nothing;
+
+drop policy if exists "Quiz proofs insert by owner" on storage.objects;
+drop policy if exists "Quiz proofs read by owner" on storage.objects;
+
+create policy "Quiz proofs insert by owner"
+  on storage.objects
+  for insert
+  with check (
+    bucket_id = 'quiz-proofs'
+    and auth.uid() = owner
+  );
+
+create policy "Quiz proofs read by owner"
+  on storage.objects
+  for select
+  using (
+    bucket_id = 'quiz-proofs'
     and auth.uid() = owner
   );

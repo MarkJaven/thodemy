@@ -283,6 +283,11 @@ create table if not exists public.quiz_attempts (
   answers jsonb not null default '{}'::jsonb,
   score integer,
   submitted_at timestamptz not null default now(),
+  proof_url text,
+  proof_file_name text,
+  proof_file_type text,
+  proof_message text,
+  proof_submitted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users(id)
@@ -902,16 +907,10 @@ create policy "Quizzes readable by assignee"
   on public.quizzes
   for select
   using (
-    exists (
-      select 1
-      from public.enrollments
-      where user_id = auth.uid()
-        and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
-    )
-    and (
-      assigned_user_id = auth.uid()
-      or assigned_user_id is null
-      or course_id in (
+    assigned_user_id = auth.uid()
+    or (
+      assigned_user_id is null
+      and course_id in (
         select course_id
         from public.enrollments
         where user_id = auth.uid()
@@ -982,6 +981,13 @@ drop policy if exists "Quiz attempts insertable by owner" on public.quiz_attempt
 create policy "Quiz attempts insertable by owner"
   on public.quiz_attempts
   for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Quiz attempts updatable by owner" on public.quiz_attempts;
+create policy "Quiz attempts updatable by owner"
+  on public.quiz_attempts
+  for update
+  using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
 drop policy if exists "Quiz scores manageable by superadmin" on public.quiz_scores;
@@ -1250,6 +1256,10 @@ insert into storage.buckets (id, name, public)
 values ('course-proofs', 'course-proofs', false)
 on conflict (id) do nothing;
 
+insert into storage.buckets (id, name, public)
+values ('quiz-proofs', 'quiz-proofs', false)
+on conflict (id) do nothing;
+
 drop policy if exists "Lesson proofs insert by owner" on storage.objects;
 drop policy if exists "Lesson proofs read by owner" on storage.objects;
 drop policy if exists "Lesson proofs read by admin" on storage.objects;
@@ -1284,6 +1294,9 @@ drop policy if exists "Topic proofs read by admin" on storage.objects;
 drop policy if exists "Course proofs insert by owner" on storage.objects;
 drop policy if exists "Course proofs read by owner" on storage.objects;
 drop policy if exists "Course proofs read by admin" on storage.objects;
+drop policy if exists "Quiz proofs insert by owner" on storage.objects;
+drop policy if exists "Quiz proofs read by owner" on storage.objects;
+drop policy if exists "Quiz proofs read by admin" on storage.objects;
 
 create policy "Topic proofs insert by owner"
   on storage.objects
@@ -1330,5 +1343,29 @@ create policy "Course proofs read by admin"
   for select
   using (
     bucket_id = 'course-proofs'
+    and public.is_admin()
+  );
+
+create policy "Quiz proofs insert by owner"
+  on storage.objects
+  for insert
+  with check (
+    bucket_id = 'quiz-proofs'
+    and auth.uid() = owner
+  );
+
+create policy "Quiz proofs read by owner"
+  on storage.objects
+  for select
+  using (
+    bucket_id = 'quiz-proofs'
+    and auth.uid() = owner
+  );
+
+create policy "Quiz proofs read by admin"
+  on storage.objects
+  for select
+  using (
+    bucket_id = 'quiz-proofs'
     and public.is_admin()
   );

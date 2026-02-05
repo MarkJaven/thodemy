@@ -157,6 +157,25 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+const buildLatestByQuizId = <T extends { quiz_id: string; submitted_at?: string | null }>(
+  entries: T[]
+) => {
+  const map = new Map<string, T>();
+  entries.forEach((entry) => {
+    const existing = map.get(entry.quiz_id);
+    if (!existing) {
+      map.set(entry.quiz_id, entry);
+      return;
+    }
+    const existingTime = existing.submitted_at ? new Date(existing.submitted_at).getTime() : 0;
+    const currentTime = entry.submitted_at ? new Date(entry.submitted_at).getTime() : 0;
+    if (currentTime >= existingTime) {
+      map.set(entry.quiz_id, entry);
+    }
+  });
+  return map;
+};
+
 const getSubmissionTimestamp = (submission?: TopicSubmission | null) => {
   if (!submission) return 0;
   const stamp = submission.submitted_at ?? submission.created_at ?? null;
@@ -271,6 +290,12 @@ const Dashboard = () => {
   const [proofMessage, setProofMessage] = useState("");
   const [proofError, setProofError] = useState<string | null>(null);
   const [submittingProof, setSubmittingProof] = useState(false);
+  const [isQuizProofOpen, setIsQuizProofOpen] = useState(false);
+  const [proofQuiz, setProofQuiz] = useState<Quiz | null>(null);
+  const [quizProofFile, setQuizProofFile] = useState<File | null>(null);
+  const [quizProofMessage, setQuizProofMessage] = useState("");
+  const [quizProofError, setQuizProofError] = useState<string | null>(null);
+  const [submittingQuizProof, setSubmittingQuizProof] = useState(false);
   const [submissionSuccess, setSubmissionSuccess] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [profileDraft, setProfileDraft] = useState<any>(null);
@@ -451,15 +476,67 @@ const Dashboard = () => {
   );
 
   const visibleQuizzes = data.quizzes.filter((quiz) => {
-    if (!hasActiveEnrollment) return false;
-    const assignedMatch = !quiz.assigned_user_id || quiz.assigned_user_id === user?.id;
-    const courseMatch = quiz.course_id ? activeEnrollmentCourseIds.has(quiz.course_id) : false;
-    return assignedMatch && courseMatch;
+    if (quiz.assigned_user_id && quiz.assigned_user_id === user?.id) {
+      return true;
+    }
+    if (quiz.assigned_user_id && quiz.assigned_user_id !== user?.id) {
+      return false;
+    }
+    if (!quiz.assigned_user_id && !quiz.course_id) {
+      return true;
+    }
+    if (quiz.course_id) {
+      return activeEnrollmentCourseIds.has(quiz.course_id);
+    }
+    return hasActiveEnrollment;
   });
 
   const visibleForms = hasActiveEnrollment
     ? data.forms.filter((form) => form.assigned_user_id === user?.id || !form.assigned_user_id)
     : [];
+
+  const quizAttemptLookup = useMemo(
+    () => buildLatestByQuizId(quizAttemptEntries),
+    [quizAttemptEntries]
+  );
+
+  const quizScoreLookup = useMemo(
+    () => buildLatestByQuizId(quizScoreEntries),
+    [quizScoreEntries]
+  );
+
+  const quizSummary = useMemo(() => {
+    const now = new Date();
+    let openCount = 0;
+    let completedCount = 0;
+    let pendingScoreCount = 0;
+
+    visibleQuizzes.forEach((quiz) => {
+      const status = (quiz.status ?? "active").toLowerCase();
+      const statusAllowsOpen = ["active", "open", "published"].includes(status);
+      const startAt = quiz.start_at ? new Date(quiz.start_at) : null;
+      const endAt = quiz.end_at ? new Date(quiz.end_at) : null;
+      const isOpen =
+        statusAllowsOpen &&
+        (!startAt || now >= startAt) &&
+        (!endAt || now <= endAt);
+      if (isOpen) openCount += 1;
+
+      const attempt = quizAttemptLookup.get(quiz.id);
+      if (attempt?.submitted_at) {
+        completedCount += 1;
+        const score = quizScoreLookup.get(quiz.id);
+        if (attempt.proof_url && !score) pendingScoreCount += 1;
+      }
+    });
+
+    return {
+      total: visibleQuizzes.length,
+      openCount,
+      completedCount,
+      pendingScoreCount,
+    };
+  }, [quizAttemptLookup, quizScoreLookup, visibleQuizzes]);
 
   const assignedActivities = activityEntries.filter((activity) => {
     const isAssignment = !activity.file_name && !activity.file_type;
@@ -524,6 +601,22 @@ const Dashboard = () => {
     setProofError(null);
   };
 
+  const openQuizProofModal = (quiz: Quiz) => {
+    setProofQuiz(quiz);
+    setQuizProofFile(null);
+    setQuizProofMessage("");
+    setQuizProofError(null);
+    setIsQuizProofOpen(true);
+  };
+
+  const closeQuizProofModal = () => {
+    setIsQuizProofOpen(false);
+    setProofQuiz(null);
+    setQuizProofFile(null);
+    setQuizProofMessage("");
+    setQuizProofError(null);
+  };
+
   const handleSubmitTopicProof = async () => {
     if (!user?.id || !proofTopic || !proofFile) {
       setProofError("Upload a JPG, PNG, or PDF certificate before submitting.");
@@ -548,6 +641,52 @@ const Dashboard = () => {
       setProofError(message);
     } finally {
       setSubmittingProof(false);
+    }
+  };
+
+  const handleSubmitQuizProof = async () => {
+    if (!user?.id || !proofQuiz || !quizProofFile) {
+      setQuizProofError("Upload a JPG, PNG, or PDF proof file before submitting.");
+      return;
+    }
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
+    if (!allowedTypes.includes(quizProofFile.type)) {
+      setQuizProofError("Proof file must be a PDF, JPG, or PNG.");
+      return;
+    }
+    const maxSizeBytes = 10 * 1024 * 1024;
+    if (quizProofFile.size > maxSizeBytes) {
+      setQuizProofError("Proof file must be smaller than 10MB.");
+      return;
+    }
+    setSubmittingQuizProof(true);
+    setQuizProofError(null);
+    setCompletingQuizId(proofQuiz.id);
+    try {
+      const attempt = await dashboardApi.submitQuizProof({
+        quizId: proofQuiz.id,
+        userId: user.id,
+        file: quizProofFile,
+        message: quizProofMessage.trim() || undefined,
+      });
+      setQuizAttemptEntries((prev) => {
+        const existingIndex = prev.findIndex((entry) => entry.id === attempt.id);
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = attempt;
+          return updated;
+        }
+        return [...prev, attempt];
+      });
+      closeQuizProofModal();
+      await refresh();
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error ? submitError.message : "Unable to submit quiz proof.";
+      setQuizProofError(message);
+    } finally {
+      setSubmittingQuizProof(false);
+      setCompletingQuizId(null);
     }
   };
 
@@ -619,29 +758,13 @@ const Dashboard = () => {
     }
   };
 
-  const handleCompleteQuiz = async (quiz: Quiz) => {
+  const handleUploadQuizProof = (quiz: Quiz) => {
     if (!user?.id) {
-      setQuizStatusError("You must be signed in to update quiz status.");
+      setQuizStatusError("You must be signed in to upload quiz proof.");
       return;
     }
     setQuizStatusError(null);
-    setCompletingQuizId(quiz.id);
-    try {
-      const attempt = await dashboardApi.completeQuiz({ quizId: quiz.id, userId: user.id });
-      setQuizAttemptEntries((prev) => {
-        if (prev.some((entry) => entry.quiz_id === quiz.id)) {
-          return prev;
-        }
-        return [...prev, attempt];
-      });
-      await refresh();
-    } catch (completeError) {
-      const message =
-        completeError instanceof Error ? completeError.message : "Unable to update quiz status.";
-      setQuizStatusError(message);
-    } finally {
-      setCompletingQuizId(null);
-    }
+    openQuizProofModal(quiz);
   };
   const handleDeleteActivity = async (activityId: string) => {
     setDeleteActivityError(null);
@@ -1407,8 +1530,8 @@ const Dashboard = () => {
           quizzes={visibleQuizzes}
           quizScores={quizScoreEntries}
           quizAttempts={quizAttemptEntries}
-          onCompleteQuiz={handleCompleteQuiz}
-          completingQuizId={completingQuizId}
+          onUploadProof={handleUploadQuizProof}
+          uploadingQuizId={completingQuizId}
         />
       </div>
     );
@@ -1813,6 +1936,29 @@ const Dashboard = () => {
       <div>
         <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Quiz</p>
         <h2 className="mt-2 font-display text-2xl text-white">Assigned quizzes</h2>
+        <p className="mt-2 text-sm text-slate-400">
+          Open the external quiz, submit your answers, and mark completion so your
+          score can be verified.
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 text-sm text-slate-300">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Assigned</p>
+          <p className="mt-2 text-2xl font-semibold text-white">{quizSummary.total}</p>
+          <p className="mt-1 text-xs text-slate-500">Total quizzes in your queue.</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 text-sm text-slate-300">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Open now</p>
+          <p className="mt-2 text-2xl font-semibold text-white">{quizSummary.openCount}</p>
+          <p className="mt-1 text-xs text-slate-500">Quizzes currently accepting submissions.</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 text-sm text-slate-300">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Awaiting score</p>
+          <p className="mt-2 text-2xl font-semibold text-white">
+            {quizSummary.pendingScoreCount}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">Completed quizzes pending verification.</p>
+        </div>
       </div>
       {renderQuizTab()}
     </div>
@@ -2468,6 +2614,67 @@ const Dashboard = () => {
                 className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90 disabled:opacity-60"
               >
                 {submittingProof ? "Submitting..." : "Submit certificate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isQuizProofOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-800/95 p-6 shadow-glow">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Quiz proof
+              </p>
+              <h3 className="mt-2 font-display text-xl text-white">Upload quiz proof</h3>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">
+              {proofQuiz
+                ? `Upload proof for "${proofQuiz.title}".`
+                : "Upload proof so your admin can verify the quiz."}
+            </p>
+            <div className="mt-4 space-y-3">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,application/pdf"
+                onChange={(event) => setQuizProofFile(event.target.files?.[0] ?? null)}
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300"
+              />
+              <label className="block text-xs uppercase tracking-[0.25em] text-slate-400">
+                Notes (optional)
+                <textarea
+                  rows={3}
+                  value={quizProofMessage}
+                  onChange={(event) => setQuizProofMessage(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
+                />
+              </label>
+              {quizProofError && (
+                <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+                  {quizProofError}
+                </div>
+              )}
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeQuizProofModal}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitQuizProof}
+                disabled={submittingQuizProof}
+                className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90 disabled:opacity-60"
+              >
+                {submittingQuizProof ? "Submitting..." : "Submit proof"}
               </button>
             </div>
           </div>
