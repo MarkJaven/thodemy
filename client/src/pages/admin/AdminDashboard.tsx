@@ -105,13 +105,12 @@ interface DashboardStats {
   approvalsToday: number;
 }
 
-interface RecentCourse {
-  id: string;
-  title: string;
-  topicCount: number;
-  learnerCount: number;
-  status: string;
-  updatedAt: string;
+interface EnrollmentHealth {
+  active: number;
+  pending: number;
+  completed: number;
+  dropped: number;
+  total: number;
 }
 
 interface ApprovalItem {
@@ -154,7 +153,13 @@ const AdminDashboard = () => {
     pendingApprovals: 0,
     approvalsToday: 0,
   });
-  const [recentCourses, setRecentCourses] = useState<RecentCourse[]>([]);
+  const [enrollmentHealth, setEnrollmentHealth] = useState<EnrollmentHealth>({
+    active: 0,
+    pending: 0,
+    completed: 0,
+    dropped: 0,
+    total: 0,
+  });
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [activityError, setActivityError] = useState<string | null>(null);
@@ -226,6 +231,36 @@ const AdminDashboard = () => {
     }
   };
 
+  const resolveEnrollmentBucket = (
+    status?: string | null
+  ): "active" | "pending" | "completed" | "dropped" => {
+    const normalized = (status ?? "pending").toLowerCase();
+    if (["active", "approved", "enrolled"].includes(normalized)) return "active";
+    if (normalized === "pending") return "pending";
+    if (normalized === "completed") return "completed";
+    if (["rejected", "removed", "dropped"].includes(normalized)) return "dropped";
+    return "pending";
+  };
+
+  const buildEnrollmentHealth = (
+    courseEnrollments: Array<{ status?: string | null }>,
+    learningPathEnrollments: Array<{ status?: string | null }>
+  ): EnrollmentHealth => {
+    const combined = [...courseEnrollments, ...learningPathEnrollments];
+    const health: EnrollmentHealth = {
+      active: 0,
+      pending: 0,
+      completed: 0,
+      dropped: 0,
+      total: combined.length,
+    };
+    combined.forEach((entry) => {
+      const bucket = resolveEnrollmentBucket(entry.status);
+      health[bucket] += 1;
+    });
+    return health;
+  };
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
@@ -284,28 +319,24 @@ const AdminDashboard = () => {
           pendingCourseRequests +
           pendingCourseEnrollments +
           pendingLearningPathEnrollments;
+        const activeLearnerIds = new Set(
+          [...enrollments, ...learningPathEnrollments]
+            .map((entry) => entry.user_id)
+            .filter(Boolean)
+        );
+        const enrollmentHealth = buildEnrollmentHealth(enrollments, learningPathEnrollments);
 
         setStats({
           activeCourses,
           coursesThisMonth,
           topicsLibrary: topics.length,
           topicsAwaitingReview: pendingTopicSubmissions,
-          activeLearners: users.filter(u => u.role === "learner").length,
+          activeLearners: activeLearnerIds.size,
           completionRate: 87, // Placeholder - would need enrollment data
           pendingApprovals: totalPending,
           approvalsToday: Math.min(5, totalPending),
         });
-
-        // Recent courses
-        const recent = courses.slice(0, 4).map(course => ({
-          id: course.id,
-          title: course.title,
-          topicCount: course.topic_ids?.length || 0,
-          learnerCount: 0, // Would need enrollment count
-          status: course.status ?? "draft",
-          updatedAt: formatTimeAgo(course.updated_at ?? ""),
-        }));
-        setRecentCourses(recent);
+        setEnrollmentHealth(enrollmentHealth);
 
         // Approvals queue - with actual user names and details
         const approvalItems: ApprovalItem[] = [
@@ -444,21 +475,6 @@ const AdminDashboard = () => {
 
   const handleSignOut = async () => {
     await signOut({ redirectTo: "/" });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "published":
-      case "active":
-        return "text-emerald-400";
-      case "in_review":
-      case "pending":
-        return "text-amber-400";
-      case "draft":
-        return "text-indigo-400";
-      default:
-        return "text-slate-400";
-    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -613,57 +629,54 @@ const AdminDashboard = () => {
 
       {/* Middle Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Courses in Review Card */}
+        {/* Enrollment Health Card */}
         <div className="lg:col-span-2 rounded-2xl bg-ink-800/50 border border-white/10 p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-white font-semibold">Courses in Review</h3>
-              <p className="text-xs text-slate-500">Updated in the last 24 hours</p>
+              <h3 className="text-white font-semibold">Enrollment Health</h3>
+              <p className="text-xs text-slate-500">Course + learning path enrollments</p>
             </div>
             <button
-              onClick={() => setActiveNav("courses")}
+              onClick={() => handleOpenApprovals("learning_path_enrollments")}
               className="text-xs font-semibold text-accent-purple hover:text-accent-purple/80 transition-colors"
             >
-              View all
+              Review pending
             </button>
           </div>
 
-          {/* Table Header */}
-          <div className="hidden sm:grid grid-cols-5 gap-3 px-2 mb-3">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Course</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Topics</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Learners</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Status</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Updated</span>
-          </div>
-
-          {/* Table Rows */}
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="rounded-xl bg-ink-750/50 p-3 animate-pulse h-12" />
-              ))
-            ) : recentCourses.length > 0 ? (
-              recentCourses.map((course, index) => (
-                <div
-                  key={course.id}
-                  className={`grid grid-cols-1 sm:grid-cols-5 gap-2 sm:gap-3 items-center rounded-xl p-3 ${
-                    index % 2 === 0 ? "bg-ink-750/50" : "bg-ink-800/30"
-                  }`}
-                >
-                  <span className="text-sm text-slate-200 truncate">{course.title}</span>
-                  <span className="text-sm text-slate-400 hidden sm:block">{course.topicCount}</span>
-                  <span className="text-sm text-slate-400 hidden sm:block">{course.learnerCount}</span>
-                  <span className={`text-sm font-semibold capitalize ${getStatusColor(course.status)}`}>
-                    {course.status.replace("_", " ")}
-                  </span>
-                  <span className="text-sm text-slate-400 hidden sm:block">{course.updatedAt}</span>
-                </div>
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={`enrollment-skeleton-${i}`} className="rounded-xl bg-ink-750/50 p-4 animate-pulse h-20" />
               ))
             ) : (
-              <p className="text-slate-500 text-sm py-4 text-center">No recent courses</p>
+              <>
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300">Active</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{enrollmentHealth.active}</p>
+                </div>
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-amber-300">Pending</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{enrollmentHealth.pending}</p>
+                </div>
+                <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-indigo-300">Completed</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{enrollmentHealth.completed}</p>
+                </div>
+                <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-rose-300">Dropped</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{enrollmentHealth.dropped}</p>
+                </div>
+              </>
             )}
           </div>
+
+          {!isLoading && (
+            <div className="mt-4 flex items-center justify-between text-[11px] text-slate-500">
+              <span>Total enrollments: {enrollmentHealth.total}</span>
+              <span>{enrollmentHealth.pending} pending approvals</span>
+            </div>
+          )}
         </div>
 
         {/* Approvals Queue */}
