@@ -16,12 +16,13 @@ import { dashboardApi } from "../services/dashboardApi";
 import type {
   Activity,
   Course,
-  CourseCompletionRequest,
   LearningPath,
   LearningPathEnrollment,
   QuizAttempt,
   QuizScore,
   Topic,
+  TopicProgress,
+  TopicSubmission,
   Quiz,
 } from "../types/dashboard";
 
@@ -116,6 +117,37 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+const getSubmissionTimestamp = (submission?: TopicSubmission | null) => {
+  if (!submission) return 0;
+  const stamp = submission.submitted_at ?? submission.created_at ?? null;
+  if (!stamp) return 0;
+  const date = new Date(stamp);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
+
+const getTopicStatusLabel = (
+  progress?: TopicProgress | null,
+  submission?: TopicSubmission | null
+) => {
+  if (submission?.status === "completed" || progress?.status === "completed") {
+    return "Completed";
+  }
+  if (submission?.status === "pending") return "Pending Review";
+  if (submission?.status === "in_progress") return "Needs Info";
+  if (submission?.status === "rejected") return "Rejected";
+  if (progress?.status === "in_progress") return "In Progress";
+  return "Not Started";
+};
+
+const topicStatusStyles: Record<string, string> = {
+  Completed: "border-emerald-400/40 text-emerald-200",
+  "Pending Review": "border-amber-400/40 text-amber-200",
+  "Needs Info": "border-sky-400/40 text-sky-200",
+  Rejected: "border-rose-400/40 text-rose-200",
+  "In Progress": "border-white/10 text-slate-200",
+  "Not Started": "border-white/10 text-slate-400",
+};
+
 const Dashboard = () => {
   const { user, isLoading: userLoading, verified } = useUser();
   const { signOut } = useAuth();
@@ -175,7 +207,7 @@ const Dashboard = () => {
   const [learningPathCode, setLearningPathCode] = useState("");
   const [learningPathDeleteError, setLearningPathDeleteError] = useState<string | null>(null);
   const [deleteActivityError, setDeleteActivityError] = useState<string | null>(null);
-  const [markingTopicId, setMarkingTopicId] = useState<string | null>(null);
+  const [startingTopicId, setStartingTopicId] = useState<string | null>(null);
   const [startingLearningPathId, setStartingLearningPathId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [enrollingLearningPathId, setEnrollingLearningPathId] = useState<string | null>(
@@ -187,12 +219,13 @@ const Dashboard = () => {
   const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
   const [isSignOutOpen, setIsSignOutOpen] = useState(false);
   const [completingQuizId, setCompletingQuizId] = useState<string | null>(null);
-  const [isCourseProofOpen, setIsCourseProofOpen] = useState(false);
-  const [proofCourse, setProofCourse] = useState<Course | null>(null);
-  const [proofLearningPathId, setProofLearningPathId] = useState<string | null>(null);
+  const [isTopicProofOpen, setIsTopicProofOpen] = useState(false);
+  const [proofTopic, setProofTopic] = useState<Topic | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofMessage, setProofMessage] = useState("");
   const [proofError, setProofError] = useState<string | null>(null);
   const [submittingProof, setSubmittingProof] = useState(false);
+  const [submissionSuccess, setSubmissionSuccess] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [isProfileSetupOpen, setIsProfileSetupOpen] = useState(false);
@@ -233,23 +266,20 @@ const Dashboard = () => {
     [topicsData.topicProgress]
   );
 
-  const courseCompletionLookup = useMemo(() => {
-    const map = new Map<string, CourseCompletionRequest>();
-    data.courseCompletionRequests.forEach((request) => {
-      const key = `${request.learning_path_id}:${request.course_id}`;
-      const existing = map.get(key);
+  const topicSubmissionLookup = useMemo(() => {
+    const map = new Map<string, TopicSubmission>();
+    topicsData.topicSubmissions.forEach((submission) => {
+      const existing = map.get(submission.topic_id);
       if (!existing) {
-        map.set(key, request);
+        map.set(submission.topic_id, submission);
         return;
       }
-      const existingTime = existing.created_at ? new Date(existing.created_at).getTime() : 0;
-      const nextTime = request.created_at ? new Date(request.created_at).getTime() : 0;
-      if (nextTime >= existingTime) {
-        map.set(key, request);
+      if (getSubmissionTimestamp(submission) >= getSubmissionTimestamp(existing)) {
+        map.set(submission.topic_id, submission);
       }
     });
     return map;
-  }, [data.courseCompletionRequests]);
+  }, [topicsData.topicSubmissions]);
 
   const learningPathEnrollmentLookup = useMemo(
     () =>
@@ -333,29 +363,80 @@ const Dashboard = () => {
     (activity) => activity.file_name || activity.file_type
   );
 
-  const handleMarkTopicComplete = async (topic: Topic) => {
+  const handleStartTopic = async (topic: Topic) => {
     if (!user?.id) {
-      setProgressError("You must be signed in to update a topic.");
+      setProgressError("You must be signed in to start a topic.");
       return;
     }
-    const missingPrereqs = (topic.pre_requisites ?? []).filter(
-      (id) => progressLookup.get(id)?.status !== "completed"
-    );
-    if (missingPrereqs.length > 0) {
-      setProgressError("Complete prerequisites before marking this topic.");
+    if (progressLookup.get(topic.id)) {
       return;
     }
     setProgressError(null);
-    setMarkingTopicId(topic.id);
+    setStartingTopicId(topic.id);
     try {
-      await dashboardApi.completeTopic({ topicId: topic.id, userId: user.id });
+      await dashboardApi.startTopic({
+        topicId: topic.id,
+        userId: user.id,
+        timeAllocated: Number(topic.time_allocated),
+        timeUnit: topic.time_unit ?? "days",
+      });
       await refreshTopics();
-    } catch (completeError) {
+    } catch (startError) {
       const message =
-        completeError instanceof Error ? completeError.message : "Unable to update the topic.";
+        startError instanceof Error ? startError.message : "Unable to start the topic.";
       setProgressError(message);
     } finally {
-      setMarkingTopicId(null);
+      setStartingTopicId(null);
+    }
+  };
+
+  const handleOpenTopic = (topic: Topic) => {
+    if (!topic.link_url) return;
+    window.open(topic.link_url, "_blank", "noopener,noreferrer");
+    void handleStartTopic(topic);
+  };
+
+  const openTopicProofModal = (topic: Topic) => {
+    setSubmissionSuccess(null);
+    setProofTopic(topic);
+    setProofFile(null);
+    setProofMessage("");
+    setProofError(null);
+    setIsTopicProofOpen(true);
+  };
+
+  const closeTopicProofModal = () => {
+    setIsTopicProofOpen(false);
+    setProofTopic(null);
+    setProofFile(null);
+    setProofMessage("");
+    setProofError(null);
+  };
+
+  const handleSubmitTopicProof = async () => {
+    if (!user?.id || !proofTopic || !proofFile) {
+      setProofError("Upload a JPG, PNG, or PDF certificate before submitting.");
+      return;
+    }
+    setSubmittingProof(true);
+    setProofError(null);
+    try {
+      await dashboardApi.submitTopicSubmission({
+        topicId: proofTopic.id,
+        userId: user.id,
+        file: proofFile,
+        message: proofMessage.trim() || undefined,
+      });
+      closeTopicProofModal();
+      setSubmissionSuccess("Certificate submitted. Awaiting admin review.");
+      await refreshTopics();
+      setTimeout(() => setSubmissionSuccess(null), 4000);
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error ? submitError.message : "Unable to submit certificate.";
+      setProofError(message);
+    } finally {
+      setSubmittingProof(false);
     }
   };
 
@@ -393,47 +474,6 @@ const Dashboard = () => {
       setProgressError(message);
     } finally {
       setStartingLearningPathId(null);
-    }
-  };
-
-  const openCourseProofModal = (course: Course, learningPathId: string) => {
-    setProofCourse(course);
-    setProofLearningPathId(learningPathId);
-    setProofFile(null);
-    setProofError(null);
-    setIsCourseProofOpen(true);
-  };
-
-  const closeCourseProofModal = () => {
-    setIsCourseProofOpen(false);
-    setProofCourse(null);
-    setProofLearningPathId(null);
-    setProofFile(null);
-    setProofError(null);
-  };
-
-  const handleSubmitCourseProof = async () => {
-    if (!user?.id || !proofCourse || !proofLearningPathId || !proofFile) {
-      setProofError("Upload a JPG, PNG, or PDF proof before submitting.");
-      return;
-    }
-    setSubmittingProof(true);
-    setProofError(null);
-    try {
-      await dashboardApi.submitCourseCompletionProof({
-        courseId: proofCourse.id,
-        learningPathId: proofLearningPathId,
-        userId: user.id,
-        file: proofFile,
-      });
-      closeCourseProofModal();
-      await refresh();
-    } catch (submitError) {
-      const message =
-        submitError instanceof Error ? submitError.message : "Unable to submit proof.";
-      setProofError(message);
-    } finally {
-      setSubmittingProof(false);
     }
   };
 
@@ -756,15 +796,17 @@ const Dashboard = () => {
           const pathTopicIds = Array.from(
             new Set(pathCourses.flatMap((course) => course?.topic_ids ?? []).filter(Boolean))
           );
-          const completedTopics = pathTopicIds.filter(
-            (topicId) => progressLookup.get(topicId)?.status === "completed"
-          ).length;
+          const completedTopics = pathTopicIds.filter((topicId) => {
+            const progress = progressLookup.get(topicId);
+            const submission = topicSubmissionLookup.get(topicId);
+            return getTopicStatusLabel(progress, submission) === "Completed";
+          }).length;
           const pathCompletion =
             pathTopicIds.length > 0
               ? Math.round((completedTopics / pathTopicIds.length) * 100)
               : 0;
 
-          let previousCourseVerified = true;
+          let previousCourseComplete = true;
 
           return (
             <div
@@ -819,23 +861,21 @@ const Dashboard = () => {
                     const orderedTopics = topicIds
                       .map((id) => topicLookup.get(id))
                       .filter(Boolean) as Topic[];
-                    const completedCount = orderedTopics.filter(
-                      (topic) => progressLookup.get(topic.id)?.status === "completed"
-                    ).length;
+                    const completedCount = orderedTopics.filter((topic) => {
+                      const progress = progressLookup.get(topic.id);
+                      const submission = topicSubmissionLookup.get(topic.id);
+                      return getTopicStatusLabel(progress, submission) === "Completed";
+                    }).length;
                     const completion =
                       orderedTopics.length > 0
                         ? Math.round((completedCount / orderedTopics.length) * 100)
                         : 0;
                     const isCourseComplete = orderedTopics.length > 0 && completion === 100;
-                    const proofKey = `${path.id}:${course.id}`;
-                    const courseProof = courseCompletionLookup.get(proofKey);
-                    const courseProofStatus = courseProof?.status ?? null;
-                    const isCourseVerified = courseProofStatus === "approved";
                     const isCourseUnlocked =
-                      hasStarted && (courseIndex === 0 || previousCourseVerified);
+                      hasStarted && (courseIndex === 0 || previousCourseComplete);
                     const isCourseLocked = !isCourseUnlocked;
 
-                    previousCourseVerified = isCourseVerified;
+                    previousCourseComplete = isCourseComplete;
 
                     return (
                       <div
@@ -857,9 +897,9 @@ const Dashboard = () => {
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
-                            {courseProofStatus && (
-                              <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-                                {courseProofStatus}
+                            {isCourseComplete && (
+                              <span className="rounded-full border border-emerald-400/40 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200">
+                                Completed
                               </span>
                             )}
                             <span className="rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-slate-300">
@@ -869,35 +909,8 @@ const Dashboard = () => {
                         </div>
                         {isCourseLocked && (
                           <p className="mt-3 text-xs text-slate-400">
-                            Complete and verify the previous course to unlock this one.
+                            Complete all topics in the previous course to unlock this one.
                           </p>
-                        )}
-                        {isCourseComplete && isCourseUnlocked && (
-                          <div className="mt-4 flex flex-wrap items-center gap-3">
-                            {courseProofStatus === "approved" ? (
-                              <span className="rounded-full border border-emerald-400/40 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200">
-                                Verified
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => openCourseProofModal(course, path.id)}
-                                disabled={courseProofStatus === "pending"}
-                                className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                {courseProofStatus === "pending"
-                                  ? "Pending review"
-                                  : courseProofStatus === "rejected"
-                                  ? "Resubmit proof"
-                                  : "Submit course proof"}
-                              </button>
-                            )}
-                            {courseProofStatus !== "approved" && (
-                              <span className="text-xs text-slate-400">
-                                Submit proof to unlock the next course.
-                              </span>
-                            )}
-                          </div>
                         )}
                         <div className="mt-4 space-y-3">
                           {orderedTopics.length === 0 ? (
@@ -905,89 +918,138 @@ const Dashboard = () => {
                               No topics assigned to this course yet.
                             </p>
                           ) : (
-                            orderedTopics.map((topic) => {
-                              const progress = progressLookup.get(topic.id);
-                              const status =
-                                progress?.status === "completed"
-                                  ? "Completed"
-                                  : progress
-                                  ? "In Progress"
-                                  : "Not Started";
-                              const prereqs = topic.pre_requisites ?? [];
-                              const missingPrereqs = prereqs.filter(
-                                (id) => progressLookup.get(id)?.status !== "completed"
-                              );
-                              const canMarkComplete =
-                                isCourseUnlocked &&
-                                status !== "Completed" &&
-                                missingPrereqs.length === 0;
-                              return (
-                                <div
-                                  key={`topic-${path.id}-${course?.id}-${topic.id}`}
-                                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div>
-                                      <p className="text-white">{topic.title}</p>
-                                      <p className="text-xs text-slate-400">
-                                        {topic.description}
-                                      </p>
+                            (() => {
+                              let previousTopicComplete = true;
+                              return orderedTopics.map((topic) => {
+                                const progress = progressLookup.get(topic.id);
+                                const submission = topicSubmissionLookup.get(topic.id);
+                                const status = getTopicStatusLabel(progress, submission);
+                                const statusStyle =
+                                  topicStatusStyles[status] ?? topicStatusStyles["Not Started"];
+                                const prereqs = topic.pre_requisites ?? [];
+                                const missingPrereqs = prereqs.filter((id) => {
+                                  const prereqProgress = progressLookup.get(id);
+                                  const prereqSubmission = topicSubmissionLookup.get(id);
+                                  return (
+                                    getTopicStatusLabel(prereqProgress, prereqSubmission) !==
+                                    "Completed"
+                                  );
+                                });
+                                const isApproved = status === "Completed";
+                                const isPending = submission?.status === "pending";
+                                const isNeedsInfo = submission?.status === "in_progress";
+                                const isRejected = submission?.status === "rejected";
+                                const isSequenceLocked = !previousTopicComplete;
+                                const isTopicUnlocked =
+                                  isCourseUnlocked &&
+                                  !isSequenceLocked &&
+                                  missingPrereqs.length === 0;
+                                const canSubmit =
+                                  Boolean(user?.id) && isTopicUnlocked && !isApproved && !isPending;
+                                const submitLabel = isPending
+                                  ? "Pending review"
+                                  : isRejected
+                                  ? "Resubmit certificate"
+                                  : isNeedsInfo
+                                  ? "Update certificate"
+                                  : "Upload certificate";
+
+                                previousTopicComplete = isApproved;
+
+                                return (
+                                  <div
+                                    key={`topic-${path.id}-${course?.id}-${topic.id}`}
+                                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                      <div>
+                                        <p className="text-white">{topic.title}</p>
+                                        <p className="text-xs text-slate-400">
+                                          {topic.description}
+                                        </p>
+                                      </div>
+                                      <span
+                                        className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${statusStyle}`}
+                                      >
+                                        {status}
+                                      </span>
                                     </div>
-                                    <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                                      {status}
-                                    </span>
-                                  </div>
-                                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                                    <span className="rounded-full border border-white/10 px-3 py-1">
-                                      {topic.time_allocated}{" "}
-                                      {topic.time_unit === "hours" ? "hours" : "days"}
-                                    </span>
-                                    {topic.link_url ? (
+                                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
                                       <span className="rounded-full border border-white/10 px-3 py-1">
-                                        Link available
+                                        {topic.time_allocated}{" "}
+                                        {topic.time_unit === "hours" ? "hours" : "days"}
                                       </span>
-                                    ) : (
-                                      <span className="rounded-full border border-white/10 px-3 py-1">
-                                        No link yet
-                                      </span>
+                                      {topic.link_url ? (
+                                        <span className="rounded-full border border-white/10 px-3 py-1">
+                                          Link available
+                                        </span>
+                                      ) : (
+                                        <span className="rounded-full border border-white/10 px-3 py-1">
+                                          No link yet
+                                        </span>
+                                      )}
+                                    </div>
+                                    {isSequenceLocked && (
+                                      <p className="mt-3 text-xs text-slate-400">
+                                        Await approval of the previous topic before continuing.
+                                      </p>
                                     )}
-                                  </div>
-                                  {missingPrereqs.length > 0 && (
-                                    <p className="mt-3 text-xs text-slate-400">
-                                      Complete prerequisites before continuing.
+                                    {!isSequenceLocked && missingPrereqs.length > 0 && (
+                                      <p className="mt-3 text-xs text-slate-400">
+                                        Complete prerequisites before continuing.
+                                      </p>
+                                    )}
+                                    {isPending && (
+                                      <p className="mt-3 text-xs text-amber-200">
+                                        Certificate submitted. Awaiting review.
+                                      </p>
+                                    )}
+                                    {isNeedsInfo && (
+                                      <p className="mt-3 text-xs text-sky-200">
+                                        Admin requested more info. Please resubmit your certificate.
+                                      </p>
+                                    )}
+                                {isRejected && (
+                                  <p className="mt-3 text-xs text-rose-200">
+                                    Submission rejected. Upload a new certificate to continue.
+                                  </p>
+                                )}
+                                {submission?.review_notes && (
+                                  <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
+                                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                                      Admin note
                                     </p>
-                                  )}
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (topic.link_url) {
-                                          window.open(
-                                            topic.link_url,
-                                            "_blank",
-                                            "noopener,noreferrer"
-                                          );
-                                        }
-                                      }}
-                                      disabled={!isCourseUnlocked || !topic.link_url}
-                                      className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                      Start
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleMarkTopicComplete(topic)}
-                                      disabled={!canMarkComplete || markingTopicId === topic.id}
-                                      className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                      {markingTopicId === topic.id
-                                        ? "Saving..."
-                                        : "Mark as complete"}
-                                    </button>
+                                    <p className="mt-1">{submission.review_notes}</p>
                                   </div>
-                                </div>
-                              );
-                            })
+                                )}
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenTopic(topic)}
+                                        disabled={!isTopicUnlocked || !topic.link_url}
+                                        className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                                      >
+                                        {startingTopicId === topic.id ? "Starting..." : "Start"}
+                                      </button>
+                                      {isApproved ? (
+                                        <span className="rounded-full border border-emerald-400/40 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-emerald-200">
+                                          Approved
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => openTopicProofModal(topic)}
+                                          disabled={!canSubmit}
+                                          className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                                        >
+                                          {submitLabel}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()
                           )}
                         </div>
                       </div>
@@ -1146,7 +1208,7 @@ const Dashboard = () => {
                 Welcome back{user?.username ? `, ${user.username}` : user?.email ? `, ${user.email.split("@")[0]}` : ""}.
               </h1>
               <p className="mt-3 max-w-xl text-sm text-slate-300">
-                Track training momentum, submit activities, and keep an eye on every lesson.
+                Track training momentum, upload topic certificates, and keep an eye on every lesson.
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-xs uppercase tracking-[0.3em] text-slate-400">
@@ -1164,6 +1226,11 @@ const Dashboard = () => {
               >
                 Retry
               </button>
+            </div>
+          )}
+          {submissionSuccess && (
+            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-200">
+              {submissionSuccess}
             </div>
           )}
 
@@ -1216,7 +1283,7 @@ const Dashboard = () => {
         </div>
       )}
 
-      {isCourseProofOpen && (
+      {isTopicProofOpen && (
         <div
           role="dialog"
           aria-modal="true"
@@ -1225,12 +1292,14 @@ const Dashboard = () => {
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-800/95 p-6 shadow-glow">
             <div>
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                Course completion proof
+                Topic certificate
               </p>
-              <h3 className="mt-2 font-display text-xl text-white">Upload proof</h3>
+              <h3 className="mt-2 font-display text-xl text-white">Upload certificate</h3>
             </div>
             <p className="mt-3 text-sm text-slate-300">
-              Upload a JPG, PNG, or PDF so an admin can verify the course completion.
+              {proofTopic
+                ? `Upload a certificate for "${proofTopic.title}".`
+                : "Upload a certificate so an admin can review your completion."}
             </p>
             <div className="mt-4 space-y-3">
               <input
@@ -1239,6 +1308,15 @@ const Dashboard = () => {
                 onChange={(event) => setProofFile(event.target.files?.[0] ?? null)}
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300"
               />
+              <label className="block text-xs uppercase tracking-[0.25em] text-slate-400">
+                Notes (optional)
+                <textarea
+                  rows={3}
+                  value={proofMessage}
+                  onChange={(event) => setProofMessage(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
+                />
+              </label>
               {proofError && (
                 <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
                   {proofError}
@@ -1248,18 +1326,18 @@ const Dashboard = () => {
             <div className="mt-5 flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={closeCourseProofModal}
+                onClick={closeTopicProofModal}
                 className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleSubmitCourseProof}
+                onClick={handleSubmitTopicProof}
                 disabled={submittingProof}
                 className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90 disabled:opacity-60"
               >
-                {submittingProof ? "Submitting..." : "Submit proof"}
+                {submittingProof ? "Submitting..." : "Submit certificate"}
               </button>
             </div>
           </div>

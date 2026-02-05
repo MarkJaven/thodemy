@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
 import { useUser } from "../../../hooks/useUser";
@@ -25,7 +25,19 @@ const formatDate = (value?: string | null) => {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
-const ActivitiesSection = () => {
+type ActivitiesSectionProps = {
+  focusSubmissionId?: string | null;
+  focusSection?: "topic_submissions" | "course_completion" | null;
+  onFocusHandled?: () => void;
+  variant?: "full" | "approvals";
+};
+
+const ActivitiesSection = ({
+  focusSubmissionId = null,
+  focusSection = null,
+  onFocusHandled,
+  variant = "full",
+}: ActivitiesSectionProps) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -71,6 +83,8 @@ const ActivitiesSection = () => {
     to: "",
   });
   const { user } = useUser();
+  const topicSubmissionsRef = useRef<HTMLDivElement | null>(null);
+  const courseProofsRef = useRef<HTMLDivElement | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -273,6 +287,31 @@ const ActivitiesSection = () => {
     setReviewNotes(submission.review_notes ?? "");
     setActionError(null);
   };
+
+  useEffect(() => {
+    if (!focusSection) return;
+    const target =
+      focusSection === "topic_submissions" ? topicSubmissionsRef.current : courseProofsRef.current;
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (onFocusHandled && !focusSubmissionId) {
+      onFocusHandled();
+    }
+  }, [focusSection, focusSubmissionId, onFocusHandled]);
+
+  useEffect(() => {
+    if (!focusSubmissionId || submissionsLoading) return;
+    const match = topicSubmissions.find((submission) => submission.id === focusSubmissionId);
+    if (!match) return;
+    openSubmissionReview(match);
+    if (topicSubmissionsRef.current) {
+      topicSubmissionsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (onFocusHandled) {
+      onFocusHandled();
+    }
+  }, [focusSubmissionId, submissionsLoading, topicSubmissions, onFocusHandled]);
 
   const handleSubmissionAction = async (
     status: "completed" | "rejected" | "in_progress"
@@ -928,66 +967,70 @@ const ActivitiesSection = () => {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-4">
-        <div>
-          <h2 className="font-display text-2xl text-white">Learning path enrollments</h2>
-          <p className="text-sm text-slate-300">
-            Review users who requested access via learning path code.
-          </p>
-        </div>
-        <DataTable
-          columns={learningPathEnrollmentColumns}
-          data={learningPathEnrollmentRows}
-          emptyMessage="No learning path enrollment requests yet."
-        />
-      </div>
+      {variant === "full" && (
+        <>
+          <div className="space-y-4">
+            <div>
+              <h2 className="font-display text-2xl text-white">Learning path enrollments</h2>
+              <p className="text-sm text-slate-300">
+                Review users who requested access via learning path code.
+              </p>
+            </div>
+            <DataTable
+              columns={learningPathEnrollmentColumns}
+              data={learningPathEnrollmentRows}
+              emptyMessage="No learning path enrollment requests yet."
+            />
+          </div>
 
-      <div className="space-y-4">
-        <div>
-          <h2 className="font-display text-2xl text-white">Course progress</h2>
-          <p className="text-sm text-slate-300">Track enrollment progress by user.</p>
-        </div>
-        <DataTable
-          columns={progressColumns}
-          data={progressRows}
-          emptyMessage="No enrollments available."
-        />
-      </div>
+          <div className="space-y-4">
+            <div>
+              <h2 className="font-display text-2xl text-white">Course progress</h2>
+              <p className="text-sm text-slate-300">Track enrollment progress by user.</p>
+            </div>
+            <DataTable
+              columns={progressColumns}
+              data={progressRows}
+              emptyMessage="No enrollments available."
+            />
+          </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-display text-2xl text-white">Activities</h2>
-          <p className="text-sm text-slate-300">
-            Create activities and review submitted artifacts.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="btn-primary flex items-center gap-2"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          New Activity
-        </button>
-      </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-2xl text-white">Activities</h2>
+              <p className="text-sm text-slate-300">
+                Create activities and review submitted artifacts.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openCreate}
+              className="btn-primary flex items-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New Activity
+            </button>
+          </div>
 
-      <DataTable columns={activityColumns} data={activities} emptyMessage="No activities yet." />
+          <DataTable columns={activityColumns} data={activities} emptyMessage="No activities yet." />
 
-      <div>
-        <h3 className="font-display text-xl text-white">Submissions</h3>
-        <p className="text-sm text-slate-400">Review files uploaded by learners.</p>
-        <div className="mt-4">
-          <DataTable
-            columns={submissionColumns}
-            data={submissions}
-            emptyMessage="No submissions yet."
-          />
-        </div>
-      </div>
+          <div>
+            <h3 className="font-display text-xl text-white">Submissions</h3>
+            <p className="text-sm text-slate-400">Review files uploaded by learners.</p>
+            <div className="mt-4">
+              <DataTable
+                columns={submissionColumns}
+                data={submissions}
+                emptyMessage="No submissions yet."
+              />
+            </div>
+          </div>
+        </>
+      )}
 
-      <div className="space-y-3">
+      <div ref={topicSubmissionsRef} className="space-y-3">
         <div>
           <h3 className="font-display text-xl text-white">Topic submissions</h3>
           <p className="text-sm text-slate-400">
@@ -1080,7 +1123,7 @@ const ActivitiesSection = () => {
         {submissionError && <p className="text-xs text-rose-200">{submissionError}</p>}
       </div>
 
-      <div className="space-y-3">
+      <div ref={courseProofsRef} className="space-y-3">
         <div>
           <h3 className="font-display text-xl text-white">Course completion proofs</h3>
           <p className="text-sm text-slate-400">

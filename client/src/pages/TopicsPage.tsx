@@ -8,7 +8,7 @@ import { useUser } from "../hooks/useUser";
 import { useUserRole } from "../hooks/useUserRole";
 import { dashboardApi } from "../services/dashboardApi";
 import { superAdminService } from "../services/superAdminService";
-import type { Topic, TopicProgress } from "../types/dashboard";
+import type { Topic, TopicProgress, TopicSubmission } from "../types/dashboard";
 
 type TopicFormState = {
   title: string;
@@ -32,6 +32,36 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+const getSubmissionTimestamp = (submittedAt?: string | null, createdAt?: string | null) => {
+  const stamp = submittedAt ?? createdAt ?? null;
+  if (!stamp) return 0;
+  const date = new Date(stamp);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
+
+const getTopicStatusLabel = (
+  progress?: TopicProgress | null,
+  submission?: { status?: string | null }
+) => {
+  if (submission?.status === "completed" || progress?.status === "completed") {
+    return "Completed";
+  }
+  if (submission?.status === "pending") return "Pending Review";
+  if (submission?.status === "in_progress") return "Needs Info";
+  if (submission?.status === "rejected") return "Rejected";
+  if (progress?.status === "in_progress") return "In Progress";
+  return "Not Started";
+};
+
+const topicStatusStyles: Record<string, string> = {
+  Completed: "border-emerald-400/40 text-emerald-200",
+  "Pending Review": "border-amber-400/40 text-amber-200",
+  "Needs Info": "border-sky-400/40 text-sky-200",
+  Rejected: "border-rose-400/40 text-rose-200",
+  "In Progress": "border-white/10 text-slate-200",
+  "Not Started": "border-white/10 text-slate-400",
+};
+
 const TopicsPage = () => {
   const { user, isLoading: userLoading } = useUser();
   const { signOut } = useAuth();
@@ -42,7 +72,6 @@ const TopicsPage = () => {
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [startingTopicId, setStartingTopicId] = useState<string | null>(null);
-  const [completingTopicId, setCompletingTopicId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [savingTopic, setSavingTopic] = useState(false);
@@ -64,6 +93,24 @@ const TopicsPage = () => {
   const progressByTopicId = useMemo(() => {
     return new Map(data.topicProgress.map((entry) => [entry.topic_id, entry]));
   }, [data.topicProgress]);
+
+  const submissionByTopicId = useMemo(() => {
+    const map = new Map<string, (typeof data.topicSubmissions)[number]>();
+    data.topicSubmissions.forEach((submission) => {
+      const existing = map.get(submission.topic_id);
+      if (!existing) {
+        map.set(submission.topic_id, submission);
+        return;
+      }
+      if (
+        getSubmissionTimestamp(submission.submitted_at, submission.created_at) >=
+        getSubmissionTimestamp(existing.submitted_at, existing.created_at)
+      ) {
+        map.set(submission.topic_id, submission);
+      }
+    });
+    return map;
+  }, [data.topicSubmissions]);
 
   const handleOpenCreate = () => {
     setActionError(null);
@@ -255,30 +302,12 @@ const TopicsPage = () => {
     }
   };
 
-  const handleCompleteTopic = async (topic: Topic) => {
-    if (!user?.id) {
-      setActionError("You must be signed in to complete a topic.");
-      return;
-    }
-    setActionError(null);
-    setCompletingTopicId(topic.id);
-    try {
-      await dashboardApi.completeTopic({ topicId: topic.id, userId: user.id });
-      await refresh();
-    } catch (completeError) {
-      const message =
-        completeError instanceof Error ? completeError.message : "Unable to complete the topic.";
-      setActionError(message);
-    } finally {
-      setCompletingTopicId(null);
-    }
-  };
+  
 
-  const renderStatus = (progress?: TopicProgress) => {
-    if (!progress) return "Not Started";
-    if (progress.status === "completed") return "Completed";
-    return "In Progress";
-  };
+  const renderStatus = (
+    progress?: TopicProgress,
+    submission?: TopicSubmission | null
+  ) => getTopicStatusLabel(progress, submission ?? undefined);
 
   const visibleTopics = data.topics.filter(
     (topic) => topic.status !== "inactive" && !topic.deleted_at
@@ -307,7 +336,7 @@ const TopicsPage = () => {
               </p>
               <h1 className="mt-2 font-display text-3xl text-white">Your Topics</h1>
               <p className="mt-2 max-w-xl text-sm text-slate-300">
-                Track each topic as you move from not started to completion.
+                Track each topic and submit certificates for admin review.
               </p>
             </div>
             {isSuperAdmin && (
@@ -350,12 +379,32 @@ const TopicsPage = () => {
             <div className="grid gap-4 md:grid-cols-2">
               {visibleTopics.map((topic) => {
                 const progress = progressByTopicId.get(topic.id);
-                const status = renderStatus(progress);
+                const submission = submissionByTopicId.get(topic.id) ?? null;
+                const status = renderStatus(progress, submission);
+                const statusStyle =
+                  topicStatusStyles[status] ?? topicStatusStyles["Not Started"];
                 const prereqs = topic.pre_requisites ?? [];
-                const missingPrereqs = prereqs.filter(
-                  (id) => progressByTopicId.get(id)?.status !== "completed"
-                );
+                const missingPrereqs = prereqs.filter((id) => {
+                  const prereqProgress = progressByTopicId.get(id);
+                  const prereqSubmission = submissionByTopicId.get(id) ?? null;
+                  return (
+                    getTopicStatusLabel(prereqProgress, prereqSubmission) !== "Completed"
+                  );
+                });
                 const canStart = status === "Not Started" && missingPrereqs.length === 0;
+                const isApproved = status === "Completed";
+                const isPending = submission?.status === "pending";
+                const isNeedsInfo = submission?.status === "in_progress";
+                const isRejected = submission?.status === "rejected";
+                const canSubmit =
+                  Boolean(user?.id) && !isApproved && !isPending && missingPrereqs.length === 0;
+                const submitLabel = isPending
+                  ? "Pending review"
+                  : isRejected
+                  ? "Resubmit certificate"
+                  : isNeedsInfo
+                  ? "Update certificate"
+                  : "Upload Certificate";
                 return (
                   <div
                     key={topic.id}
@@ -367,7 +416,9 @@ const TopicsPage = () => {
                           <h3 className="text-lg font-semibold text-white">{topic.title}</h3>
                           <p className="mt-1 text-sm text-slate-300">{topic.description}</p>
                         </div>
-                        <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
+                        <span
+                          className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${statusStyle}`}
+                        >
                           {status}
                         </span>
                       </div>
@@ -387,6 +438,29 @@ const TopicsPage = () => {
                           Complete prerequisites before starting this topic.
                         </p>
                       )}
+                      {isPending && (
+                        <p className="mt-3 text-xs text-amber-200">
+                          Certificate submitted. Awaiting review.
+                        </p>
+                      )}
+                      {isNeedsInfo && (
+                        <p className="mt-3 text-xs text-sky-200">
+                          Admin requested more info. Please resubmit your certificate.
+                        </p>
+                      )}
+                      {isRejected && (
+                        <p className="mt-3 text-xs text-rose-200">
+                          Submission rejected. Upload a new certificate to continue.
+                        </p>
+                      )}
+                      {submission?.review_notes && (
+                        <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                            Admin note
+                          </p>
+                          <p className="mt-1">{submission.review_notes}</p>
+                        </div>
+                      )}
                     </div>
                     <div className="mt-5 flex flex-wrap items-center gap-2">
                       {status === "Not Started" && (
@@ -399,23 +473,18 @@ const TopicsPage = () => {
                           {startingTopicId === topic.id ? "Starting..." : "Start"}
                         </button>
                       )}
-                      {status === "In Progress" && (
-                        <button
-                          type="button"
-                          onClick={() => handleCompleteTopic(topic)}
-                          disabled={completingTopicId === topic.id}
-                          className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          {completingTopicId === topic.id ? "Completing..." : "Mark complete"}
-                        </button>
-                      )}
-                      {user?.id && (
+                      {isApproved ? (
+                        <span className="rounded-full border border-emerald-400/40 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-emerald-200">
+                          Approved
+                        </span>
+                      ) : (
                         <button
                           type="button"
                           onClick={() => handleOpenSubmission(topic)}
-                          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/20"
+                          disabled={!canSubmit}
+                          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          Upload Certificate
+                          {submitLabel}
                         </button>
                       )}
                       {isSuperAdmin && (
@@ -444,7 +513,7 @@ const TopicsPage = () => {
           )}
 
           <div className="text-xs uppercase tracking-[0.3em] text-slate-500">
-            {userLoading ? "Loading user..." : "Statuses update as you start and finish topics."}
+            {userLoading ? "Loading user..." : "Statuses update after admin review."}
           </div>
         </div>
       </div>

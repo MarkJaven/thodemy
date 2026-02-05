@@ -440,27 +440,6 @@ export const dashboardApi = {
     return data as TopicProgress;
   },
 
-  async completeTopic(payload: { topicId: string; userId: string }): Promise<void> {
-    if (!supabase) {
-      throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-    }
-    const now = new Date().toISOString();
-    const { error } = await supabase
-      .from("topic_progress")
-      .upsert(
-        {
-          topic_id: payload.topicId,
-          user_id: payload.userId,
-          status: "completed",
-          start_date: now,
-          end_date: now,
-        },
-        { onConflict: "user_id,topic_id" }
-      );
-    if (error) {
-      throw new Error(error.message);
-    }
-  },
   async submitTopicSubmission(payload: {
     topicId: string;
     userId: string;
@@ -767,68 +746,6 @@ export const dashboardApi = {
       start_date: startDate.toISOString(),
       end_date: endDate ? endDate.toISOString() : null,
     };
-  },
-  async submitCourseCompletionProof(payload: {
-    courseId: string;
-    learningPathId: string;
-    userId: string;
-    file: File;
-  }): Promise<CourseCompletionRequest> {
-    if (!supabase) {
-      throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-    }
-    const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
-    if (!allowedTypes.includes(payload.file.type)) {
-      throw new Error("Proof file must be a JPG, PNG, or PDF.");
-    }
-
-    const { data: existing, error: existingError } = await supabase
-      .from("course_completion_requests")
-      .select("id, status")
-      .eq("course_id", payload.courseId)
-      .eq("learning_path_id", payload.learningPathId)
-      .eq("user_id", payload.userId)
-      .eq("status", "pending")
-      .maybeSingle();
-    if (existingError) {
-      throw new Error(existingError.message);
-    }
-    if (existing) {
-      throw new Error("A completion proof is already pending review.");
-    }
-
-    const timestamp = Date.now();
-    const safeName = payload.file.name.replace(/\s+/g, "_");
-    const filePath = `${payload.userId}/${payload.learningPathId}/${payload.courseId}/${timestamp}-${safeName}`;
-    const upload = await supabase.storage
-      .from("course-proofs")
-      .upload(filePath, payload.file, {
-        contentType: payload.file.type,
-        upsert: false,
-      });
-    if (upload.error) {
-      throw new Error(upload.error.message);
-    }
-
-    const { data, error } = await supabase
-      .from("course_completion_requests")
-      .insert({
-        course_id: payload.courseId,
-        learning_path_id: payload.learningPathId,
-        user_id: payload.userId,
-        storage_path: filePath,
-        file_name: payload.file.name,
-        file_type: payload.file.type,
-        status: "pending",
-      })
-      .select(
-        "id, course_id, learning_path_id, user_id, storage_path, file_name, file_type, status, created_at, updated_at, reviewed_at, reviewed_by"
-      )
-      .single();
-    if (error) {
-      throw new Error(error.message);
-    }
-    return data as CourseCompletionRequest;
   },
   async deleteLearningPathEnrollment(enrollmentId: string): Promise<void> {
     if (!supabase) {

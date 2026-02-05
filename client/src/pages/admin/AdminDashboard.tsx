@@ -158,6 +158,10 @@ const AdminDashboard = () => {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [approvalFocus, setApprovalFocus] = useState<{
+    submissionId?: string | null;
+    section?: "topic_submissions" | "course_completion" | null;
+  } | null>(null);
 
   const { signOut } = useAuth();
   const { user } = useUser();
@@ -432,10 +436,19 @@ const AdminDashboard = () => {
 
   const handleReviewApproval = (item: ApprovalItem) => {
     if (item.entityType === "topic_submission") {
-      setActiveNav("topics");
+      setActiveNav("activity");
+      setApprovalFocus({ submissionId: item.id, section: "topic_submissions" });
     } else if (item.entityType === "course_completion") {
-      setActiveNav("courses");
+      setActiveNav("activity");
+      setApprovalFocus({ section: "course_completion" });
     }
+  };
+
+  const handleOpenApprovals = (
+    section: "topic_submissions" | "course_completion" = "topic_submissions"
+  ) => {
+    setActiveNav("activity");
+    setApprovalFocus({ section });
   };
 
   const navItems: { key: NavItem; label: string; icon: React.ReactNode }[] = [
@@ -460,7 +473,13 @@ const AdminDashboard = () => {
       case "users":
         return <UsersSection readOnly />;
       case "activity":
-        return <ActivitiesSection />;
+        return (
+          <ActivitiesSection
+            focusSubmissionId={approvalFocus?.submissionId ?? null}
+            focusSection={approvalFocus?.section ?? null}
+            onFocusHandled={() => setApprovalFocus(null)}
+          />
+        );
       case "quiz":
         return <QuizzesSection />;
       case "forms":
@@ -501,6 +520,7 @@ const AdminDashboard = () => {
           delta={`${stats.approvalsToday} require action today`}
           deltaColor="text-red-400"
           isLoading={isLoading}
+          onClick={() => handleOpenApprovals("topic_submissions")}
         />
       </div>
 
@@ -561,9 +581,18 @@ const AdminDashboard = () => {
 
         {/* Approvals Queue */}
         <div className="rounded-2xl bg-ink-800/50 border border-white/10 p-5">
-          <div className="mb-4">
-            <h3 className="text-white font-semibold">Approvals Queue</h3>
-            <p className="text-xs text-slate-500">Pending verifications</p>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-white font-semibold">Approvals Queue</h3>
+              <p className="text-xs text-slate-500">Pending verifications</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleOpenApprovals("topic_submissions")}
+              className="text-[10px] font-semibold uppercase tracking-widest text-accent-purple hover:text-accent-purple/80 transition-colors"
+            >
+              View all
+            </button>
           </div>
 
           <div className="flex flex-col gap-3 max-h-[320px] overflow-y-auto">
@@ -892,18 +921,37 @@ interface StatCardProps {
   delta: string;
   deltaColor: string;
   isLoading?: boolean;
+  onClick?: () => void;
 }
 
-const StatCard = ({ label, value, delta, deltaColor, isLoading }: StatCardProps) => (
-  <div className="rounded-2xl bg-ink-800/50 border border-white/10 p-4">
-    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</span>
-    {isLoading ? (
-      <div className="mt-2 h-7 w-16 bg-ink-700 rounded animate-pulse" />
-    ) : (
-      <p className="text-xl sm:text-2xl font-semibold text-white mt-1">{value}</p>
-    )}
-    <p className={`text-xs mt-1 ${deltaColor}`}>{delta}</p>
-  </div>
-);
+const StatCard = ({ label, value, delta, deltaColor, isLoading, onClick }: StatCardProps) => {
+  const content = (
+    <>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        {label}
+      </span>
+      {isLoading ? (
+        <div className="mt-2 h-7 w-16 bg-ink-700 rounded animate-pulse" />
+      ) : (
+        <p className="text-xl sm:text-2xl font-semibold text-white mt-1">{value}</p>
+      )}
+      <p className={`text-xs mt-1 ${deltaColor}`}>{delta}</p>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="rounded-2xl bg-ink-800/50 border border-white/10 p-4 text-left transition hover:border-accent-purple/40 hover:bg-ink-800/70"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="rounded-2xl bg-ink-800/50 border border-white/10 p-4">{content}</div>;
+};
 
 export default AdminDashboard;
