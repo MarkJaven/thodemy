@@ -27,7 +27,12 @@ const formatDate = (value?: string | null) => {
 
 type ActivitiesSectionProps = {
   focusSubmissionId?: string | null;
-  focusSection?: "topic_submissions" | "course_completion" | null;
+  focusSection?:
+    | "topic_submissions"
+    | "course_completion"
+    | "learning_path_enrollments"
+    | "course_enrollments"
+    | null;
   onFocusHandled?: () => void;
   variant?: "full" | "approvals";
 };
@@ -85,6 +90,8 @@ const ActivitiesSection = ({
   const { user } = useUser();
   const topicSubmissionsRef = useRef<HTMLDivElement | null>(null);
   const courseProofsRef = useRef<HTMLDivElement | null>(null);
+  const learningPathEnrollmentsRef = useRef<HTMLDivElement | null>(null);
+  const courseEnrollmentsRef = useRef<HTMLDivElement | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -291,7 +298,15 @@ const ActivitiesSection = ({
   useEffect(() => {
     if (!focusSection) return;
     const target =
-      focusSection === "topic_submissions" ? topicSubmissionsRef.current : courseProofsRef.current;
+      focusSection === "topic_submissions"
+        ? topicSubmissionsRef.current
+        : focusSection === "course_completion"
+        ? courseProofsRef.current
+        : focusSection === "learning_path_enrollments"
+        ? learningPathEnrollmentsRef.current
+        : focusSection === "course_enrollments"
+        ? courseEnrollmentsRef.current
+        : null;
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -967,34 +982,34 @@ const ActivitiesSection = ({
 
   return (
     <div className="space-y-6">
+      <div ref={learningPathEnrollmentsRef} className="space-y-4">
+        <div>
+          <h2 className="font-display text-2xl text-white">Learning path enrollments</h2>
+          <p className="text-sm text-slate-300">
+            Review users who requested access via learning path code.
+          </p>
+        </div>
+        <DataTable
+          columns={learningPathEnrollmentColumns}
+          data={learningPathEnrollmentRows}
+          emptyMessage="No learning path enrollment requests yet."
+        />
+      </div>
+
+      <div ref={courseEnrollmentsRef} className="space-y-4">
+        <div>
+          <h2 className="font-display text-2xl text-white">Course progress</h2>
+          <p className="text-sm text-slate-300">Track enrollment progress by user.</p>
+        </div>
+        <DataTable
+          columns={progressColumns}
+          data={progressRows}
+          emptyMessage="No enrollments available."
+        />
+      </div>
+
       {variant === "full" && (
         <>
-          <div className="space-y-4">
-            <div>
-              <h2 className="font-display text-2xl text-white">Learning path enrollments</h2>
-              <p className="text-sm text-slate-300">
-                Review users who requested access via learning path code.
-              </p>
-            </div>
-            <DataTable
-              columns={learningPathEnrollmentColumns}
-              data={learningPathEnrollmentRows}
-              emptyMessage="No learning path enrollment requests yet."
-            />
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <h2 className="font-display text-2xl text-white">Course progress</h2>
-              <p className="text-sm text-slate-300">Track enrollment progress by user.</p>
-            </div>
-            <DataTable
-              columns={progressColumns}
-              data={progressRows}
-              emptyMessage="No enrollments available."
-            />
-          </div>
-
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-display text-2xl text-white">Activities</h2>
