@@ -1,16 +1,16 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useUser } from "../../hooks/useUser";
 import { superAdminService } from "../../services/superAdminService";
 import { auditLogService } from "../../services/auditLogService";
 import { adminTaskService } from "../../services/adminTaskService";
-import type { AuditLog, AdminTask, AdminUser } from "../../types/superAdmin";
+import type { AuditLog, AdminUser } from "../../types/superAdmin";
 import logoThodemy from "../../assets/images/logo-thodemy.png";
 import UsersSection from "./sections/UsersSection";
 import TopicsSection from "./sections/TopicsSection";
 import LearningPathsSection from "./sections/LearningPathsSection";
 import CoursesSection from "./sections/CoursesSection";
+import ActivitiesSection from "./sections/ActivitiesSection";
 
 // Navigation icons
 const OverviewIcon = () => (
@@ -154,10 +154,13 @@ const SuperAdminDashboard = () => {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [approvalFocus, setApprovalFocus] = useState<{
+    submissionId?: string | null;
+    section?: "topic_submissions" | "course_completion" | null;
+  } | null>(null);
 
   const { signOut } = useAuth();
   const { user } = useUser();
-  const navigate = useNavigate();
 
   const buildActivityTitle = (log: AuditLog) => {
     const details = (log.details ?? {}) as Record<string, unknown>;
@@ -430,10 +433,19 @@ const SuperAdminDashboard = () => {
   const handleReviewApproval = (item: ApprovalItem) => {
     // Navigate to the appropriate section based on approval type
     if (item.entityType === "topic_submission") {
-      setActiveNav("topics");
+      setActiveNav("approvals");
+      setApprovalFocus({ submissionId: item.id, section: "topic_submissions" });
     } else if (item.entityType === "course_completion") {
-      setActiveNav("courses");
+      setActiveNav("approvals");
+      setApprovalFocus({ section: "course_completion" });
     }
+  };
+
+  const handleOpenApprovals = (
+    section: "topic_submissions" | "course_completion" = "topic_submissions"
+  ) => {
+    setActiveNav("approvals");
+    setApprovalFocus({ section });
   };
 
   const navItems: { key: NavItem; label: string; icon: React.ReactNode }[] = [
@@ -457,7 +469,14 @@ const SuperAdminDashboard = () => {
       case "users":
         return <UsersSection />;
       case "approvals":
-        return <div className="text-slate-400">Approvals section coming soon...</div>;
+        return (
+          <ActivitiesSection
+            focusSubmissionId={approvalFocus?.submissionId ?? null}
+            focusSection={approvalFocus?.section ?? null}
+            onFocusHandled={() => setApprovalFocus(null)}
+            variant="approvals"
+          />
+        );
       case "reports":
         return <div className="text-slate-400">Reports section coming soon...</div>;
       default:
@@ -496,6 +515,7 @@ const SuperAdminDashboard = () => {
           delta={`${stats.approvalsToday} require action today`}
           deltaColor="text-red-400"
           isLoading={isLoading}
+          onClick={() => handleOpenApprovals("topic_submissions")}
         />
       </div>
 
@@ -553,9 +573,18 @@ const SuperAdminDashboard = () => {
 
         {/* Approvals Queue */}
         <div className="rounded-2xl bg-ink-800/50 border border-white/10 p-5">
-          <div className="mb-4">
-            <h3 className="text-white font-semibold">Approvals Queue</h3>
-            <p className="text-xs text-slate-500">Pending verifications</p>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-white font-semibold">Approvals Queue</h3>
+              <p className="text-xs text-slate-500">Pending verifications</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleOpenApprovals("topic_submissions")}
+              className="text-[10px] font-semibold uppercase tracking-widest text-accent-purple hover:text-accent-purple/80 transition-colors"
+            >
+              View all
+            </button>
           </div>
 
           <div className="flex flex-col gap-3 max-h-[320px] overflow-y-auto">
@@ -884,18 +913,37 @@ interface StatCardProps {
   delta: string;
   deltaColor: string;
   isLoading?: boolean;
+  onClick?: () => void;
 }
 
-const StatCard = ({ label, value, delta, deltaColor, isLoading }: StatCardProps) => (
-  <div className="rounded-2xl bg-ink-800/50 border border-white/10 p-4">
-    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</span>
-    {isLoading ? (
-      <div className="mt-2 h-7 w-16 bg-ink-700 rounded animate-pulse" />
-    ) : (
-      <p className="text-xl sm:text-2xl font-semibold text-white mt-1">{value}</p>
-    )}
-    <p className={`text-xs mt-1 ${deltaColor}`}>{delta}</p>
-  </div>
-);
+const StatCard = ({ label, value, delta, deltaColor, isLoading, onClick }: StatCardProps) => {
+  const content = (
+    <>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        {label}
+      </span>
+      {isLoading ? (
+        <div className="mt-2 h-7 w-16 bg-ink-700 rounded animate-pulse" />
+      ) : (
+        <p className="text-xl sm:text-2xl font-semibold text-white mt-1">{value}</p>
+      )}
+      <p className={`text-xs mt-1 ${deltaColor}`}>{delta}</p>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="rounded-2xl bg-ink-800/50 border border-white/10 p-4 text-left transition hover:border-accent-purple/40 hover:bg-ink-800/70"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="rounded-2xl bg-ink-800/50 border border-white/10 p-4">{content}</div>;
+};
 
 export default SuperAdminDashboard;
