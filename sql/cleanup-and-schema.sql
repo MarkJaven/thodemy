@@ -364,6 +364,11 @@ CREATE TABLE IF NOT EXISTS public.quiz_attempts (
   answers jsonb NOT NULL DEFAULT '{}'::jsonb,
   score integer,
   submitted_at timestamptz NOT NULL DEFAULT now(),
+  proof_url text,
+  proof_file_name text,
+  proof_file_type text,
+  proof_message text,
+  proof_submitted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   updated_by uuid REFERENCES auth.users(id)
@@ -902,6 +907,12 @@ CREATE POLICY "Quiz attempts insertable by owner"
   ON public.quiz_attempts FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Quiz attempts updatable by owner" ON public.quiz_attempts;
+CREATE POLICY "Quiz attempts updatable by owner"
+  ON public.quiz_attempts FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
 DROP POLICY IF EXISTS "Quiz scores manageable by superadmin" ON public.quiz_scores;
 CREATE POLICY "Quiz scores manageable by superadmin"
   ON public.quiz_scores FOR ALL
@@ -972,6 +983,10 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('course-proofs', 'course-proofs', false)
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('quiz-proofs', 'quiz-proofs', false)
+ON CONFLICT (id) DO NOTHING;
+
 -- Storage policies
 DROP POLICY IF EXISTS "Lesson proofs insert by owner" ON storage.objects;
 CREATE POLICY "Lesson proofs insert by owner"
@@ -1017,6 +1032,21 @@ DROP POLICY IF EXISTS "Course proofs read by admin" ON storage.objects;
 CREATE POLICY "Course proofs read by admin"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'course-proofs' AND public.is_admin());
+
+DROP POLICY IF EXISTS "Quiz proofs insert by owner" ON storage.objects;
+CREATE POLICY "Quiz proofs insert by owner"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'quiz-proofs' AND auth.uid() = owner);
+
+DROP POLICY IF EXISTS "Quiz proofs read by owner" ON storage.objects;
+CREATE POLICY "Quiz proofs read by owner"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'quiz-proofs' AND auth.uid() = owner);
+
+DROP POLICY IF EXISTS "Quiz proofs read by admin" ON storage.objects;
+CREATE POLICY "Quiz proofs read by admin"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'quiz-proofs' AND public.is_admin());
 
 -- ============================================
 -- DONE! Your database is now clean.

@@ -501,6 +501,16 @@ export const superAdminService = {
     return data?.signedUrl ?? null;
   },
 
+  async getQuizProofUrl(storagePath?: string | null): Promise<string | null> {
+    if (!storagePath) return null;
+    const client = requireSupabase();
+    const { data, error } = await client.storage
+      .from("quiz-proofs")
+      .createSignedUrl(storagePath, 300);
+    if (error) throw new Error(error.message);
+    return data?.signedUrl ?? null;
+  },
+
   async listEnrollments(): Promise<Enrollment[]> {
     const client = requireSupabase();
     const { data, error } = await client
@@ -615,7 +625,7 @@ export const superAdminService = {
     const { data, error } = await client
       .from("quizzes")
       .select(
-        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, created_at, updated_at"
+        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
       )
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -648,6 +658,7 @@ export const superAdminService = {
       | "start_at"
       | "end_at"
       | "show_score"
+      | "max_score"
     >;
     questions: QuestionDraft[];
   }): Promise<Quiz> {
@@ -656,7 +667,7 @@ export const superAdminService = {
       .from("quizzes")
       .insert(payload.quiz)
       .select(
-        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, created_at, updated_at"
+        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
       )
       .single();
     if (error) throw new Error(error.message);
@@ -716,7 +727,9 @@ export const superAdminService = {
     const client = requireSupabase();
     const { data, error } = await client
       .from("quiz_attempts")
-      .select("id, quiz_id, user_id, answers, score, submitted_at")
+      .select(
+        "id, quiz_id, user_id, answers, score, submitted_at, proof_url, proof_file_name, proof_file_type, proof_message, proof_submitted_at"
+      )
       .order("submitted_at", { ascending: false });
     if (error) throw new Error(error.message);
     return (data ?? []) as QuizAttempt[];

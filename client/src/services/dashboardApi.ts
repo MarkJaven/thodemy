@@ -239,8 +239,12 @@ const buildMockData = (userId: string): DashboardData => ({
       title: "Foundations Check",
       description: "Quick review from the Microsoft Form assignment.",
       total_questions: 10,
+      status: "active",
       show_score: true,
       max_score: 100,
+      link_url: "https://forms.office.com/",
+      start_at: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+      end_at: new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString(),
     },
     {
       id: "quiz-2",
@@ -248,8 +252,12 @@ const buildMockData = (userId: string): DashboardData => ({
       title: "Data Fluency",
       description: "Submit your Microsoft Forms score once graded.",
       total_questions: 8,
+      status: "active",
       show_score: false,
       max_score: 100,
+      link_url: "https://forms.office.com/",
+      start_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      end_at: new Date(Date.now() + 8 * 24 * 3600 * 1000).toISOString(),
     },
   ],
   quizScores: [
@@ -270,6 +278,10 @@ const buildMockData = (userId: string): DashboardData => ({
       answers: {},
       score: null,
       submitted_at: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+      proof_url: "demo/quiz-proof.pdf",
+      proof_file_name: "quiz-proof.pdf",
+      proof_file_type: "application/pdf",
+      proof_submitted_at: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
     },
   ],
   forms: [
@@ -663,7 +675,9 @@ export const dashboardApi = {
 
     const { data: existing, error: existingError } = await supabase
       .from("quiz_attempts")
-      .select("id, quiz_id, user_id, answers, score, submitted_at")
+      .select(
+        "id, quiz_id, user_id, answers, score, submitted_at, proof_url, proof_file_name, proof_file_type, proof_message, proof_submitted_at"
+      )
       .eq("quiz_id", payload.quizId)
       .eq("user_id", payload.userId)
       .order("submitted_at", { ascending: false })
@@ -684,7 +698,79 @@ export const dashboardApi = {
         answers: {},
         submitted_at: now,
       })
-      .select("id, quiz_id, user_id, answers, score, submitted_at")
+      .select(
+        "id, quiz_id, user_id, answers, score, submitted_at, proof_url, proof_file_name, proof_file_type, proof_message, proof_submitted_at"
+      )
+      .single();
+    if (error) {
+      throw new Error(error.message);
+    }
+    return data as QuizAttempt;
+  },
+  async submitQuizProof(payload: {
+    quizId: string;
+    userId: string;
+    file: File;
+    message?: string | null;
+  }): Promise<QuizAttempt> {
+    if (!supabase) {
+      throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+    }
+    const timestamp = Date.now();
+    const safeName = payload.file.name.replace(/\s+/g, "_");
+    const filePath = `${payload.userId}/${payload.quizId}/${timestamp}-${safeName}`;
+
+    const upload = await supabase.storage.from("quiz-proofs").upload(filePath, payload.file);
+    if (upload.error) {
+      throw new Error(upload.error.message);
+    }
+
+    const proofPayload = {
+      proof_url: filePath,
+      proof_file_name: payload.file.name,
+      proof_file_type: payload.file.type,
+      proof_message: payload.message?.trim() || null,
+      proof_submitted_at: new Date().toISOString(),
+    };
+
+    const { data: existing, error: existingError } = await supabase
+      .from("quiz_attempts")
+      .select("id")
+      .eq("quiz_id", payload.quizId)
+      .eq("user_id", payload.userId)
+      .order("submitted_at", { ascending: false })
+      .limit(1);
+    if (existingError) {
+      throw new Error(existingError.message);
+    }
+
+    if (existing && existing.length > 0) {
+      const { data, error } = await supabase
+        .from("quiz_attempts")
+        .update(proofPayload)
+        .eq("id", existing[0].id)
+        .select(
+          "id, quiz_id, user_id, answers, score, submitted_at, proof_url, proof_file_name, proof_file_type, proof_message, proof_submitted_at"
+        )
+        .single();
+      if (error) {
+        throw new Error(error.message);
+      }
+      return data as QuizAttempt;
+    }
+
+    const { data, error } = await supabase
+      .from("quiz_attempts")
+      .insert({
+        quiz_id: payload.quizId,
+        user_id: payload.userId,
+        answers: {},
+        submitted_at: new Date().toISOString(),
+        ...proofPayload,
+      })
+      .select(
+        "id, quiz_id, user_id, answers, score, submitted_at, proof_url, proof_file_name, proof_file_type, proof_message, proof_submitted_at"
+      )
       .single();
     if (error) {
       throw new Error(error.message);

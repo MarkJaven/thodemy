@@ -11,6 +11,7 @@ import TopicsSection from "./sections/TopicsSection";
 import LearningPathsSection from "./sections/LearningPathsSection";
 import CoursesSection from "./sections/CoursesSection";
 import ActivitiesSection from "./sections/ActivitiesSection";
+import QuizzesSection from "./sections/QuizzesSection";
 
 // Navigation icons
 const OverviewIcon = () => (
@@ -52,6 +53,14 @@ const UsersIcon = () => (
   </svg>
 );
 
+const QuizIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+    <path d="M12 17h.01" />
+  </svg>
+);
+
 const ApprovalsIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M9 11l3 3L22 4" />
@@ -88,7 +97,15 @@ const CloseIcon = () => (
   </svg>
 );
 
-type NavItem = "overview" | "courses" | "learning-paths" | "topics" | "users" | "approvals" | "reports";
+type NavItem =
+  | "overview"
+  | "courses"
+  | "learning-paths"
+  | "topics"
+  | "users"
+  | "quiz"
+  | "approvals"
+  | "reports";
 
 interface DashboardStats {
   activeCourses: number;
@@ -541,6 +558,7 @@ const SuperAdminDashboard = () => {
     { key: "learning-paths", label: "Learning Paths", icon: <LearningPathIcon /> },
     { key: "topics", label: "Topics", icon: <TopicsIcon /> },
     { key: "users", label: "Users", icon: <UsersIcon /> },
+    { key: "quiz", label: "Quiz", icon: <QuizIcon /> },
     { key: "approvals", label: "Approvals", icon: <ApprovalsIcon /> },
     { key: "reports", label: "Reports", icon: <ReportsIcon /> },
   ];
@@ -555,6 +573,8 @@ const SuperAdminDashboard = () => {
         return <TopicsSection />;
       case "users":
         return <UsersSection />;
+      case "quiz":
+        return <QuizzesSection />;
       case "approvals":
         return (
           <ActivitiesSection

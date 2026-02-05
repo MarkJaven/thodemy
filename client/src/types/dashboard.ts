@@ -180,6 +180,11 @@ export type QuizAttempt = {
   answers?: Record<string, string> | null;
   score?: number | null;
   submitted_at?: string | null;
+  proof_url?: string | null;
+  proof_file_name?: string | null;
+  proof_file_type?: string | null;
+  proof_message?: string | null;
+  proof_submitted_at?: string | null;
 };
 
 export type Form = {
