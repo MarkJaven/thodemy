@@ -400,11 +400,13 @@ const Dashboard = () => {
   const activeLearningPathCourseIds = useMemo(() => {
     const ids = new Set<string>();
     data.learningPaths.forEach((path) => {
-      if (!startedLearningPathIds.has(path.id)) return;
+      // Include courses from started OR approved learning paths
+      // This ensures quizzes assigned to "all" are visible even before user starts
+      if (!startedLearningPathIds.has(path.id) && !activeLearningPathIds.has(path.id)) return;
       (path.course_ids ?? []).forEach((courseId) => ids.add(courseId));
     });
     return ids;
-  }, [data.learningPaths, startedLearningPathIds]);
+  }, [data.learningPaths, startedLearningPathIds, activeLearningPathIds]);
 
   const activeEnrollmentCourseIds = useMemo(() => {
     const ids = new Set<string>();
