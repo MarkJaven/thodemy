@@ -2049,8 +2049,8 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
-          <div className="space-y-6">
+        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1.35fr_0.65fr] lg:items-start">
+          <div className="order-1 lg:order-none lg:col-start-1">
             <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Next up</p>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2118,7 +2118,129 @@ const Dashboard = () => {
                 </button>
               </div>
             </div>
+          </div>
 
+          <div className="order-2 lg:order-none lg:col-start-2">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Enrollment
+              </p>
+              <h3 className="mt-2 font-display text-lg text-white">Enroll with a code</h3>
+              <p className="mt-2 text-sm text-slate-400">
+                Enter the learning path code shared by your admin.
+              </p>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input
+                  type="text"
+                  ref={learningPathCodeRef}
+                  value={learningPathCode}
+                  onChange={(event) => setLearningPathCode(event.target.value)}
+                  placeholder="Enter learning path code"
+                  className="flex-1 min-w-[180px] rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleEnrollLearningPathByCode}
+                  disabled={Boolean(enrollingLearningPathId)}
+                  className="w-full rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20 disabled:opacity-50 sm:w-auto"
+                >
+                  {enrollingLearningPathId ? "Submitting..." : "Enroll"}
+                </button>
+              </div>
+              {(learningPathEnrollError || learningPathEnrollSuccess) && (
+                <div
+                  className={`mt-4 rounded-2xl border px-5 py-3 text-sm ${
+                    learningPathEnrollError
+                      ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                      : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                  }`}
+                >
+                  {learningPathEnrollError || learningPathEnrollSuccess}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="order-3 lg:order-none lg:col-start-2">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Learning path
+              </p>
+              <h3 className="mt-2 font-display text-lg text-white">
+                {primaryPath?.title ?? "No active learning path"}
+              </h3>
+              <p className="mt-2 text-sm text-slate-400">
+                {primaryPath?.description ?? "Enroll in a learning path to begin tracking."}
+              </p>
+              <div className="mt-4 h-2 w-full rounded-full bg-white/5">
+                <div
+                  className="h-2 rounded-full bg-accent-purple"
+                  style={{ width: `${completionPercent}%` }}
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                <span className="rounded-full border border-white/10 px-3 py-1">
+                  Start {formatDate(primaryEnrollment?.start_date)}
+                </span>
+                <span className="rounded-full border border-white/10 px-3 py-1">
+                  Target end {formatDate(primaryEnrollment?.end_date)}
+                </span>
+                <span className="rounded-full border border-white/10 px-3 py-1">
+                  {completionPercent}% complete
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="order-4 lg:order-none lg:col-start-2">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Path stats
+              </p>
+              <div className="mt-4 space-y-3 text-sm text-slate-300">
+                <div className="flex items-center justify-between">
+                  <span>Courses</span>
+                  <span className="font-semibold text-white">
+                    {primaryCourses.length || 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Hours remaining</span>
+                  <span className="font-semibold text-white">
+                    {remainingHours ? `${Math.round(remainingHours)} hrs` : "--"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="order-5 lg:order-none lg:col-start-2">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Progress breakdown
+              </p>
+              <div className="mt-4 space-y-4">
+                {breakdown.map((item) => (
+                  <div key={item.label} className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>{item.label}</span>
+                      <span className="text-white">
+                        {item.count} / {primaryTopicIds.length || 0}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-white/5">
+                      <div
+                        className={`h-2 rounded-full ${item.barClass}`}
+                        style={{ width: `${item.percent}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="order-6 lg:order-none lg:col-start-1">
             <div
               className={`rounded-2xl border bg-ink-800/70 shadow-card ${
                 learningPathPanels.track ? "border-accent-purple/30" : "border-white/10"
@@ -2159,120 +2281,6 @@ const Dashboard = () => {
                   <div className="pt-6">{renderTrackTab()}</div>
                 </div>
               )}
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                Enrollment
-              </p>
-              <h3 className="mt-2 font-display text-lg text-white">Enroll with a code</h3>
-              <p className="mt-2 text-sm text-slate-400">
-                Enter the learning path code shared by your admin.
-              </p>
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <input
-                  type="text"
-                  ref={learningPathCodeRef}
-                  value={learningPathCode}
-                  onChange={(event) => setLearningPathCode(event.target.value)}
-                  placeholder="Enter learning path code"
-                  className="flex-1 min-w-[180px] rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
-                />
-                <button
-                  type="button"
-                  onClick={handleEnrollLearningPathByCode}
-                  disabled={Boolean(enrollingLearningPathId)}
-                  className="w-full rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20 disabled:opacity-50 sm:w-auto"
-                >
-                  {enrollingLearningPathId ? "Submitting..." : "Enroll"}
-                </button>
-              </div>
-              {(learningPathEnrollError || learningPathEnrollSuccess) && (
-                <div
-                  className={`mt-4 rounded-2xl border px-5 py-3 text-sm ${
-                    learningPathEnrollError
-                      ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
-                      : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                  }`}
-                >
-                  {learningPathEnrollError || learningPathEnrollSuccess}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                Learning path
-              </p>
-              <h3 className="mt-2 font-display text-lg text-white">
-                {primaryPath?.title ?? "No active learning path"}
-              </h3>
-              <p className="mt-2 text-sm text-slate-400">
-                {primaryPath?.description ?? "Enroll in a learning path to begin tracking."}
-              </p>
-              <div className="mt-4 h-2 w-full rounded-full bg-white/5">
-                <div
-                  className="h-2 rounded-full bg-accent-purple"
-                  style={{ width: `${completionPercent}%` }}
-                />
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                <span className="rounded-full border border-white/10 px-3 py-1">
-                  Start {formatDate(primaryEnrollment?.start_date)}
-                </span>
-                <span className="rounded-full border border-white/10 px-3 py-1">
-                  Target end {formatDate(primaryEnrollment?.end_date)}
-                </span>
-                <span className="rounded-full border border-white/10 px-3 py-1">
-                  {completionPercent}% complete
-                </span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                Path stats
-              </p>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                <div className="flex items-center justify-between">
-                  <span>Courses</span>
-                  <span className="font-semibold text-white">
-                    {primaryCourses.length || 0}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Hours remaining</span>
-                  <span className="font-semibold text-white">
-                    {remainingHours ? `${Math.round(remainingHours)} hrs` : "--"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                Progress breakdown
-              </p>
-              <div className="mt-4 space-y-4">
-                {breakdown.map((item) => (
-                  <div key={item.label} className="space-y-2">
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span>{item.label}</span>
-                      <span className="text-white">
-                        {item.count} / {primaryTopicIds.length || 0}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-white/5">
-                      <div
-                        className={`h-2 rounded-full ${item.barClass}`}
-                        style={{ width: `${item.percent}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </div>
