@@ -61,7 +61,8 @@ const listTopics = async (req, res, next) => {
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
-    if (userRole !== "superadmin" && userId) {
+    // Only restrict list for ordinary users. Admins and superadmins see all topics.
+    if (userRole === "user" && userId) {
       query = query.or(`author_id.eq.${userId},created_by.eq.${userId}`);
     }
 
