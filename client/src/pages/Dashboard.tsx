@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FormList from "../components/dashboard/FormList";
 import ProfileSetupModal from "../components/auth/ProfileSetupModal";
@@ -228,6 +228,8 @@ const Dashboard = () => {
     enroll: false,
     track: false,
   });
+  const learningPathCodeRef = useRef<HTMLInputElement | null>(null);
+  const didInitLearningPathTrack = useRef(false);
 
   // Redirect to auth page if not logged in or not verified
   useEffect(() => {
@@ -261,6 +263,7 @@ const Dashboard = () => {
     fetchProfile();
   }, [user]);
 
+
   const [activityEntries, setActivityEntries] = useState<Activity[]>([]);
   const [quizScoreEntries, setQuizScoreEntries] = useState<QuizScore[]>([]);
   const [quizAttemptEntries, setQuizAttemptEntries] = useState<QuizAttempt[]>([]);
@@ -273,6 +276,18 @@ const Dashboard = () => {
   const [quizStatusError, setQuizStatusError] = useState<string | null>(null);
   const [learningPathEnrollError, setLearningPathEnrollError] = useState<string | null>(null);
   const [learningPathEnrollSuccess, setLearningPathEnrollSuccess] = useState<string | null>(null);
+
+  const resetLearningPathFilters = () => {
+    setSelectedLearningPathId("all");
+    setSelectedCourseId("all");
+    setSelectedTopicId("all");
+  };
+
+  const openEnrollmentPanel = () => {
+    setActiveNav("learning-path");
+    setLearningPathPanels((prev) => ({ ...prev, track: true }));
+    requestAnimationFrame(() => learningPathCodeRef.current?.focus());
+  };
   const [learningPathCode, setLearningPathCode] = useState("");
   const [deleteActivityError, setDeleteActivityError] = useState<string | null>(null);
   const [startingTopicId, setStartingTopicId] = useState<string | null>(null);
@@ -454,6 +469,14 @@ const Dashboard = () => {
       ).length,
     [learningPathEnrollmentEntries]
   );
+
+  useEffect(() => {
+    if (didInitLearningPathTrack.current) return;
+    if (activeLearningPathCount > 0) {
+      setLearningPathPanels((prev) => ({ ...prev, track: true }));
+      didInitLearningPathTrack.current = true;
+    }
+  }, [activeLearningPathCount]);
 
   const recentSubmissions = useMemo(
     () =>
@@ -915,8 +938,15 @@ const Dashboard = () => {
 
     if (activeLearningPaths.length === 0) {
       return (
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300">
-          No active learning paths yet. Request enrollment to start tracking progress.
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300 space-y-3">
+          <p>No active learning paths yet. Enter a learning path code to start tracking progress.</p>
+          <button
+            type="button"
+            onClick={openEnrollmentPanel}
+            className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white transition hover:bg-white/20"
+          >
+            Enroll with a code
+          </button>
         </div>
       );
     }
@@ -1024,11 +1054,7 @@ const Dashboard = () => {
             {isFiltered && (
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedLearningPathId("all");
-                  setSelectedCourseId("all");
-                  setSelectedTopicId("all");
-                }}
+                onClick={resetLearningPathFilters}
                 className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white transition hover:bg-white/20"
               >
                 Clear filters
@@ -1084,16 +1110,28 @@ const Dashboard = () => {
           </div>
           {isFiltered && (
             <p className="mt-3 text-xs text-slate-400">
-              Showing {selectedLearningPath ? selectedLearningPath.title : "all learning paths"}
-              {selectedCourse ? ` ? ${selectedCourse.title}` : " ? all courses"}
-              {selectedTopicLabel ? ` ? ${selectedTopicLabel}` : " ? all topics"}
+              Showing{" "}
+              {selectedLearningPath ? selectedLearningPath.title : "all learning paths"}
+              {" / "}
+              {selectedCourse ? selectedCourse.title : "all courses"}
+              {" / "}
+              {selectedTopicLabel ?? "all topics"}
             </p>
           )}
         </div>
 
         {filteredLearningPaths.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300">
-            No learning paths match this filter selection yet.
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300 space-y-3">
+            <p>No learning paths match this filter selection yet.</p>
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={resetLearningPathFilters}
+                className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white transition hover:bg-white/20"
+              >
+                Reset filters
+              </button>
+            )}
           </div>
         ) : (
           filteredLearningPaths.map((path) => {
@@ -1320,6 +1358,14 @@ const Dashboard = () => {
                                       "Completed"
                                     );
                                   });
+                                  const missingPrereqLabels = missingPrereqs
+                                    .map((id) => topicLookup.get(id)?.title)
+                                    .filter((title): title is string => Boolean(title));
+                                  const topicIndex = orderedTopics.findIndex(
+                                    (item) => item.id === topic.id
+                                  );
+                                  const previousTopicLabel =
+                                    topicIndex > 0 ? orderedTopics[topicIndex - 1]?.title : null;
                                   const isApproved = status === "Completed";
                                   const isPending = submission?.status === "pending";
                                   const isNeedsInfo = submission?.status === "in_progress";
@@ -1378,12 +1424,17 @@ const Dashboard = () => {
                                       </div>
                                       {isSequenceLocked && (
                                         <p className="mt-3 text-xs text-slate-400">
-                                          Await approval of the previous topic before continuing.
+                                          Await approval of{" "}
+                                          {previousTopicLabel ?? "the previous topic"} before
+                                          continuing.
                                         </p>
                                       )}
                                       {!isSequenceLocked && missingPrereqs.length > 0 && (
                                         <p className="mt-3 text-xs text-slate-400">
-                                          Complete prerequisites before continuing.
+                                          Complete prerequisites
+                                          {missingPrereqLabels.length
+                                            ? `: ${missingPrereqLabels.join(", ")}`
+                                            : " before continuing."}
                                         </p>
                                       )}
                                       {isPending && (
@@ -1790,13 +1841,22 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
-            <h3 className="font-display text-xl text-white">Next Steps</h3>
-            <div className="mt-4 space-y-3">
-              {nextSteps.map((step) => (
-                <div key={step} className="flex items-center gap-3 text-sm text-slate-200">
-                  <span className="h-2 w-2 rounded-sm bg-accent-purple" />
-                  <span>{step}</span>
+        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+          <h3 className="font-display text-xl text-white">Next Steps</h3>
+          {!hasActiveEnrollment && (
+            <button
+              type="button"
+              onClick={openEnrollmentPanel}
+              className="mt-4 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white transition hover:bg-white/20"
+            >
+              Enroll in a learning path
+            </button>
+          )}
+          <div className="mt-4 space-y-3">
+            {nextSteps.map((step) => (
+              <div key={step} className="flex items-center gap-3 text-sm text-slate-200">
+                <span className="h-2 w-2 rounded-sm bg-accent-purple" />
+                <span>{step}</span>
                 </div>
               ))}
             </div>
@@ -1836,6 +1896,7 @@ const Dashboard = () => {
           <div className="mt-4 flex flex-wrap gap-3">
             <input
               type="text"
+              ref={learningPathCodeRef}
               value={learningPathCode}
               onChange={(event) => setLearningPathCode(event.target.value)}
               placeholder="Enter learning path code"
@@ -1998,13 +2059,13 @@ const Dashboard = () => {
             onClick={() => setActiveNav("forms")}
             className="text-xs font-semibold uppercase tracking-[0.25em] text-accent-purple"
           >
-            Open modal
+            Go to forms
           </button>
         </div>
         <div className="mt-5 space-y-3">
           {latestSubmissions.length === 0 ? (
             <p className="text-sm text-slate-400">
-              No requests yet. Open the Request Certificate modal to submit proof.
+              No requests yet. Submit proof from Forms to create your first request.
             </p>
           ) : (
             latestSubmissions
@@ -2369,7 +2430,7 @@ const Dashboard = () => {
             <img
               src={logoThodemy}
               alt="Thodemy"
-              className="h-20 w-auto object-contain shrink-0"
+              className="h-32 w-auto object-contain shrink-0"
               loading="lazy"
             />
             <button
