@@ -21,6 +21,9 @@ const AuthPage = () => {
   const [loadingTarget, setLoadingTarget] = useState(null);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
+  const [roleCheckStatus, setRoleCheckStatus] = useState("idle");
+  const [roleCheckError, setRoleCheckError] = useState(null);
+  const [roleCheckUserId, setRoleCheckUserId] = useState(null);
 
   /**
    * Reset view state when the auth mode changes.
@@ -29,6 +32,9 @@ const AuthPage = () => {
   const resetModeState = () => {
     setError(null);
     setInfo(null);
+    setRoleCheckStatus("idle");
+    setRoleCheckError(null);
+    setRoleCheckUserId(null);
 
     if (!authService.isConfigured) {
       setError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
@@ -77,6 +83,8 @@ const AuthPage = () => {
     event.preventDefault();
     setError(null);
     setInfo(null);
+    setRoleCheckStatus("idle");
+    setRoleCheckError(null);
 
     if (!authService.isConfigured) {
       setError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
@@ -101,10 +109,45 @@ const AuthPage = () => {
         sessionService.createSession(userId).catch(() => {});
         sessionService.announceSession().catch(() => {});
       }
-      const role = await Promise.race([
-        superAdminService.getCurrentRole(session?.user?.id),
-        new Promise((resolve) => setTimeout(() => resolve(null), 6000)),
+      setRoleCheckUserId(userId ?? null);
+      await resolveRoleAndRedirect(userId);
+    } catch (signInError) {
+      setError(signInError.message);
+      setLoadingTarget(null);
+    }
+  };
+
+  const resolveRoleAndRedirect = async (userId) => {
+    if (!userId) {
+      setRoleCheckStatus("failed");
+      setRoleCheckError("We could not confirm your access level. Please try again.");
+      setLoadingTarget(null);
+      return;
+    }
+
+    setRoleCheckStatus("pending");
+    setRoleCheckError(null);
+    setLoadingTarget("role");
+
+    try {
+      const result = await Promise.race([
+        superAdminService.getCurrentRole(userId).then((role) => ({ role })),
+        new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 6000)),
       ]);
+
+      if (result.timeout) {
+        setRoleCheckStatus("failed");
+        setRoleCheckError(
+          "We could not confirm your access level yet. You can retry or continue to your learner dashboard."
+        );
+        setLoadingTarget(null);
+        return;
+      }
+
+      const role = result.role;
+      setRoleCheckStatus("idle");
+      setLoadingTarget(null);
+
       if (role === "superadmin") {
         window.location.replace("/super-admin");
       } else if (role === "admin") {
@@ -112,15 +155,23 @@ const AuthPage = () => {
       } else {
         window.location.replace("/dashboard");
       }
-    } catch (signInError) {
-      setError(signInError.message);
-    } finally {
+    } catch (roleError) {
+      setRoleCheckStatus("failed");
+      setRoleCheckError(
+        roleError instanceof Error
+          ? roleError.message
+          : "We could not confirm your access level yet."
+      );
       setLoadingTarget(null);
     }
   };
 
-  const isSubmitting = loadingTarget === "form";
+  const isSubmitting = loadingTarget === "form" || loadingTarget === "role";
   const isConfigured = authService.isConfigured;
+  const handleRoleRetry = () => {
+    if (!roleCheckUserId) return;
+    resolveRoleAndRedirect(roleCheckUserId);
+  };
 
   return (
     <div className="min-h-screen bg-ink-900 text-slate-100">
@@ -300,6 +351,60 @@ const AuthPage = () => {
                     </div>
                   )}
 
+                  {roleCheckStatus === "pending" && (
+                    <div className="flex items-start gap-3 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className="mt-0.5 flex-shrink-0"
+                      >
+                        <path d="M12 6v6l4 2" />
+                        <circle cx="12" cy="12" r="10" />
+                      </svg>
+                      <span>Finalizing your access. This can take a few seconds.</span>
+                    </div>
+                  )}
+
+                  {roleCheckStatus === "failed" && (
+                    <div className="space-y-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                      <p>{roleCheckError}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={handleRoleRetry}
+                          className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                        >
+                          Retry
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => window.location.replace("/dashboard")}
+                          className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                        >
+                          Learner dashboard
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => window.location.replace("/admin")}
+                          className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                        >
+                          Admin console
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => window.location.replace("/super-admin")}
+                          className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                        >
+                          Super admin
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     type="submit"
                     disabled={isSubmitting || !isConfigured}
@@ -311,7 +416,9 @@ const AuthPage = () => {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                         </svg>
-                        <span>Signing in...</span>
+                        <span>
+                          {loadingTarget === "role" ? "Finalizing access..." : "Signing in..."}
+                        </span>
                       </>
                     ) : (
                       <>

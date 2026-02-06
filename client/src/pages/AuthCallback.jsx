@@ -49,7 +49,41 @@ const AuthCallback = () => {
               ? "We could not complete the sign-in. Please try again."
               : "Hang tight while we secure your session."}
           </p>
-          {error && <p className="mt-4 text-xs text-rose-300">{error}</p>}
+          {error && (
+            <>
+              <p className="mt-4 text-xs text-rose-300">{error}</p>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.location.replace("/dashboard")}
+                  className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                >
+                  Learner dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.location.replace("/admin")}
+                  className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                >
+                  Admin console
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.location.replace("/super-admin")}
+                  className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                >
+                  Super admin
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

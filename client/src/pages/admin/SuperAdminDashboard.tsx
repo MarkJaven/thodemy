@@ -244,6 +244,16 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "Not set";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Not set";
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(parsed);
+  };
+
   const resolveEnrollmentBucket = (
     status?: string | null
   ): "active" | "pending" | "completed" | "dropped" => {
@@ -607,6 +617,12 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const showSetupGuide =
+    !isLoading &&
+    stats.activeCourses === 0 &&
+    stats.topicsLibrary === 0 &&
+    stats.activeLearners === 0;
+
   const renderOverview = () => (
     <div className="flex flex-col gap-6">
       {/* Stats Row */}
@@ -641,6 +657,45 @@ const SuperAdminDashboard = () => {
           onClick={() => handleOpenApprovals("learning_path_enrollments")}
         />
       </div>
+
+      {showSetupGuide && (
+        <div className="rounded-2xl bg-ink-800/50 border border-white/10 p-5">
+          <h3 className="text-white font-semibold">Getting started</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Set up your first learning path and enroll trainees to begin tracking progress.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <button
+              type="button"
+              onClick={() => setActiveNav("learning-paths")}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-white/10"
+            >
+              Create learning paths
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveNav("courses")}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-white/10"
+            >
+              Add courses
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveNav("topics")}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-white/10"
+            >
+              Add topics
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveNav("users")}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-white/10"
+            >
+              Enroll learners
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Middle Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -728,6 +783,9 @@ const SuperAdminDashboard = () => {
                     )}
                     <p className="text-[10px] text-accent-purple/80 truncate mt-0.5">
                       {item.type} · {item.detail}
+                    </p>
+                    <p className="text-[10px] text-slate-500 truncate">
+                      Submitted {formatDateTime(item.createdAt)}
                     </p>
                   </div>
                   <button
