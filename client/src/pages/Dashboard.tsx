@@ -2050,7 +2050,7 @@ const Dashboard = () => {
         </div>
 
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1.35fr_0.65fr] lg:items-start">
-          <div className="order-1 lg:order-none lg:col-start-1">
+          <div className="order-1 lg:order-none lg:col-start-1 lg:row-start-1">
             <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Next up</p>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2120,7 +2120,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="order-2 lg:order-none lg:col-start-2">
+          <div className="order-2 lg:order-none lg:col-start-2 lg:row-start-1">
             <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                 Enrollment
@@ -2161,7 +2161,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="order-3 lg:order-none lg:col-start-2">
+          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-2">
             <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                 Learning path
@@ -2192,7 +2192,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="order-4 lg:order-none lg:col-start-2">
+          <div className="order-4 lg:order-none lg:col-start-2 lg:row-start-3">
             <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                 Path stats
@@ -2214,7 +2214,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="order-5 lg:order-none lg:col-start-2">
+          <div className="order-5 lg:order-none lg:col-start-2 lg:row-start-4">
             <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                 Progress breakdown
@@ -2240,7 +2240,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="order-6 lg:order-none lg:col-start-1">
+          <div className="order-6 lg:order-none lg:col-start-1 lg:row-start-2">
             <div
               className={`rounded-2xl border bg-ink-800/70 shadow-card ${
                 learningPathPanels.track ? "border-accent-purple/30" : "border-white/10"
