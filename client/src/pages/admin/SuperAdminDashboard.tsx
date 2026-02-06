@@ -198,6 +198,7 @@ const SuperAdminDashboard = () => {
     const details = (log.details ?? {}) as Record<string, unknown>;
     const title = typeof details.title === "string" ? details.title : null;
     const from = typeof details.from === "string" ? details.from : null;
+    const topicTitle = typeof details.topic_title === "string" ? details.topic_title : null;
     const to =
       typeof details.to === "string"
         ? details.to
@@ -234,6 +235,14 @@ const SuperAdminDashboard = () => {
           return `${entity} status updated → ${to}`;
         }
         return `${entity} status updated`;
+      case "totals_recalculated":
+        if (title && topicTitle) {
+          return `Recalculated ${entity} totals: ${title} (topic updated: ${topicTitle})`;
+        }
+        if (title) {
+          return `Recalculated ${entity} totals: ${title}`;
+        }
+        return `Recalculated ${entity} totals`;
       case "soft_deleted":
       case "deleted":
       case "deactivated":
@@ -1128,3 +1137,5 @@ const StatCard = ({ label, value, delta, deltaColor, isLoading, onClick }: StatC
 };
 
 export default SuperAdminDashboard;
+
+
