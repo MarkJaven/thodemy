@@ -7,6 +7,7 @@ const {
 } = require("../utils/errors");
 const { auditLogService } = require("../services/auditLogService");
 const { topicService } = require("../services/topicService");
+const { calculateCourseTotals, calculateCourseEndDate } = require("../utils/courseUtils");
 
 const TOPIC_SELECT_FIELDS =
   "id, title, description, link_url, time_allocated, time_unit, pre_requisites, co_requisites, status, certificate_file_url, start_date, end_date, author_id, edited, deleted_at, created_at, updated_at, created_by, updated_by";
@@ -49,6 +50,242 @@ const attachAuthors = async (topics) => {
       author: authorId ? authorMap.get(authorId) ?? null : null,
     };
   });
+};
+
+const dedupeIds = (ids) =>
+  Array.from(
+    new Set((Array.isArray(ids) ? ids : []).map((id) => String(id)).filter(Boolean))
+  );
+
+const updateLearningPathEnrollmentSchedules = async (pathTotals, userId) => {
+  if (!pathTotals || pathTotals.size === 0) {
+    return;
+  }
+  const pathIds = Array.from(pathTotals.keys());
+  const { data: enrollments, error: enrollError } = await supabaseAdmin
+    .from("learning_path_enrollments")
+    .select("id, learning_path_id, start_date, end_date")
+    .in("learning_path_id", pathIds);
+  if (enrollError) {
+    throw new ExternalServiceError("Unable to load learning path enrollments", {
+      code: enrollError.code,
+      details: enrollError.message,
+    });
+  }
+  if (!enrollments || enrollments.length === 0) {
+    return;
+  }
+
+  for (const enrollment of enrollments) {
+    const startDateValue = enrollment.start_date ? new Date(enrollment.start_date) : null;
+    if (!startDateValue || Number.isNaN(startDateValue.getTime())) {
+      continue;
+    }
+    const totalDays = Number(pathTotals.get(String(enrollment.learning_path_id)) || 0);
+    const endDate =
+      totalDays > 0 ? calculateCourseEndDate(startDateValue, totalDays) : startDateValue;
+    const enrollmentUpdate = {
+      end_date: endDate ? endDate.toISOString() : null,
+    };
+    if (userId) {
+      enrollmentUpdate.updated_by = userId;
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from("learning_path_enrollments")
+      .update(enrollmentUpdate)
+      .eq("id", enrollment.id);
+    if (updateError) {
+      throw new ExternalServiceError("Unable to update learning path enrollment schedule", {
+        code: updateError.code,
+        details: updateError.message,
+      });
+    }
+  }
+};
+
+const syncCourseAndLearningPathTotalsForTopic = async (topicId, userId, topicTitle) => {
+  const { data: courses, error: courseError } = await supabaseAdmin
+    .from("courses")
+    .select("id, title, topic_ids, start_at, total_hours, total_days")
+    .contains("topic_ids", [String(topicId)]);
+  if (courseError) {
+    throw new ExternalServiceError("Unable to load courses for topic totals", {
+      code: courseError.code,
+      details: courseError.message,
+    });
+  }
+  if (!courses || courses.length === 0) {
+    return;
+  }
+
+  const allTopicIds = dedupeIds(courses.flatMap((course) => course.topic_ids ?? []));
+  if (allTopicIds.length === 0) {
+    return;
+  }
+
+  const { data: topics, error: topicError } = await supabaseAdmin
+    .from("topics")
+    .select("id, time_allocated, time_unit")
+    .in("id", allTopicIds);
+  if (topicError) {
+    throw new ExternalServiceError("Unable to load topics for course totals", {
+      code: topicError.code,
+      details: topicError.message,
+    });
+  }
+
+  const topicsById = new Map((topics ?? []).map((topic) => [String(topic.id), topic]));
+  const updatedCourseIds = [];
+
+  for (const course of courses ?? []) {
+    const courseTopicIds = Array.isArray(course.topic_ids)
+      ? course.topic_ids.map((id) => String(id))
+      : [];
+    const courseTopics = courseTopicIds.map((id) => topicsById.get(id)).filter(Boolean);
+
+    if (courseTopics.length !== courseTopicIds.length) {
+      throw new ExternalServiceError("Unable to resolve all topics for course totals", {
+        details: `Course ${course.id} is missing topic metadata.`,
+      });
+    }
+
+    const { totalHours, totalDays } = calculateCourseTotals(courseTopics);
+    const startDate = course.start_at ? new Date(course.start_at) : null;
+    const endDate =
+      startDate && totalDays > 0 ? calculateCourseEndDate(startDate, totalDays) : null;
+
+    const courseUpdate = {
+      total_hours: totalHours,
+      total_days: totalDays,
+      end_at: endDate ? endDate.toISOString() : null,
+    };
+    if (userId) {
+      courseUpdate.updated_by = userId;
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from("courses")
+      .update(courseUpdate)
+      .eq("id", course.id);
+    if (updateError) {
+      throw new ExternalServiceError("Unable to update course totals", {
+        code: updateError.code,
+        details: updateError.message,
+      });
+    }
+
+    updatedCourseIds.push(course.id);
+
+    await auditLogService.recordAuditLog({
+      entityType: "course",
+      entityId: course.id,
+      action: "totals_recalculated",
+      actorId: userId,
+      details: {
+        title: course.title,
+        topic_id: topicId,
+        topic_title: topicTitle ?? null,
+        total_hours_from: Number(course.total_hours) || 0,
+        total_hours_to: totalHours,
+        total_days_from: Number(course.total_days) || 0,
+        total_days_to: totalDays,
+      },
+    });
+  }
+
+  if (updatedCourseIds.length === 0) {
+    return;
+  }
+
+  const { data: learningPaths, error: lpError } = await supabaseAdmin
+    .from("learning_paths")
+    .select("id, title, course_ids, start_at, total_hours, total_days")
+    .overlaps("course_ids", updatedCourseIds);
+  if (lpError) {
+    throw new ExternalServiceError("Unable to load learning paths for course totals", {
+      code: lpError.code,
+      details: lpError.message,
+    });
+  }
+  if (!learningPaths || learningPaths.length === 0) {
+    return;
+  }
+
+  const allCourseIds = dedupeIds(learningPaths.flatMap((path) => path.course_ids ?? []));
+  if (allCourseIds.length === 0) {
+    return;
+  }
+
+  const { data: lpCourses, error: lpCourseError } = await supabaseAdmin
+    .from("courses")
+    .select("id, total_hours")
+    .in("id", allCourseIds);
+  if (lpCourseError) {
+    throw new ExternalServiceError("Unable to load courses for learning path totals", {
+      code: lpCourseError.code,
+      details: lpCourseError.message,
+    });
+  }
+
+  const courseHoursById = new Map(
+    (lpCourses ?? []).map((course) => [String(course.id), Number(course.total_hours) || 0])
+  );
+
+  const learningPathTotals = new Map();
+  for (const path of learningPaths ?? []) {
+    const courseIds = Array.isArray(path.course_ids)
+      ? path.course_ids.map((id) => String(id))
+      : [];
+    const totalHours = courseIds.reduce(
+      (sum, id) => sum + (courseHoursById.get(id) ?? 0),
+      0
+    );
+    const totalDays = totalHours > 0 ? Math.ceil(totalHours / 8) : 0;
+    const startDate = path.start_at ? new Date(path.start_at) : null;
+    const endDate =
+      startDate && totalDays > 0 ? calculateCourseEndDate(startDate, totalDays) : null;
+
+    const pathUpdate = {
+      total_hours: totalHours,
+      total_days: totalDays,
+      end_at: endDate ? endDate.toISOString() : null,
+    };
+    if (userId) {
+      pathUpdate.updated_by = userId;
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from("learning_paths")
+      .update(pathUpdate)
+      .eq("id", path.id);
+    if (updateError) {
+      throw new ExternalServiceError("Unable to update learning path totals", {
+        code: updateError.code,
+        details: updateError.message,
+      });
+    }
+
+    await auditLogService.recordAuditLog({
+      entityType: "learning_path",
+      entityId: path.id,
+      action: "totals_recalculated",
+      actorId: userId,
+      details: {
+        title: path.title,
+        topic_id: topicId,
+        topic_title: topicTitle ?? null,
+        total_hours_from: Number(path.total_hours) || 0,
+        total_hours_to: totalHours,
+        total_days_from: Number(path.total_days) || 0,
+        total_days_to: totalDays,
+      },
+    });
+
+    learningPathTotals.set(String(path.id), totalDays);
+  }
+
+  await updateLearningPathEnrollmentSchedules(learningPathTotals, userId);
 };
 
 const listTopics = async (req, res, next) => {
@@ -174,6 +411,10 @@ const updateTopic = async (req, res, next) => {
     const payload = req.body || {};
 
     const existing = await topicService.getTopicById(topicId, { includeDeleted: true });
+    const timeChanged =
+      (payload.time_allocated !== undefined &&
+        Number(payload.time_allocated) !== Number(existing.time_allocated ?? 0)) ||
+      (payload.time_unit !== undefined && payload.time_unit !== existing.time_unit);
 
     if (payload.title !== undefined) {
       const trimmedTitle = String(payload.title || "").trim();
@@ -231,6 +472,14 @@ const updateTopic = async (req, res, next) => {
         code: error.code,
         details: error.message,
       });
+    }
+
+    if (timeChanged) {
+      await syncCourseAndLearningPathTotalsForTopic(
+        topicId,
+        userId,
+        existing.title ? String(existing.title) : null
+      );
     }
 
     if (payload.status !== undefined && payload.status !== existing.status) {

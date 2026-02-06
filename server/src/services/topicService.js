@@ -12,7 +12,7 @@ const getTopicById = async (topicId, options = {}) => {
   let query = supabaseAdmin
     .from("topics")
     .select(
-      "id, title, status, deleted_at, certificate_file_url, start_date, end_date, author_id, edited"
+      "id, title, status, deleted_at, time_allocated, time_unit, certificate_file_url, start_date, end_date, author_id, edited"
     )
     .eq("id", topicId);
 
