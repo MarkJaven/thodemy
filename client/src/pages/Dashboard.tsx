@@ -200,7 +200,7 @@ const getTopicStatusLabel = (
 
 const topicStatusStyles: Record<string, string> = {
   Completed: "border-emerald-400/40 text-emerald-200",
-  "Pending Review": "border-amber-400/40 text-amber-200",
+  "Pending Review": "border-accent-purple/40 text-accent-purple",
   "Needs Info": "border-sky-400/40 text-sky-200",
   Rejected: "border-rose-400/40 text-rose-200",
   "In Progress": "border-white/10 text-slate-200",
@@ -1251,7 +1251,7 @@ const Dashboard = () => {
                       type="button"
                       onClick={() => handleStartLearningPath(path)}
                       disabled={startingLearningPathId === enrollment?.id}
-                      className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-emerald-200 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-full border border-accent-purple/40 bg-accent-purple/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-accent-purple transition hover:bg-accent-purple/20 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {startingLearningPathId === enrollment?.id
                         ? "Starting..."
@@ -1438,7 +1438,7 @@ const Dashboard = () => {
                                         </p>
                                       )}
                                       {isPending && (
-                                        <p className="mt-3 text-xs text-amber-200">
+                                        <p className="mt-3 text-xs text-accent-purple/80">
                                           Certificate submitted. Awaiting review.
                                         </p>
                                       )}
@@ -1870,106 +1870,415 @@ const Dashboard = () => {
     setLearningPathPanels((prev) => ({ ...prev, [panel]: !prev[panel] }));
   };
 
-  const renderLearningPathSection = () => (
-    <div className="space-y-8">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-          Learning Path
-        </p>
-        <h2 className="mt-2 font-display text-2xl text-white">
-          Enroll, track, and submit progress
-        </h2>
-        <p className="mt-2 text-sm text-slate-400">
-          Enter your enrollment code below, then expand Progress to review courses.
-        </p>
-      </div>
+  const renderLearningPathSection = () => {
+    const activeLearningPaths = data.learningPaths.filter((path) =>
+      activeLearningPathIds.has(path.id)
+    );
+    const sortedActiveLearningPaths = activeLearningPaths
+      .slice()
+      .sort((a, b) => a.title.localeCompare(b.title));
+    const primaryPath = sortedActiveLearningPaths[0] ?? null;
+    const primaryEnrollment = primaryPath
+      ? learningPathEnrollmentLookup.get(primaryPath.id)
+      : null;
+    const primaryCourses = primaryPath
+      ? ((primaryPath.course_ids ?? [])
+          .map((courseId) => courseLookup.get(courseId))
+          .filter(Boolean) as Course[])
+      : [];
+    const primaryTopicIds = Array.from(
+      new Set(primaryCourses.flatMap((course) => course?.topic_ids ?? []))
+    );
+    const primaryTopics = primaryTopicIds
+      .map((topicId) => topicLookup.get(topicId))
+      .filter(Boolean) as Topic[];
 
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-            Learning Path Code
-          </p>
-          <h3 className="mt-2 font-display text-xl text-white">Enroll with a code</h3>
-          <p className="mt-2 text-sm text-slate-400">
-            Enter the learning path code shared by your admin.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <input
-              type="text"
-              ref={learningPathCodeRef}
-              value={learningPathCode}
-              onChange={(event) => setLearningPathCode(event.target.value)}
-              placeholder="Enter learning path code"
-              className="flex-1 min-w-[220px] rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
-            />
+    const completedTopics = primaryTopicIds.filter((topicId) => {
+      const progress = progressLookup.get(topicId);
+      const submission = topicSubmissionLookup.get(topicId);
+      return getTopicStatusLabel(progress, submission) === "Completed";
+    }).length;
+
+    const completionPercent = primaryTopicIds.length
+      ? Math.round((completedTopics / primaryTopicIds.length) * 100)
+      : 0;
+
+    const statusCounts = primaryTopicIds.reduce(
+      (acc, topicId) => {
+        const progress = progressLookup.get(topicId);
+        const submission = topicSubmissionLookup.get(topicId);
+        const status = getTopicStatusLabel(progress, submission);
+        if (status === "Completed") {
+          acc.completed += 1;
+        } else if (["In Progress", "Pending Review", "Needs Info"].includes(status)) {
+          acc.inProgress += 1;
+        } else {
+          acc.notStarted += 1;
+        }
+        return acc;
+      },
+      { completed: 0, inProgress: 0, notStarted: 0 }
+    );
+
+    const remainingHours = primaryTopics.reduce((total, topic) => {
+      const progress = progressLookup.get(topic.id);
+      const submission = topicSubmissionLookup.get(topic.id);
+      if (getTopicStatusLabel(progress, submission) === "Completed") return total;
+      const unit = topic.time_unit ?? "hours";
+      const value = Number(topic.time_allocated ?? 0);
+      if (!value || Number.isNaN(value)) return total;
+      const hours = unit === "days" ? value * 8 : value;
+      return total + hours;
+    }, 0);
+
+    const nextUp = (() => {
+      if (!primaryPath || primaryCourses.length === 0) return null;
+      const hasStarted = Boolean(primaryEnrollment?.start_date);
+      let previousCourseComplete = true;
+      for (let courseIndex = 0; courseIndex < primaryCourses.length; courseIndex += 1) {
+        const course = primaryCourses[courseIndex];
+        const orderedTopics = (course.topic_ids ?? [])
+          .map((id) => topicLookup.get(id))
+          .filter(Boolean) as Topic[];
+        const completedCount = orderedTopics.filter((topic) => {
+          const progress = progressLookup.get(topic.id);
+          const submission = topicSubmissionLookup.get(topic.id);
+          return getTopicStatusLabel(progress, submission) === "Completed";
+        }).length;
+        const isCourseComplete =
+          orderedTopics.length > 0 && completedCount === orderedTopics.length;
+        const isCourseUnlocked = hasStarted && (courseIndex === 0 || previousCourseComplete);
+        let previousTopicComplete = true;
+        let previousTopicLabel: string | null = null;
+
+        for (const topic of orderedTopics) {
+          const progress = progressLookup.get(topic.id);
+          const submission = topicSubmissionLookup.get(topic.id);
+          const status = getTopicStatusLabel(progress, submission);
+          const isApproved = status === "Completed";
+          const isSequenceLocked = !previousTopicComplete;
+          const prereqs = topic.pre_requisites ?? [];
+          const missingPrereqs = prereqs.filter((id) => {
+            const prereqProgress = progressLookup.get(id);
+            const prereqSubmission = topicSubmissionLookup.get(id);
+            return getTopicStatusLabel(prereqProgress, prereqSubmission) !== "Completed";
+          });
+          const missingPrereqLabels = missingPrereqs
+            .map((id) => topicLookup.get(id)?.title)
+            .filter((title): title is string => Boolean(title));
+          const isTopicUnlocked =
+            isCourseUnlocked && !isSequenceLocked && missingPrereqs.length === 0;
+          if (!isApproved) {
+            let note: string | null = null;
+            if (!hasStarted) {
+              note = "Start the learning path to unlock this topic.";
+            } else if (isSequenceLocked) {
+              note = `Await approval of ${previousTopicLabel ?? "the previous topic"} before continuing.`;
+            } else if (missingPrereqLabels.length > 0) {
+              note = `Complete prerequisites: ${missingPrereqLabels.join(", ")}.`;
+            }
+            return {
+              topic,
+              course,
+              status,
+              note,
+              canContinue: Boolean(topic.link_url) && isTopicUnlocked,
+            };
+          }
+          previousTopicComplete = isApproved;
+          previousTopicLabel = topic.title;
+        }
+
+        previousCourseComplete = isCourseComplete;
+      }
+      return null;
+    })();
+
+    const breakdownTotal = primaryTopicIds.length || 1;
+    const breakdown = [
+      {
+        label: "Completed",
+        count: statusCounts.completed,
+        percent: Math.round((statusCounts.completed / breakdownTotal) * 100),
+        barClass: "bg-accent-purple",
+      },
+      {
+        label: "In progress",
+        count: statusCounts.inProgress,
+        percent: Math.round((statusCounts.inProgress / breakdownTotal) * 100),
+        barClass: "bg-accent-purple/70",
+      },
+      {
+        label: "Not started",
+        count: statusCounts.notStarted,
+        percent: Math.round((statusCounts.notStarted / breakdownTotal) * 100),
+        barClass: "bg-accent-purple/40",
+      },
+    ];
+
+    const handleNextUpAction = () => {
+      if (nextUp?.topic && nextUp.canContinue) {
+        handleOpenTopic(nextUp.topic);
+        return;
+      }
+      setLearningPathPanels((prev) => ({ ...prev, track: true }));
+    };
+
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+              Learning Path
+            </p>
+            <h2 className="mt-2 font-display text-2xl text-white">
+              Enroll, track, and submit progress
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Keep your learning path moving with clear next steps and progress tracking.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={handleEnrollLearningPathByCode}
-              disabled={Boolean(enrollingLearningPathId)}
-              className="rounded-full border border-white/10 bg-white/10 px-6 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20 disabled:opacity-50"
+              onClick={() => setLearningPathPanels((prev) => ({ ...prev, track: true }))}
+              className="rounded-full bg-accent-purple px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-accent-purple/90"
             >
-              {enrollingLearningPathId ? "Submitting..." : "Enroll"}
+              Resume module
             </button>
           </div>
-          {(learningPathEnrollError || learningPathEnrollSuccess) && (
-            <div
-              className={`mt-4 rounded-2xl border px-5 py-3 text-sm ${
-                learningPathEnrollError
-                  ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
-                  : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-              }`}
-            >
-              {learningPathEnrollError || learningPathEnrollSuccess}
-            </div>
-          )}
         </div>
 
-        <div
-          className={`rounded-2xl border bg-ink-800/70 shadow-card ${
-            learningPathPanels.track ? "border-accent-purple/30" : "border-white/10"
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => toggleLearningPathPanel("track")}
-            className="flex w-full items-start justify-between gap-4 px-6 py-5 text-left transition hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40"
-            aria-expanded={learningPathPanels.track}
-            aria-controls="learning-path-track-panel"
-          >
-            <div className="flex items-start gap-4">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                  Progress
-                </p>
-                <h3 className="mt-2 font-display text-xl text-white">
-                  Track courses & topic submissions
-                </h3>
-                <p className="mt-2 text-sm text-slate-400">
-                  Filter by learning path, course, or topic to stay focused.
-                </p>
+        <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Next up</p>
+              <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-xl text-white">
+                    {nextUp
+                      ? `${primaryPath?.title ?? "Learning Path"} · ${nextUp.course?.title ?? "Course"}`
+                      : hasActiveEnrollment
+                      ? "You are all caught up"
+                      : "No active learning path yet"}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-400">
+                    {nextUp
+                      ? nextUp.topic.title
+                      : hasActiveEnrollment
+                      ? "All topics are completed or awaiting review."
+                      : "Enroll in a learning path to see your next module."}
+                  </p>
+                </div>
+                {nextUp && (
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${
+                      topicStatusStyles[nextUp.status] ?? "border-white/10 text-slate-300"
+                    }`}
+                  >
+                    {nextUp.status}
+                  </span>
+                )}
+              </div>
+              {nextUp?.note && (
+                <p className="mt-3 text-xs text-slate-400">{nextUp.note}</p>
+              )}
+              <div className="mt-4 h-2 w-full rounded-full bg-white/5">
+                <div
+                  className="h-2 rounded-full bg-accent-purple"
+                  style={{ width: `${completionPercent}%` }}
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                <span className="rounded-full border border-white/10 px-3 py-1">
+                  {primaryCourses.length} courses
+                </span>
+                <span className="rounded-full border border-white/10 px-3 py-1">
+                  {completedTopics}/{primaryTopicIds.length} topics complete
+                </span>
+                <span className="rounded-full border border-white/10 px-3 py-1">
+                  {completionPercent}% overall
+                </span>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleNextUpAction}
+                  disabled={!nextUp?.canContinue && !hasActiveEnrollment}
+                  className="rounded-full bg-accent-purple px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-accent-purple/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {nextUp?.canContinue ? "Continue" : "View path"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLearningPathPanels((prev) => ({ ...prev, track: true }))}
+                  className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                >
+                  View progress
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-slate-400">
-              {learningPathPanels.track ? "Hide" : "Expand"}
-              <ChevronDownIcon
-                className={`h-4 w-4 transition ${
-                  learningPathPanels.track ? "rotate-180" : ""
-                }`}
-              />
-            </div>
-          </button>
-          {learningPathPanels.track && (
+
             <div
-              id="learning-path-track-panel"
-              className="border-t border-white/5 px-6 pb-6"
+              className={`rounded-2xl border bg-ink-800/70 shadow-card ${
+                learningPathPanels.track ? "border-accent-purple/30" : "border-white/10"
+              }`}
             >
-              <div className="pt-6">{renderTrackTab()}</div>
+              <div className="flex w-full items-start justify-between gap-4 px-6 py-5">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                    Progress
+                  </p>
+                  <h3 className="mt-2 font-display text-xl text-white">
+                    Track courses & topic submissions
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-400">
+                    Filter by learning path, course, or topic to stay focused.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleLearningPathPanel("track")}
+                  className="flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-slate-400"
+                  aria-expanded={learningPathPanels.track}
+                  aria-controls="learning-path-track-panel"
+                >
+                  {learningPathPanels.track ? "Hide" : "Expand"}
+                  <ChevronDownIcon
+                    className={`h-4 w-4 transition ${
+                      learningPathPanels.track ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+              </div>
+              {learningPathPanels.track && (
+                <div
+                  id="learning-path-track-panel"
+                  className="border-t border-white/5 px-6 pb-6"
+                >
+                  <div className="pt-6">{renderTrackTab()}</div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Enrollment
+              </p>
+              <h3 className="mt-2 font-display text-lg text-white">Enroll with a code</h3>
+              <p className="mt-2 text-sm text-slate-400">
+                Enter the learning path code shared by your admin.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <input
+                  type="text"
+                  ref={learningPathCodeRef}
+                  value={learningPathCode}
+                  onChange={(event) => setLearningPathCode(event.target.value)}
+                  placeholder="Enter learning path code"
+                  className="flex-1 min-w-[180px] rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleEnrollLearningPathByCode}
+                  disabled={Boolean(enrollingLearningPathId)}
+                  className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20 disabled:opacity-50"
+                >
+                  {enrollingLearningPathId ? "Submitting..." : "Enroll"}
+                </button>
+              </div>
+              {(learningPathEnrollError || learningPathEnrollSuccess) && (
+                <div
+                  className={`mt-4 rounded-2xl border px-5 py-3 text-sm ${
+                    learningPathEnrollError
+                      ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                      : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                  }`}
+                >
+                  {learningPathEnrollError || learningPathEnrollSuccess}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Learning path
+              </p>
+              <h3 className="mt-2 font-display text-lg text-white">
+                {primaryPath?.title ?? "No active learning path"}
+              </h3>
+              <p className="mt-2 text-sm text-slate-400">
+                {primaryPath?.description ?? "Enroll in a learning path to begin tracking."}
+              </p>
+              <div className="mt-4 h-2 w-full rounded-full bg-white/5">
+                <div
+                  className="h-2 rounded-full bg-accent-purple"
+                  style={{ width: `${completionPercent}%` }}
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                <span className="rounded-full border border-white/10 px-3 py-1">
+                  Start {formatDate(primaryEnrollment?.start_date)}
+                </span>
+                <span className="rounded-full border border-white/10 px-3 py-1">
+                  Target end {formatDate(primaryEnrollment?.end_date)}
+                </span>
+                <span className="rounded-full border border-white/10 px-3 py-1">
+                  {completionPercent}% complete
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Path stats
+              </p>
+              <div className="mt-4 space-y-3 text-sm text-slate-300">
+                <div className="flex items-center justify-between">
+                  <span>Courses</span>
+                  <span className="font-semibold text-white">
+                    {primaryCourses.length || 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Hours remaining</span>
+                  <span className="font-semibold text-white">
+                    {remainingHours ? `${Math.round(remainingHours)} hrs` : "--"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Progress breakdown
+              </p>
+              <div className="mt-4 space-y-4">
+                {breakdown.map((item) => (
+                  <div key={item.label} className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>{item.label}</span>
+                      <span className="text-white">
+                        {item.count} / {primaryTopicIds.length || 0}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-white/5">
+                      <div
+                        className={`h-2 rounded-full ${item.barClass}`}
+                        style={{ width: `${item.percent}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderProjectsSection = () => {
     const hasProjectItems =
@@ -2556,9 +2865,6 @@ const Dashboard = () => {
                 <p className="mt-3 max-w-xl text-sm text-slate-300">
                   Track course progress, submit forms, and stay on top of quizzes.
                 </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-xs uppercase tracking-[0.3em] text-slate-400">
-                {userLoading ? "Loading user..." : "Aligned with admin enrollments"}
               </div>
             </div>
 
