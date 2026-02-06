@@ -1,87 +1,67 @@
-import { supabase } from "../lib/supabaseClient";
+import { apiClient, getApiErrorMessage } from "../lib/apiClient";
 import type { AdminTask } from "../types/superAdmin";
 
-const requireSupabase = () => {
-  if (!supabase) {
-    throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-  }
-  return supabase;
-};
+const TASKS_ENDPOINT = "/api/admin/tasks";
 
 export const adminTaskService = {
   async listTasks(): Promise<AdminTask[]> {
-    const client = requireSupabase();
-    const { data, error } = await client
-      .from("admin_tasks")
-      .select("id, title, description, priority, status, created_by, completed_at, created_at, updated_at")
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as AdminTask[];
+    try {
+      const { data } = await apiClient.get(TASKS_ENDPOINT);
+      return (data?.tasks ?? []) as AdminTask[];
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async listPendingTasks(): Promise<AdminTask[]> {
-    const client = requireSupabase();
-    const { data, error } = await client
-      .from("admin_tasks")
-      .select("id, title, description, priority, status, created_by, completed_at, created_at, updated_at")
-      .eq("status", "pending")
-      .order("priority", { ascending: false })
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as AdminTask[];
+    try {
+      const { data } = await apiClient.get(TASKS_ENDPOINT, {
+        params: { status: "pending" },
+      });
+      return (data?.tasks ?? []) as AdminTask[];
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async createTask(payload: Pick<AdminTask, "title" | "description" | "priority">): Promise<AdminTask> {
-    const client = requireSupabase();
-    const { data: userData } = await client.auth.getUser();
-    const { data, error } = await client
-      .from("admin_tasks")
-      .insert({
-        title: payload.title,
-        description: payload.description ?? null,
-        priority: payload.priority ?? "medium",
-        status: "pending",
-        created_by: userData?.user?.id ?? null,
-      })
-      .select("id, title, description, priority, status, created_by, completed_at, created_at, updated_at")
-      .single();
-    if (error) throw new Error(error.message);
-    return data as AdminTask;
+    try {
+      const { data } = await apiClient.post(TASKS_ENDPOINT, payload);
+      return data?.task as AdminTask;
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async completeTask(taskId: string): Promise<void> {
-    const client = requireSupabase();
-    const { error } = await client
-      .from("admin_tasks")
-      .update({ status: "completed", completed_at: new Date().toISOString() })
-      .eq("id", taskId);
-    if (error) throw new Error(error.message);
+    try {
+      await apiClient.post(`${TASKS_ENDPOINT}/${taskId}/complete`);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async reopenTask(taskId: string): Promise<void> {
-    const client = requireSupabase();
-    const { error } = await client
-      .from("admin_tasks")
-      .update({ status: "pending", completed_at: null })
-      .eq("id", taskId);
-    if (error) throw new Error(error.message);
+    try {
+      await apiClient.post(`${TASKS_ENDPOINT}/${taskId}/reopen`);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async updateTask(taskId: string, payload: Partial<Pick<AdminTask, "title" | "description" | "priority">>): Promise<void> {
-    const client = requireSupabase();
-    const { error } = await client
-      .from("admin_tasks")
-      .update(payload)
-      .eq("id", taskId);
-    if (error) throw new Error(error.message);
+    try {
+      await apiClient.patch(`${TASKS_ENDPOINT}/${taskId}`, payload);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async deleteTask(taskId: string): Promise<void> {
-    const client = requireSupabase();
-    const { error } = await client
-      .from("admin_tasks")
-      .delete()
-      .eq("id", taskId);
-    if (error) throw new Error(error.message);
+    try {
+      await apiClient.delete(`${TASKS_ENDPOINT}/${taskId}`);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 };
