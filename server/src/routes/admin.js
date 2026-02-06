@@ -5,6 +5,7 @@ const { requireAdmin } = require("../middleware/requireAdmin");
 const { requireSuperAdmin } = require("../middleware/requireSuperAdmin");
 const { validateRequest } = require("../middleware/validation");
 const { adminController } = require("../controllers/adminController");
+const { adminTaskController } = require("../controllers/adminTaskController");
 const { courseController } = require("../controllers/courseController");
 const { learningPathController } = require("../controllers/learningPathController");
 const {
@@ -12,6 +13,12 @@ const {
   validateUpdateUser,
   validateUserIdParam,
 } = require("../validators/adminValidator");
+const {
+  validateTaskIdParam,
+  validateCreateTask,
+  validateUpdateTask,
+  validateTaskStatusQuery,
+} = require("../validators/taskValidator");
 
 const router = express.Router();
 
@@ -46,6 +53,67 @@ router.patch(
   validateUpdateUser,
   validateRequest,
   adminController.updateUser
+);
+
+router.get(
+  "/tasks",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  validateTaskStatusQuery,
+  validateRequest,
+  adminTaskController.listTasks
+);
+
+router.post(
+  "/tasks",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  validateCreateTask,
+  validateRequest,
+  adminTaskController.createTask
+);
+
+router.patch(
+  "/tasks/:taskId",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  validateTaskIdParam,
+  validateUpdateTask,
+  validateRequest,
+  adminTaskController.updateTask
+);
+
+router.post(
+  "/tasks/:taskId/complete",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  validateTaskIdParam,
+  validateRequest,
+  adminTaskController.completeTask
+);
+
+router.post(
+  "/tasks/:taskId/reopen",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  validateTaskIdParam,
+  validateRequest,
+  adminTaskController.reopenTask
+);
+
+router.delete(
+  "/tasks/:taskId",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  validateTaskIdParam,
+  validateRequest,
+  adminTaskController.deleteTask
 );
 
 router.get("/courses", generalLimiter, requireAuth, requireAdmin, courseController.listCourses);
