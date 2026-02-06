@@ -6,7 +6,7 @@ A web-based training management system built with the PERN stack (PostgreSQL, Ex
 
 - **Multi-Role System**: User, Admin, and Super Admin roles
 - **Learning Management**: Modules, lessons, activities, and quizzes
-- **Certificate Generation**: Automatic certificate creation upon lesson completion
+<!-- - **Certificate Generation**: Automatic certificate creation upon lesson completion -->
 - **Activity Verification**: Admin approval system for user submissions
 - **Dashboard & Analytics**: Progress tracking and performance monitoring
 - **User Management**: Comprehensive admin controls
