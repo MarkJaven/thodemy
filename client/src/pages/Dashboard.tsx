@@ -938,7 +938,7 @@ const Dashboard = () => {
 
     if (activeLearningPaths.length === 0) {
       return (
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300 space-y-3">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300 space-y-3 sm:p-6">
           <p>No active learning paths yet. Enter a learning path code to start tracking progress.</p>
           <button
             type="button"
@@ -1038,7 +1038,7 @@ const Dashboard = () => {
             {progressError}
           </div>
         )}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
@@ -1121,7 +1121,7 @@ const Dashboard = () => {
         </div>
 
         {filteredLearningPaths.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300 space-y-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300 space-y-3 sm:p-6">
             <p>No learning paths match this filter selection yet.</p>
             {isFiltered && (
               <button
@@ -1218,7 +1218,7 @@ const Dashboard = () => {
             return (
               <details
                 key={`learning-path-track-${path.id}`}
-                className="group rounded-2xl border border-white/10 bg-white/5 p-6"
+                className="group rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-6"
               >
                 <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1245,7 +1245,7 @@ const Dashboard = () => {
                     </div>
                   </div>
                 </summary>
-                <div className="mt-4 space-y-5">
+                  <div className="mt-4 space-y-5">
                   {canStart && (
                     <button
                       type="button"
@@ -1298,12 +1298,12 @@ const Dashboard = () => {
                         });
 
                         return (
-                          <details
-                            key={`course-track-${path.id}-${course?.id}`}
-                            className={`group rounded-2xl border border-white/10 bg-white/5 p-5 ${
-                              isCourseLocked ? "opacity-60" : ""
-                            }`}
-                          >
+                      <details
+                        key={`course-track-${path.id}-${course?.id}`}
+                        className={`group rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5 ${
+                          isCourseLocked ? "opacity-60" : ""
+                        }`}
+                      >
                             <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div>
@@ -1392,7 +1392,7 @@ const Dashboard = () => {
                                   return (
                                     <div
                                       key={`topic-${path.id}-${course?.id}-${topic.id}`}
-                                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
+                                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm sm:px-4"
                                     >
                                       <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div>
@@ -2026,7 +2026,7 @@ const Dashboard = () => {
 
     return (
       <div className="space-y-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
               Learning Path
@@ -2038,11 +2038,11 @@ const Dashboard = () => {
               Keep your learning path moving with clear next steps and progress tracking.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
             <button
               type="button"
               onClick={() => setLearningPathPanels((prev) => ({ ...prev, track: true }))}
-              className="rounded-full bg-accent-purple px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-accent-purple/90"
+              className="w-full rounded-full bg-accent-purple px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-accent-purple/90 sm:w-auto"
             >
               Resume module
             </button>
@@ -2051,9 +2051,9 @@ const Dashboard = () => {
 
         <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
           <div className="space-y-6">
-            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Next up</p>
-              <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="font-display text-xl text-white">
                     {nextUp
@@ -2100,19 +2100,19 @@ const Dashboard = () => {
                   {completionPercent}% overall
                 </span>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
                 <button
                   type="button"
                   onClick={handleNextUpAction}
                   disabled={!nextUp?.canContinue && !hasActiveEnrollment}
-                  className="rounded-full bg-accent-purple px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-accent-purple/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-full bg-accent-purple px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-accent-purple/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   {nextUp?.canContinue ? "Continue" : "View path"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setLearningPathPanels((prev) => ({ ...prev, track: true }))}
-                  className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                  className="w-full rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 sm:w-auto"
                 >
                   View progress
                 </button>
@@ -2124,7 +2124,7 @@ const Dashboard = () => {
                 learningPathPanels.track ? "border-accent-purple/30" : "border-white/10"
               }`}
             >
-              <div className="flex w-full items-start justify-between gap-4 px-6 py-5">
+              <div className="flex w-full flex-col gap-4 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:py-5">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                     Progress
@@ -2139,7 +2139,7 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleLearningPathPanel("track")}
-                  className="flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-slate-400"
+                  className="flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-slate-400 sm:justify-end"
                   aria-expanded={learningPathPanels.track}
                   aria-controls="learning-path-track-panel"
                 >
@@ -2154,7 +2154,7 @@ const Dashboard = () => {
               {learningPathPanels.track && (
                 <div
                   id="learning-path-track-panel"
-                  className="border-t border-white/5 px-6 pb-6"
+                  className="border-t border-white/5 px-4 pb-6 sm:px-6"
                 >
                   <div className="pt-6">{renderTrackTab()}</div>
                 </div>
@@ -2163,7 +2163,7 @@ const Dashboard = () => {
           </div>
 
           <div className="space-y-6">
-            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                 Enrollment
               </p>
@@ -2171,7 +2171,7 @@ const Dashboard = () => {
               <p className="mt-2 text-sm text-slate-400">
                 Enter the learning path code shared by your admin.
               </p>
-              <div className="mt-4 flex flex-wrap gap-3">
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <input
                   type="text"
                   ref={learningPathCodeRef}
@@ -2184,7 +2184,7 @@ const Dashboard = () => {
                   type="button"
                   onClick={handleEnrollLearningPathByCode}
                   disabled={Boolean(enrollingLearningPathId)}
-                  className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20 disabled:opacity-50"
+                  className="w-full rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20 disabled:opacity-50 sm:w-auto"
                 >
                   {enrollingLearningPathId ? "Submitting..." : "Enroll"}
                 </button>
@@ -2202,7 +2202,7 @@ const Dashboard = () => {
               )}
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                 Learning path
               </p>
@@ -2231,7 +2231,7 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                 Path stats
               </p>
@@ -2251,7 +2251,7 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 shadow-card sm:p-6">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                 Progress breakdown
               </p>
