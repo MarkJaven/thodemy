@@ -103,10 +103,7 @@ const QuizzesSection = () => {
   };
 
   const handleSave = async () => {
-    if (!formState.course_id) {
-      setActionError("Course is required. All users means all enrolled in the selected course.");
-      return;
-    }
+    // Course is now optional - if no course is selected, quiz is visible to ALL enrolled learners (any course)
     const maxScoreValue = formState.max_score ? Number(formState.max_score) : null;
     if (formState.max_score && Number.isNaN(maxScoreValue)) {
       setActionError("Max score must be a number.");
@@ -402,7 +399,7 @@ const QuizzesSection = () => {
                   : `Course: ${courseName} · All enrolled`
                 : userEmail
                   ? `User: ${userEmail}`
-                  : "All enrolled"}
+                  : "All enrolled (any course)"}
             </span>
           );
         },
@@ -808,7 +805,7 @@ const QuizzesSection = () => {
                 }
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               >
-                <option value="">All enrolled in course</option>
+                <option value="">All enrolled</option>
                 {users.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.email}
@@ -816,7 +813,7 @@ const QuizzesSection = () => {
                 ))}
               </select>
               <span className="mt-2 block text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                Leave blank to assign the quiz to all enrolled users for the selected course.
+                Leave blank to assign to all enrolled users (in selected course, or any course if none selected).
               </span>
             </label>
             <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
@@ -832,7 +829,7 @@ const QuizzesSection = () => {
               />
             </label>
             <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-              Course
+              Course (optional)
               <select
                 value={formState.course_id}
                 onChange={(event) =>
@@ -840,13 +837,16 @@ const QuizzesSection = () => {
                 }
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               >
-                <option value="">Select course</option>
+                <option value="">Any course</option>
                 {courses.map((course) => (
                   <option key={course.id} value={course.id}>
                     {course.title}
                   </option>
                 ))}
               </select>
+              <span className="mt-2 block text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                Leave blank to show quiz to all enrolled learners regardless of course.
+              </span>
             </label>
             <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
               Start date/time

@@ -201,8 +201,8 @@ const AdminDashboard = () => {
       learning_path_enrollment: "Learning Path Enrollment",
       topic_submission: "Topic Submission",
       course_completion_request: "Course Completion Proof",
-      activity: "Activity",
-      activity_submission: "Activity Submission",
+      activity: "Project",
+      activity_submission: "Project Submission",
     };
     const entity = entityLabels[log.entity_type] ?? log.entity_type.replace(/_/g, " ");
 
@@ -236,7 +236,7 @@ const AdminDashboard = () => {
       case "removed":
         return title ? `Removed ${entity}: ${title}` : `Removed ${entity}`;
       default:
-        return title ? `${entity}: ${title}` : `${entity} activity`;
+        return title ? `${entity}: ${title}` : `${entity} project`;
     }
   };
 
@@ -579,7 +579,7 @@ const AdminDashboard = () => {
     { key: "learning-paths", label: "Learning Paths", icon: <LearningPathIcon /> },
     { key: "topics", label: "Topics", icon: <TopicsIcon /> },
     { key: "users", label: "Users", icon: <UsersIcon /> },
-    { key: "activity", label: "Activity", icon: <ActivityIcon /> },
+    { key: "activity", label: "Projects", icon: <ActivityIcon /> },
     { key: "quiz", label: "Quiz", icon: <QuizIcon /> },
     { key: "forms", label: "Forms", icon: <FormsIcon /> },
   ];
