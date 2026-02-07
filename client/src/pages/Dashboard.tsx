@@ -501,15 +501,19 @@ const Dashboard = () => {
   );
 
   const visibleQuizzes = data.quizzes.filter((quiz) => {
+    // Quiz is assigned to a specific user - only that user sees it
     if (quiz.assigned_user_id && quiz.assigned_user_id === user?.id) {
       return true;
     }
     if (quiz.assigned_user_id && quiz.assigned_user_id !== user?.id) {
       return false;
     }
+    // Quiz has NO assigned user - check course assignment
+    // If no course either, it's for ALL enrolled learners (any course)
     if (!quiz.assigned_user_id && !quiz.course_id) {
-      return true;
+      return hasActiveEnrollment;
     }
+    // Quiz is assigned to a specific course - only enrolled users see it
     if (quiz.course_id) {
       return activeEnrollmentCourseIds.has(quiz.course_id);
     }
@@ -564,16 +568,32 @@ const Dashboard = () => {
   }, [quizAttemptLookup, quizScoreLookup, visibleQuizzes]);
 
   const assignedActivities = activityEntries.filter((activity) => {
-    const isAssignment = !activity.file_name && !activity.file_type;
+    const isSubmission = Boolean(
+      activity.file_name ||
+        activity.file_type ||
+        activity.github_url ||
+        activity.reviewed_at ||
+        activity.activity_id ||
+        (activity.score !== null && activity.score !== undefined)
+    );
+    const isAssignment = !isSubmission;
     if (!isAssignment) return false;
     const assignedToUser = activity.user_id === user?.id;
     const assignedToCourse =
       activity.course_id && activeEnrollmentCourseIds.has(activity.course_id);
-    return assignedToUser || assignedToCourse;
+    // Activity with no user and no course: visible to anyone with any active enrollment
+    const globalActivity = !activity.user_id && !activity.course_id && hasActiveEnrollment;
+    return assignedToUser || assignedToCourse || globalActivity;
   });
 
   const uploadedActivities = activityEntries.filter(
-    (activity) => activity.file_name || activity.file_type
+    (activity) =>
+      activity.file_name ||
+      activity.file_type ||
+      activity.github_url ||
+      activity.reviewed_at ||
+      activity.activity_id ||
+      (activity.score !== null && activity.score !== undefined)
   );
 
   const handleStartTopic = async (topic: Topic) => {
@@ -752,32 +772,49 @@ const Dashboard = () => {
     }
   };
 
-  const handleUploadActivity = async (payload: { title: string; file: File }) => {
+  const handleUploadActivity = async (payload: {
+    title: string;
+    file?: File | null;
+    activityId?: string | null;
+    description?: string | null;
+    githubUrl?: string | null;
+  }) => {
     setActivityError(null);
     setDeleteActivityError(null);
     setIsUploading(true);
     try {
-      await dashboardApi.submitActivity({
+      const submission = await dashboardApi.submitActivity({
         title: payload.title,
-        fileName: payload.file.name,
-        fileType: payload.file.type,
+        file: payload.file ?? null,
+        activityId: payload.activityId ?? null,
+        description: payload.description ?? null,
+        githubUrl: payload.githubUrl ?? null,
       });
       setActivityEntries((prev) => [
         {
-          id: `activity-${Date.now()}`,
-          user_id: user?.id ?? "demo-user",
-          title: payload.title,
-          file_name: payload.file.name,
-          file_type: payload.file.type,
-          file_url: "",
-          created_at: new Date().toISOString(),
+          id: submission?.id ?? `activity-${Date.now()}`,
+          user_id: submission?.user_id ?? user?.id ?? "demo-user",
+          course_id: submission?.course_id ?? null,
+          activity_id: submission?.activity_id ?? payload.activityId ?? null,
+          title: submission?.title ?? payload.title,
+          description: submission?.description ?? payload.description ?? null,
+          github_url: submission?.github_url ?? payload.githubUrl ?? null,
+          status: submission?.status ?? "pending",
+          score: submission?.score ?? null,
+          reviewed_at: submission?.reviewed_at ?? null,
+          review_notes: submission?.review_notes ?? null,
+          file_name: submission?.file_name ?? payload.file?.name ?? null,
+          file_type: submission?.file_type ?? payload.file?.type ?? null,
+          file_url: submission?.storage_path ?? "",
+          created_at: submission?.created_at ?? new Date().toISOString(),
         },
         ...prev,
       ]);
     } catch (submitError) {
       const message =
-        submitError instanceof Error ? submitError.message : "Unable to upload activity.";
+        submitError instanceof Error ? submitError.message : "Unable to upload project.";
       setActivityError(message);
+      throw submitError;
     } finally {
       setIsUploading(false);
     }
@@ -799,7 +836,7 @@ const Dashboard = () => {
       setActivityEntries((prev) => prev.filter((entry) => entry.id !== activityId));
     } catch (deleteError) {
       const message =
-        deleteError instanceof Error ? deleteError.message : "Unable to delete activity.";
+        deleteError instanceof Error ? deleteError.message : "Unable to delete project.";
       setDeleteActivityError(message);
     } finally {
       setDeletingActivityId(null);
@@ -1514,34 +1551,10 @@ const Dashboard = () => {
 
     return (
       <div className="space-y-6">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-          <h3 className="font-display text-xl text-white">Assigned activities</h3>
-          <p className="mt-2 text-sm text-slate-400">
-            Activities assigned to your enrolled courses.
-          </p>
-          <div className="mt-4 space-y-3">
-            {assignedActivities.length === 0 ? (
-              <p className="text-sm text-slate-400">No activities assigned yet.</p>
-            ) : (
-              assignedActivities.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
-                >
-                  <div>
-                    <p className="text-white">{activity.title}</p>
-                    <p className="text-xs text-slate-400">{activity.description}</p>
-                  </div>
-                  <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                    {activity.status ?? "active"}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
         <UploadWidget
           activities={uploadedActivities}
+          assignedProjects={assignedActivities}
+          showForm={true}
           onUpload={handleUploadActivity}
           onDelete={handleDeleteActivity}
           isUploading={isUploading}
@@ -1812,14 +1825,14 @@ const Dashboard = () => {
         <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
           <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
             <div className="flex items-center justify-between">
-              <h3 className="font-display text-xl text-white">Module Activity</h3>
+              <h3 className="font-display text-xl text-white">Project activity</h3>
               <span className="text-xs font-semibold uppercase tracking-[0.25em] text-accent-purple">
                 This week
               </span>
             </div>
             <div className="mt-4 space-y-3">
               {recentActivities.length === 0 ? (
-                <p className="text-sm text-slate-400">No recent activity yet.</p>
+                <p className="text-sm text-slate-400">No recent project activity yet.</p>
               ) : (
                 recentActivities.map((activity) => (
                   <div
@@ -2288,7 +2301,7 @@ const Dashboard = () => {
     const hasProjectItems =
       assignedActivities.length > 0 || uploadedActivities.length > 0;
     const projectDescription = hasProjectItems
-      ? "Review assigned activities and upload learning artifacts."
+      ? "Review assigned projects and upload learning artifacts."
       : "Projects will appear here once assigned. Upload learning artifacts in the meantime.";
 
     return (

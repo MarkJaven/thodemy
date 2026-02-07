@@ -181,8 +181,14 @@ export type ActivitySubmission = {
   user_id: string;
   course_id?: string | null;
   title: string;
-  file_name: string;
-  file_type: string;
+  description?: string | null;
+  github_url?: string | null;
+  status?: string | null;
+  score?: number | null;
+  reviewed_at?: string | null;
+  review_notes?: string | null;
+  file_name?: string | null;
+  file_type?: string | null;
   storage_path?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
