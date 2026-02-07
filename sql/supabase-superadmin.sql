@@ -242,13 +242,30 @@ create table if not exists public.activity_submissions (
   user_id uuid not null references auth.users(id) on delete cascade,
   course_id uuid references public.courses(id) on delete set null,
   title text not null,
-  file_name text not null,
-  file_type text not null,
+  description text,
+  github_url text,
+  status text default 'pending',
+  score numeric,
+  reviewed_at timestamptz,
+  reviewed_by uuid references auth.users(id),
+  review_notes text,
+  file_name text,
+  file_type text,
   storage_path text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users(id)
 );
+
+alter table public.activity_submissions add column if not exists description text;
+alter table public.activity_submissions add column if not exists github_url text;
+alter table public.activity_submissions add column if not exists status text default 'pending';
+alter table public.activity_submissions add column if not exists score numeric;
+alter table public.activity_submissions add column if not exists reviewed_at timestamptz;
+alter table public.activity_submissions add column if not exists reviewed_by uuid references auth.users(id);
+alter table public.activity_submissions add column if not exists review_notes text;
+alter table public.activity_submissions alter column file_name drop not null;
+alter table public.activity_submissions alter column file_type drop not null;
 
 alter table public.quizzes add column if not exists description text;
 alter table public.quizzes add column if not exists assigned_user_id uuid references auth.users(id);
@@ -261,6 +278,7 @@ alter table public.quizzes add column if not exists updated_at timestamptz not n
 alter table public.quizzes add column if not exists created_by uuid references auth.users(id);
 alter table public.quizzes add column if not exists updated_by uuid references auth.users(id);
 alter table public.quizzes add column if not exists show_score boolean not null default false;
+alter table public.quizzes alter column course_id drop not null;
 alter table public.quizzes alter column created_by set default auth.uid();
 alter table public.quizzes alter column updated_by set default auth.uid();
 
@@ -836,10 +854,13 @@ create policy "Activities manageable by superadmin"
   with check (public.is_superadmin());
 
 drop policy if exists "Activities readable by admin" on public.activities;
-create policy "Activities readable by admin"
+
+drop policy if exists "Activities manageable by admin" on public.activities;
+create policy "Activities manageable by admin"
   on public.activities
-  for select
-  using (public.is_admin());
+  for all
+  using (public.is_admin())
+  with check (public.is_admin());
 
 drop policy if exists "Activities readable by enrolled user" on public.activities;
 
@@ -848,11 +869,40 @@ create policy "Activities readable by enrolled user"
   for select
   using (
     auth.uid() = user_id
-    or course_id in (
-      select course_id
-      from public.enrollments
-      where user_id = auth.uid()
-        and status in ('approved', 'active', 'completed')
+    or (
+      -- Activity with no course and no user: visible to anyone with any active enrollment or learning path
+      user_id is null
+      and course_id is null
+      and (
+        exists (
+          select 1
+          from public.enrollments
+          where user_id = auth.uid()
+            and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+        )
+        or exists (
+          select 1
+          from public.learning_path_enrollments
+          where user_id = auth.uid()
+            and status in ('pending', 'approved', 'active', 'completed')
+        )
+      )
+    )
+    or (
+      -- Activity assigned to a course: visible to users enrolled in that course (direct or via learning path)
+      course_id in (
+        select course_id
+        from public.enrollments
+        where user_id = auth.uid()
+          and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+      )
+      or course_id in (
+        select unnest(lp.course_ids)
+        from public.learning_path_enrollments lpe
+        join public.learning_paths lp on lp.id = lpe.learning_path_id
+        where lpe.user_id = auth.uid()
+          and lpe.status in ('pending', 'approved', 'active', 'completed')
+      )
     )
   );
 
@@ -862,6 +912,13 @@ create policy "Activity submissions manageable by superadmin"
   for all
   using (public.is_superadmin())
   with check (public.is_superadmin());
+
+drop policy if exists "Activity submissions manageable by admin" on public.activity_submissions;
+create policy "Activity submissions manageable by admin"
+  on public.activity_submissions
+  for all
+  using (public.is_admin())
+  with check (public.is_admin());
 
 drop policy if exists "Activity submissions readable by admin" on public.activity_submissions;
 create policy "Activity submissions readable by admin"
@@ -909,12 +966,41 @@ create policy "Quizzes readable by assignee"
   using (
     assigned_user_id = auth.uid()
     or (
+      -- Quiz with no course and no assigned user: visible to anyone with any active enrollment or learning path
       assigned_user_id is null
-      and course_id in (
-        select course_id
-        from public.enrollments
-        where user_id = auth.uid()
-          and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+      and course_id is null
+      and (
+        exists (
+          select 1
+          from public.enrollments
+          where user_id = auth.uid()
+            and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+        )
+        or exists (
+          select 1
+          from public.learning_path_enrollments
+          where user_id = auth.uid()
+            and status in ('pending', 'approved', 'active', 'completed')
+        )
+      )
+    )
+    or (
+      -- Quiz assigned to a specific course: visible to users enrolled in that course (direct or via learning path)
+      assigned_user_id is null
+      and (
+        course_id in (
+          select course_id
+          from public.enrollments
+          where user_id = auth.uid()
+            and status in ('pending', 'approved', 'active', 'completed', 'enrolled')
+        )
+        or course_id in (
+          select unnest(lp.course_ids)
+          from public.learning_path_enrollments lpe
+          join public.learning_paths lp on lp.id = lpe.learning_path_id
+          where lpe.user_id = auth.uid()
+            and lpe.status in ('pending', 'approved', 'active', 'completed')
+        )
       )
     )
   );
@@ -949,6 +1035,7 @@ create policy "Quiz questions readable by assignee"
       select id
       from public.quizzes
       where assigned_user_id = auth.uid()
+        or (assigned_user_id is null and course_id is null)
         or course_id in (
           select course_id
           from public.enrollments
@@ -1260,6 +1347,15 @@ insert into storage.buckets (id, name, public)
 values ('quiz-proofs', 'quiz-proofs', false)
 on conflict (id) do nothing;
 
+insert into storage.buckets (id, name, public)
+values ('activity-submissions', 'activity-submissions', false)
+on conflict (id) do nothing;
+
+drop policy if exists "Activity submissions insert by owner" on storage.objects;
+drop policy if exists "Activity submissions read by owner" on storage.objects;
+drop policy if exists "Activity submissions read by admin" on storage.objects;
+drop policy if exists "Activity submissions delete by admin" on storage.objects;
+
 drop policy if exists "Lesson proofs insert by owner" on storage.objects;
 drop policy if exists "Lesson proofs read by owner" on storage.objects;
 drop policy if exists "Lesson proofs read by admin" on storage.objects;
@@ -1367,5 +1463,37 @@ create policy "Quiz proofs read by admin"
   for select
   using (
     bucket_id = 'quiz-proofs'
+    and public.is_admin()
+  );
+
+create policy "Activity submissions insert by owner"
+  on storage.objects
+  for insert
+  with check (
+    bucket_id = 'activity-submissions'
+    and auth.uid() = owner
+  );
+
+create policy "Activity submissions read by owner"
+  on storage.objects
+  for select
+  using (
+    bucket_id = 'activity-submissions'
+    and auth.uid() = owner
+  );
+
+create policy "Activity submissions read by admin"
+  on storage.objects
+  for select
+  using (
+    bucket_id = 'activity-submissions'
+    and public.is_admin()
+  );
+
+create policy "Activity submissions delete by admin"
+  on storage.objects
+  for delete
+  using (
+    bucket_id = 'activity-submissions'
     and public.is_admin()
   );

@@ -214,8 +214,8 @@ const SuperAdminDashboard = () => {
       learning_path_enrollment: "Learning Path Enrollment",
       topic_submission: "Topic Submission",
       course_completion_request: "Course Completion Proof",
-      activity: "Activity",
-      activity_submission: "Activity Submission",
+      activity: "Project",
+      activity_submission: "Project Submission",
     };
     const entity = entityLabels[log.entity_type] ?? log.entity_type.replace(/_/g, " ");
 
@@ -249,7 +249,7 @@ const SuperAdminDashboard = () => {
       case "removed":
         return title ? `Removed ${entity}: ${title}` : `Removed ${entity}`;
       default:
-        return title ? `${entity}: ${title}` : `${entity} activity`;
+        return title ? `${entity}: ${title}` : `${entity} project`;
     }
   };
 

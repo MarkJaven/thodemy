@@ -4,6 +4,7 @@ import { calculateTopicEndDate } from "../lib/topicDates";
 import { calculateLearningPathEndDate } from "../lib/learningPathSchedule";
 import type {
   Activity,
+  ActivitySubmission,
   Course,
   DashboardData,
   Enrollment,
@@ -559,6 +560,7 @@ export const dashboardApi = {
       lessonAssignments,
       lessonSubmissions,
       activities,
+      activitySubmissions,
       quizzes,
       quizScores,
       quizAttempts,
@@ -569,11 +571,30 @@ export const dashboardApi = {
       readTable<LessonAssignment>("lesson_assignments", mockData.lessonAssignments, userFilter),
       readTable<LessonSubmission>("lesson_submissions", mockData.lessonSubmissions, userFilter),
       readTable<Activity>("activities", mockData.activities),
+      readTable<ActivitySubmission>("activity_submissions", [], userFilter),
       readTable<Quiz>("quizzes", mockData.quizzes),
       readTable<QuizScore>("quiz_scores", mockData.quizScores, userFilter),
       readTable<QuizAttempt>("quiz_attempts", mockData.quizAttempts, userFilter),
       readTable<Form>("forms", mockData.forms),
     ]);
+
+    const submissionActivities: Activity[] = activitySubmissions.map((submission) => ({
+      id: submission.id,
+      user_id: submission.user_id,
+      course_id: submission.course_id ?? null,
+      activity_id: submission.activity_id ?? null,
+      title: submission.title,
+      description: submission.description ?? null,
+      github_url: submission.github_url ?? null,
+      status: submission.status ?? "pending",
+      score: submission.score ?? null,
+      reviewed_at: submission.reviewed_at ?? null,
+      review_notes: submission.review_notes ?? null,
+      file_name: submission.file_name,
+      file_type: submission.file_type,
+      file_url: submission.storage_path ?? null,
+      created_at: submission.created_at ?? null,
+    }));
 
     return {
       courses,
@@ -585,7 +606,7 @@ export const dashboardApi = {
       learningPaths,
       learningPathEnrollments,
       courseCompletionRequests,
-      activities,
+      activities: [...submissionActivities, ...activities],
       quizzes,
       quizScores,
       quizAttempts,
@@ -641,11 +662,31 @@ export const dashboardApi = {
   },
   async submitActivity(payload: {
     title: string;
-    fileName: string;
-    fileType: string;
-  }): Promise<void> {
+    file?: File | null;
+    activityId?: string | null;
+    description?: string | null;
+    githubUrl?: string | null;
+  }): Promise<ActivitySubmission> {
+    const formData = new FormData();
+    formData.append("title", payload.title);
+    if (payload.file) {
+      formData.append("file", payload.file);
+    }
+    if (payload.activityId) {
+      formData.append("activity_id", payload.activityId);
+    }
+    if (payload.description) {
+      formData.append("description", payload.description);
+    }
+    if (payload.githubUrl) {
+      formData.append("github_url", payload.githubUrl);
+    }
+
     try {
-      await apiClient.post("/api/activities", payload);
+      const { data } = await apiClient.post("/api/activities", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return data?.submission as ActivitySubmission;
     } catch (error) {
       throw new Error(getApiErrorMessage(error));
     }

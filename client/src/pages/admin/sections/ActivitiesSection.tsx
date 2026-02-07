@@ -25,6 +25,11 @@ const formatDate = (value?: string | null) => {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
+const normalizeUrl = (value: string) =>
+  value.startsWith("http://") || value.startsWith("https://")
+    ? value
+    : `https://${value}`;
+
 type ActivitiesSectionProps = {
   focusSubmissionId?: string | null;
   focusSection?:
@@ -79,6 +84,12 @@ const ActivitiesSection = ({
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<TopicSubmission | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
+  const [selectedProjectSubmission, setSelectedProjectSubmission] =
+    useState<ActivitySubmission | null>(null);
+  const [viewingSubmission, setViewingSubmission] = useState<ActivitySubmission | null>(null);
+  const [projectStatus, setProjectStatus] = useState("pending");
+  const [projectScore, setProjectScore] = useState("");
+  const [projectReviewNotes, setProjectReviewNotes] = useState("");
   const [reviewingSubmission, setReviewingSubmission] = useState(false);
   const [submissionFilters, setSubmissionFilters] = useState({
     status: "pending",
@@ -131,7 +142,7 @@ const ActivitiesSection = ({
       setTopicProgress(topicProgressData);
       setCourseCompletionRequests(courseCompletionData);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load activities.");
+      setError(loadError instanceof Error ? loadError.message : "Unable to load projects.");
     } finally {
       setLoading(false);
     }
@@ -205,7 +216,7 @@ const ActivitiesSection = ({
       setIsFormOpen(false);
       await loadData();
     } catch (saveError) {
-      setActionError(saveError instanceof Error ? saveError.message : "Unable to save activity.");
+      setActionError(saveError instanceof Error ? saveError.message : "Unable to save project.");
     } finally {
       setSaving(false);
     }
@@ -219,7 +230,7 @@ const ActivitiesSection = ({
     try {
       await superAdminService.deleteActivity(activityId);
     } catch (deleteError) {
-      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete activity.");
+      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete project.");
       setActivities(previous);
     } finally {
       setSaving(false);
@@ -238,6 +249,47 @@ const ActivitiesSection = ({
         deleteError instanceof Error ? deleteError.message : "Unable to delete submission."
       );
       setSubmissions(previous);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openProjectReview = (submission: ActivitySubmission) => {
+    setSelectedProjectSubmission(submission);
+    setProjectStatus(submission.status ?? "pending");
+    setProjectScore(
+      submission.score !== null && submission.score !== undefined ? String(submission.score) : ""
+    );
+    setProjectReviewNotes(submission.review_notes ?? "");
+    setActionError(null);
+  };
+
+  const handleProjectReviewSave = async () => {
+    if (!selectedProjectSubmission) return;
+    setSaving(true);
+    setActionError(null);
+    const normalizedScore = projectScore.trim();
+    const scoreValue = normalizedScore === "" ? null : Number(normalizedScore);
+    if (scoreValue !== null && Number.isNaN(scoreValue)) {
+      setActionError("Score must be a number.");
+      setSaving(false);
+      return;
+    }
+    const now = new Date().toISOString();
+    try {
+      await superAdminService.updateActivitySubmission(selectedProjectSubmission.id, {
+        status: projectStatus,
+        score: scoreValue,
+        review_notes: projectReviewNotes.trim() || null,
+        reviewed_by: user?.id ?? null,
+        reviewed_at: projectStatus !== "pending" || scoreValue !== null ? now : null,
+      });
+      setSelectedProjectSubmission(null);
+      await loadData();
+    } catch (reviewError) {
+      setActionError(
+        reviewError instanceof Error ? reviewError.message : "Unable to update project."
+      );
     } finally {
       setSaving(false);
     }
@@ -550,7 +602,7 @@ const ActivitiesSection = ({
     () => [
       {
         key: "title",
-        header: "Activity",
+        header: "Project",
         render: (activity: Activity) => (
           <div>
             <p className="font-semibold text-white">{activity.title}</p>
@@ -630,19 +682,54 @@ const ActivitiesSection = ({
     () => [
       {
         key: "submission",
-        header: "Submission",
+        header: "Project submission",
         render: (submission: ActivitySubmission) => (
-          <div>
-            <p className="font-semibold text-white">{submission.title}</p>
-            <p className="text-xs text-slate-400">{submission.file_name}</p>
-          </div>
+          <p className="font-semibold text-white">{submission.title}</p>
         ),
       },
       {
         key: "user",
         header: "User",
+        render: (submission: ActivitySubmission) => {
+          const submitter = users.find((entry) => entry.id === submission.user_id);
+          return (
+            <span className="text-xs text-slate-300">
+              {submitter?.email ?? submission.user_id}
+            </span>
+          );
+        },
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (submission: ActivitySubmission) => {
+          const status = submission.status ?? "pending";
+          const statusStyles: Record<string, string> = {
+            pending: "badge-warning",
+            in_progress: "badge-info",
+            completed: "badge-success",
+            resubmit: "badge-warning",
+            rejected: "badge-error",
+          };
+          return <span className={statusStyles[status] || "badge-default"}>{status}</span>;
+        },
+      },
+      {
+        key: "score",
+        header: "Score",
         render: (submission: ActivitySubmission) => (
-          <span className="text-xs text-slate-400">{submission.user_id}</span>
+          <span className="text-xs text-slate-300">
+            {submission.score ?? "--"}
+          </span>
+        ),
+      },
+      {
+        key: "submitted",
+        header: "Submitted",
+        render: (submission: ActivitySubmission) => (
+          <span className="text-xs text-slate-400">
+            {formatDate(submission.created_at)}
+          </span>
         ),
       },
       {
@@ -652,7 +739,7 @@ const ActivitiesSection = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => handleViewSubmission(submission)}
+              onClick={() => setViewingSubmission(submission)}
               className="btn-ghost flex items-center gap-1.5"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -660,6 +747,17 @@ const ActivitiesSection = ({
                 <circle cx="12" cy="12" r="3" />
               </svg>
               View
+            </button>
+            <button
+              type="button"
+              onClick={() => openProjectReview(submission)}
+              className="btn-secondary flex items-center gap-1.5"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              Grade
             </button>
             <button
               type="button"
@@ -675,7 +773,7 @@ const ActivitiesSection = ({
         ),
       },
     ],
-    []
+    [handleViewSubmission, openProjectReview]
   );
 
   const progressRows = useMemo(() => {
@@ -973,7 +1071,7 @@ const ActivitiesSection = ({
   );
 
   if (loading) {
-    return <p className="text-sm text-slate-400">Loading activities...</p>;
+    return <p className="text-sm text-slate-400">Loading projects...</p>;
   }
 
   if (error) {
@@ -1012,9 +1110,9 @@ const ActivitiesSection = ({
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="font-display text-2xl text-white">Activities</h2>
+              <h2 className="font-display text-2xl text-white">Projects</h2>
               <p className="text-sm text-slate-300">
-                Create activities and review submitted artifacts.
+                Create projects and review submitted artifacts.
               </p>
             </div>
             <button
@@ -1025,14 +1123,14 @@ const ActivitiesSection = ({
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              New Activity
+              New Project
             </button>
           </div>
 
-          <DataTable columns={activityColumns} data={activities} emptyMessage="No activities yet." />
+          <DataTable columns={activityColumns} data={activities} emptyMessage="No projects yet." />
 
           <div>
-            <h3 className="font-display text-xl text-white">Submissions</h3>
+            <h3 className="font-display text-xl text-white">Project submissions</h3>
             <p className="text-sm text-slate-400">Review files uploaded by learners.</p>
             <div className="mt-4">
               <DataTable
@@ -1156,8 +1254,222 @@ const ActivitiesSection = ({
       {viewError && <p className="text-xs text-rose-200">{viewError}</p>}
 
       <Modal
+        isOpen={Boolean(selectedProjectSubmission)}
+        title="Review project submission"
+        description="Approve and grade the learner's project submission."
+        onClose={() => (saving ? null : setSelectedProjectSubmission(null))}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setSelectedProjectSubmission(null)}
+              className="btn-secondary"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={handleProjectReviewSave}
+              disabled={saving}
+              className="btn-primary"
+            >
+              {saving ? "Saving..." : "Save review"}
+            </button>
+          </>
+        }
+      >
+        {selectedProjectSubmission && (
+          <div className="space-y-4 text-sm text-slate-300">
+            <div>
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Project</p>
+              <p className="font-semibold text-white">{selectedProjectSubmission.title}</p>
+            </div>
+            {selectedProjectSubmission.github_url && (
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">GitHub</p>
+                <a
+                  href={normalizeUrl(selectedProjectSubmission.github_url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent-purple hover:underline"
+                >
+                  {selectedProjectSubmission.github_url}
+                </a>
+              </div>
+            )}
+            {selectedProjectSubmission.description && (
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Description</p>
+                <p>{selectedProjectSubmission.description}</p>
+              </div>
+            )}
+            {selectedProjectSubmission.storage_path && (
+              <button
+                type="button"
+                onClick={() => handleViewSubmission(selectedProjectSubmission)}
+                className="btn-ghost"
+              >
+                View file
+              </button>
+            )}
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                Status
+                <select
+                  value={projectStatus}
+                  onChange={(event) => setProjectStatus(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                >
+                  <option value="pending">pending</option>
+                  <option value="in_progress">in_progress</option>
+                  <option value="completed">completed</option>
+                  <option value="resubmit">resubmit</option>
+                  <option value="rejected">rejected</option>
+                </select>
+              </label>
+              <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                Score
+                <input
+                  type="number"
+                  value={projectScore}
+                  onChange={(event) => setProjectScore(event.target.value)}
+                  placeholder="Enter score"
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                />
+              </label>
+            </div>
+            <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
+              Review notes
+              <textarea
+                rows={3}
+                value={projectReviewNotes}
+                onChange={(event) => setProjectReviewNotes(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white"
+              />
+            </label>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(viewingSubmission)}
+        title="Submission details"
+        description="View the learner's project submission."
+        onClose={() => setViewingSubmission(null)}
+        footer={
+          <button
+            type="button"
+            onClick={() => setViewingSubmission(null)}
+            className="btn-secondary"
+          >
+            Close
+          </button>
+        }
+      >
+        {viewingSubmission && (
+          <div className="space-y-4 text-sm text-slate-300">
+            <div>
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Project</p>
+              <p className="font-semibold text-white">{viewingSubmission.title}</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Submitted by</p>
+                <p className="text-white">
+                  {users.find((entry) => entry.id === viewingSubmission.user_id)?.email ??
+                    viewingSubmission.user_id}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Date</p>
+                <p>{formatDate(viewingSubmission.created_at)}</p>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Status</p>
+                <span
+                  className={`mt-1 inline-block ${
+                    {
+                      pending: "badge-warning",
+                      in_progress: "badge-info",
+                      completed: "badge-success",
+                      rejected: "badge-error",
+                      resubmit: "badge-warning",
+                    }[viewingSubmission.status ?? "pending"] || "badge-default"
+                  }`}
+                >
+                  {viewingSubmission.status ?? "pending"}
+                </span>
+              </div>
+              {(viewingSubmission.score !== null && viewingSubmission.score !== undefined) && (
+                <div>
+                  <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Score</p>
+                  <p className="text-white">{viewingSubmission.score}</p>
+                </div>
+              )}
+            </div>
+            {viewingSubmission.description && (
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Description</p>
+                <p className="mt-1 whitespace-pre-wrap">{viewingSubmission.description}</p>
+              </div>
+            )}
+            {viewingSubmission.github_url && (
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">GitHub link</p>
+                <a
+                  href={normalizeUrl(viewingSubmission.github_url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-flex items-center gap-1.5 text-accent-purple hover:underline"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                    <path d="M15 3h6v6" />
+                    <path d="M10 14L21 3" />
+                  </svg>
+                  {viewingSubmission.github_url}
+                </a>
+              </div>
+            )}
+            {viewingSubmission.file_name && (
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Uploaded file</p>
+                <div className="mt-2 flex items-center gap-3">
+                  <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300">
+                    {viewingSubmission.file_name}
+                  </span>
+                  {viewingSubmission.storage_path && (
+                    <button
+                      type="button"
+                      onClick={() => handleViewSubmission(viewingSubmission)}
+                      className="btn-ghost flex items-center gap-1.5"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                        <path d="M15 3h6v6" />
+                        <path d="M10 14L21 3" />
+                      </svg>
+                      View file
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {viewingSubmission.review_notes && (
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Admin feedback</p>
+                <p className="mt-1 whitespace-pre-wrap">{viewingSubmission.review_notes}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
         isOpen={isFormOpen}
-        title={selectedActivity ? "Edit activity" : "Create activity"}
+        title={selectedActivity ? "Edit project" : "Create project"}
         onClose={() => setIsFormOpen(false)}
         footer={
           <>
@@ -1183,7 +1495,7 @@ const ActivitiesSection = ({
                   Saving...
                 </>
               ) : (
-                "Save Activity"
+                "Save Project"
               )}
             </button>
           </>
