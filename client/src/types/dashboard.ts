@@ -139,13 +139,37 @@ export type Activity = {
   id: string;
   user_id?: string | null;
   course_id?: string | null;
+  activity_id?: string | null;
   title: string;
   description?: string | null;
+  github_url?: string | null;
   status?: string | null;
+  score?: number | null;
+  reviewed_at?: string | null;
+  review_notes?: string | null;
   file_name?: string | null;
   file_type?: string | null;
   file_url?: string | null;
   created_at?: string | null;
+};
+
+export type ActivitySubmission = {
+  id: string;
+  activity_id?: string | null;
+  user_id: string;
+  course_id?: string | null;
+  title: string;
+  description?: string | null;
+  github_url?: string | null;
+  status?: string | null;
+  score?: number | null;
+  reviewed_at?: string | null;
+  review_notes?: string | null;
+  file_name?: string | null;
+  file_type?: string | null;
+  storage_path?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type Quiz = {

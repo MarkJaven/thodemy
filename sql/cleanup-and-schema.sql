@@ -307,8 +307,15 @@ CREATE TABLE IF NOT EXISTS public.activity_submissions (
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   course_id uuid REFERENCES public.courses(id) ON DELETE SET NULL,
   title text NOT NULL,
-  file_name text NOT NULL,
-  file_type text NOT NULL,
+  description text,
+  github_url text,
+  status text DEFAULT 'pending',
+  score numeric,
+  reviewed_at timestamptz,
+  reviewed_by uuid REFERENCES auth.users(id),
+  review_notes text,
+  file_name text,
+  file_type text,
   storage_path text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -325,7 +332,7 @@ CREATE INDEX IF NOT EXISTS activity_submissions_course_idx ON public.activity_su
 -- Quizzes
 CREATE TABLE IF NOT EXISTS public.quizzes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  course_id uuid NOT NULL REFERENCES public.courses(id) ON DELETE CASCADE,
+  course_id uuid REFERENCES public.courses(id) ON DELETE CASCADE,
   title text NOT NULL,
   description text,
   total_questions integer,
@@ -886,6 +893,51 @@ CREATE POLICY "Quizzes readable by admin"
   ON public.quizzes FOR SELECT
   USING (public.is_admin());
 
+DROP POLICY IF EXISTS "Quizzes readable by assignee" ON public.quizzes;
+CREATE POLICY "Quizzes readable by assignee"
+  ON public.quizzes FOR SELECT
+  USING (
+    assigned_user_id = auth.uid()
+    OR (
+      -- Quiz with no course and no assigned user: visible to anyone with any active enrollment or learning path
+      assigned_user_id IS NULL
+      AND course_id IS NULL
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM public.enrollments
+          WHERE user_id = auth.uid()
+            AND status IN ('pending', 'approved', 'active', 'completed', 'enrolled')
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM public.learning_path_enrollments
+          WHERE user_id = auth.uid()
+            AND status IN ('pending', 'approved', 'active', 'completed')
+        )
+      )
+    )
+    OR (
+      -- Quiz assigned to a specific course: visible to users enrolled in that course (direct or via learning path)
+      assigned_user_id IS NULL
+      AND (
+        course_id IN (
+          SELECT course_id
+          FROM public.enrollments
+          WHERE user_id = auth.uid()
+            AND status IN ('pending', 'approved', 'active', 'completed', 'enrolled')
+        )
+        OR course_id IN (
+          SELECT unnest(lp.course_ids)
+          FROM public.learning_path_enrollments lpe
+          JOIN public.learning_paths lp ON lp.id = lpe.learning_path_id
+          WHERE lpe.user_id = auth.uid()
+            AND lpe.status IN ('pending', 'approved', 'active', 'completed')
+        )
+      )
+    )
+  );
+
 DROP POLICY IF EXISTS "Quiz attempts manageable by superadmin" ON public.quiz_attempts;
 CREATE POLICY "Quiz attempts manageable by superadmin"
   ON public.quiz_attempts FOR ALL
@@ -937,6 +989,27 @@ CREATE POLICY "Quiz questions manageable by admin"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Quiz questions readable by assignee" ON public.quiz_questions;
+CREATE POLICY "Quiz questions readable by assignee"
+  ON public.quiz_questions FOR SELECT
+  USING (
+    quiz_id IN (
+      SELECT id
+      FROM public.quizzes
+      WHERE assigned_user_id = auth.uid()
+         OR (assigned_user_id IS NULL AND course_id IS NULL)
+         OR (
+           assigned_user_id IS NULL
+           AND course_id IN (
+             SELECT course_id
+             FROM public.enrollments
+             WHERE user_id = auth.uid()
+               AND status IN ('pending', 'approved', 'active', 'completed', 'enrolled')
+           )
+         )
+    )
+  );
+
 -- Forms policies
 DROP POLICY IF EXISTS "Forms manageable by superadmin" ON public.forms;
 CREATE POLICY "Forms manageable by superadmin"
@@ -987,7 +1060,16 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('quiz-proofs', 'quiz-proofs', false)
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('activity-submissions', 'activity-submissions', false)
+ON CONFLICT (id) DO NOTHING;
+
 -- Storage policies
+DROP POLICY IF EXISTS "Activity submissions insert by owner" ON storage.objects;
+DROP POLICY IF EXISTS "Activity submissions read by owner" ON storage.objects;
+DROP POLICY IF EXISTS "Activity submissions read by admin" ON storage.objects;
+DROP POLICY IF EXISTS "Activity submissions delete by admin" ON storage.objects;
+
 DROP POLICY IF EXISTS "Lesson proofs insert by owner" ON storage.objects;
 CREATE POLICY "Lesson proofs insert by owner"
   ON storage.objects FOR INSERT
@@ -1047,6 +1129,22 @@ DROP POLICY IF EXISTS "Quiz proofs read by admin" ON storage.objects;
 CREATE POLICY "Quiz proofs read by admin"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'quiz-proofs' AND public.is_admin());
+
+CREATE POLICY "Activity submissions insert by owner"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'activity-submissions' AND auth.uid() = owner);
+
+CREATE POLICY "Activity submissions read by owner"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'activity-submissions' AND auth.uid() = owner);
+
+CREATE POLICY "Activity submissions read by admin"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'activity-submissions' AND public.is_admin());
+
+CREATE POLICY "Activity submissions delete by admin"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'activity-submissions' AND public.is_admin());
 
 -- ============================================
 -- DONE! Your database is now clean.
