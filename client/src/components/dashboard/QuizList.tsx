@@ -140,8 +140,10 @@ const QuizList = ({
               : "Upload proof after completing the quiz."
           : "Score is hidden by your instructor.";
 
-        const canOpen = availability.isOpen && Boolean(quiz.link_url);
-        const canUploadProof = Boolean(onUploadProof) && !isArchived && uploadingQuizId !== quiz.id;
+        const isClosed = !availability.isOpen;
+        const isDone = isCompleted && hasScore;
+        const canOpen = availability.isOpen && !isDone && Boolean(quiz.link_url);
+        const canUploadProof = Boolean(onUploadProof) && !isArchived && !isClosed && !isDone && uploadingQuizId !== quiz.id;
 
         const handleUploadProofClick = () => {
           if (!onUploadProof || !canUploadProof) return;
@@ -203,10 +205,13 @@ const QuizList = ({
                   href={quiz.link_url || "#"}
                   target="_blank"
                   rel="noreferrer"
-                  className={`rounded-full border border-white/10 px-5 py-2 text-xs uppercase tracking-[0.25em] text-white transition ${
-                    canOpen ? "bg-white/10 hover:bg-white/20" : "cursor-not-allowed bg-white/5 text-slate-400"
+                  className={`rounded-full border px-5 py-2 text-center text-xs uppercase tracking-[0.25em] transition ${
+                    canOpen
+                      ? "border-white/10 bg-white/10 text-white hover:bg-white/20"
+                      : "pointer-events-none border-white/5 bg-white/[0.02] text-slate-600"
                   }`}
                   aria-disabled={!canOpen}
+                  tabIndex={canOpen ? undefined : -1}
                   onClick={(event) => {
                     if (!canOpen) {
                       event.preventDefault();
@@ -219,7 +224,11 @@ const QuizList = ({
                   type="button"
                   onClick={handleUploadProofClick}
                   disabled={!canUploadProof}
-                  className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={`rounded-full border px-5 py-2 text-xs uppercase tracking-[0.25em] transition ${
+                    canUploadProof
+                      ? "border-white/10 bg-white/10 text-white hover:bg-white/20"
+                      : "border-white/5 bg-white/[0.02] text-slate-600 cursor-not-allowed"
+                  }`}
                 >
                   {uploadingQuizId === quiz.id
                     ? "Uploading..."
@@ -227,11 +236,11 @@ const QuizList = ({
                       ? "Replace proof"
                       : "Upload proof"}
                 </button>
-                {!quiz.link_url && (
+                {!quiz.link_url && !isClosed && (
                   <p className="text-xs text-slate-500">Quiz link unavailable. Contact your admin.</p>
                 )}
-                {!availability.isOpen && (
-                  <p className="text-xs text-slate-500">This quiz is currently closed.</p>
+                {isClosed && (
+                  <p className="text-xs text-rose-400/70">This quiz is currently closed.</p>
                 )}
                 {isArchived && (
                   <p className="text-xs text-slate-500">This quiz has been archived.</p>
