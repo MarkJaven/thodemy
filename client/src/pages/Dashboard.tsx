@@ -311,6 +311,7 @@ const Dashboard = () => {
   const [proofMessage, setProofMessage] = useState("");
   const [proofError, setProofError] = useState<string | null>(null);
   const [submittingProof, setSubmittingProof] = useState(false);
+  const [quizFilter, setQuizFilter] = useState<"all" | "completed" | "pending" | "open" | "closed" | "scored">("all");
   const [isQuizProofOpen, setIsQuizProofOpen] = useState(false);
   const [proofQuiz, setProofQuiz] = useState<Quiz | null>(null);
   const [quizProofFile, setQuizProofFile] = useState<File | null>(null);
@@ -1573,6 +1574,31 @@ const Dashboard = () => {
     );
   };
 
+  const filteredQuizzes = useMemo(() => {
+    if (quizFilter === "all") return visibleQuizzes;
+    const now = new Date();
+    return visibleQuizzes.filter((quiz) => {
+      const attempt = quizAttemptLookup.get(quiz.id);
+      const score = quizScoreLookup.get(quiz.id);
+      const isCompleted = Boolean(attempt?.submitted_at);
+      const hasScore = score !== null && typeof score?.score === "number";
+      const status = (quiz.status ?? "active").toLowerCase();
+      const statusAllowsOpen = ["active", "open", "published"].includes(status);
+      const start = quiz.start_at ? new Date(quiz.start_at) : null;
+      const end = quiz.end_at ? new Date(quiz.end_at) : null;
+      const isOpen = statusAllowsOpen && (!start || now >= start) && (!end || now <= end);
+
+      switch (quizFilter) {
+        case "completed": return isCompleted;
+        case "pending": return !isCompleted;
+        case "open": return isOpen && !isCompleted;
+        case "closed": return !isOpen;
+        case "scored": return hasScore;
+        default: return true;
+      }
+    });
+  }, [visibleQuizzes, quizFilter, quizAttemptLookup, quizScoreLookup]);
+
   const renderQuizTab = () => {
     if (loading) {
       return (
@@ -1599,13 +1625,19 @@ const Dashboard = () => {
             {quizStatusError}
           </div>
         )}
-        <QuizList
-          quizzes={visibleQuizzes}
-          quizScores={quizScoreEntries}
-          quizAttempts={quizAttemptEntries}
-          onUploadProof={handleUploadQuizProof}
-          uploadingQuizId={completingQuizId}
-        />
+        {filteredQuizzes.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300">
+            No quizzes match the selected filter.
+          </div>
+        ) : (
+          <QuizList
+            quizzes={filteredQuizzes}
+            quizScores={quizScoreEntries}
+            quizAttempts={quizAttemptEntries}
+            onUploadProof={handleUploadQuizProof}
+            uploadingQuizId={completingQuizId}
+          />
+        )}
       </div>
     );
   };
@@ -2338,6 +2370,15 @@ const Dashboard = () => {
     );
   };
 
+  const quizFilterOptions: Array<{ key: typeof quizFilter; label: string }> = [
+    { key: "all", label: "All" },
+    { key: "pending", label: "Pending" },
+    { key: "open", label: "Open" },
+    { key: "closed", label: "Closed" },
+    { key: "completed", label: "Completed" },
+    { key: "scored", label: "Scored" },
+  ];
+
   const renderQuizSection = () => (
     <div className="space-y-6">
       <div>
@@ -2366,6 +2407,22 @@ const Dashboard = () => {
           </p>
           <p className="mt-1 text-xs text-slate-500">Completed quizzes pending verification.</p>
         </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {quizFilterOptions.map((opt) => (
+          <button
+            key={opt.key}
+            type="button"
+            onClick={() => setQuizFilter(opt.key)}
+            className={`rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] transition ${
+              quizFilter === opt.key
+                ? "bg-accent-purple/20 text-accent-purple border border-accent-purple/40"
+                : "border border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
       {renderQuizTab()}
     </div>
