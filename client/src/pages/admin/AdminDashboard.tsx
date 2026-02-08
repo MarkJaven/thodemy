@@ -141,7 +141,13 @@ interface TaskItem {
 }
 
 const AdminDashboard = () => {
-  const [activeNav, setActiveNav] = useState<NavItem>("overview");
+  const [activeNav, setActiveNavRaw] = useState<NavItem>(
+    () => (sessionStorage.getItem("thodemy-admin-nav") as NavItem) || "overview"
+  );
+  const setActiveNav = (nav: NavItem) => {
+    sessionStorage.setItem("thodemy-admin-nav", nav);
+    setActiveNavRaw(nav);
+  };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     activeCourses: 0,

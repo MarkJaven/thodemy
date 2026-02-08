@@ -219,7 +219,13 @@ const Dashboard = () => {
     error: topicsError,
     refresh: refreshTopics,
   } = useTopicsData(user?.id);
-  const [activeNav, setActiveNav] = useState<UserNavItem>("overview");
+  const [activeNav, setActiveNavRaw] = useState<UserNavItem>(
+    () => (sessionStorage.getItem("thodemy-user-nav") as UserNavItem) || "overview"
+  );
+  const setActiveNav = (nav: UserNavItem) => {
+    sessionStorage.setItem("thodemy-user-nav", nav);
+    setActiveNavRaw(nav);
+  };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedLearningPathId, setSelectedLearningPathId] = useState("all");
   const [selectedCourseId, setSelectedCourseId] = useState("all");
@@ -487,18 +493,19 @@ const Dashboard = () => {
     [latestSubmissions]
   );
 
-  const recentActivities = useMemo(
-    () =>
-      activityEntries
-        .slice()
-        .sort((a, b) => {
-          const left = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const right = b.created_at ? new Date(b.created_at).getTime() : 0;
-          return right - left;
-        })
-        .slice(0, 3),
-    [activityEntries]
-  );
+  const recentActivities = useMemo(() => {
+    // Deduplicate by title, keeping the latest entry per project
+    const sorted = activityEntries.slice().sort((a, b) => {
+      const left = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const right = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return right - left;
+    });
+    const seen = new Map<string, Activity>();
+    for (const entry of sorted) {
+      if (!seen.has(entry.title)) seen.set(entry.title, entry);
+    }
+    return Array.from(seen.values()).slice(0, 3);
+  }, [activityEntries]);
 
   const visibleQuizzes = data.quizzes.filter((quiz) => {
     // Quiz is assigned to a specific user - only that user sees it
@@ -1834,22 +1841,33 @@ const Dashboard = () => {
               {recentActivities.length === 0 ? (
                 <p className="text-sm text-slate-400">No recent project activity yet.</p>
               ) : (
-                recentActivities.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-sm text-white">{activity.title}</p>
-                      <p className="text-xs text-slate-400">
-                        {formatDate(activity.created_at)}
-                      </p>
+                recentActivities.map((activity) => {
+                  const statusMap: Record<string, { label: string; className: string }> = {
+                    completed: { label: "Completed", className: "border-emerald-400/40 text-emerald-200" },
+                    rejected: { label: "Resubmit", className: "border-rose-400/40 text-rose-200" },
+                    resubmit: { label: "Resubmit", className: "border-amber-400/40 text-amber-200" },
+                    pending: { label: "Pending Review", className: "border-sky-400/40 text-sky-200" },
+                    in_progress: { label: "In Progress", className: "border-sky-400/40 text-sky-200" },
+                  };
+                  const raw = activity.status ?? "active";
+                  const info = statusMap[raw] ?? { label: "Submit", className: "border-white/10 text-slate-300" };
+                  return (
+                    <div
+                      key={activity.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+                    >
+                      <div>
+                        <p className="text-sm text-white">{activity.title}</p>
+                        <p className="text-xs text-slate-400">
+                          {formatDate(activity.created_at)}
+                        </p>
+                      </div>
+                      <span className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${info.className}`}>
+                        {info.label}
+                      </span>
                     </div>
-                    <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-                      {activity.status ?? "active"}
-                    </span>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

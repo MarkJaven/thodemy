@@ -154,7 +154,13 @@ interface TaskItem {
 }
 
 const SuperAdminDashboard = () => {
-  const [activeNav, setActiveNav] = useState<NavItem>("overview");
+  const [activeNav, setActiveNavRaw] = useState<NavItem>(
+    () => (sessionStorage.getItem("thodemy-superadmin-nav") as NavItem) || "overview"
+  );
+  const setActiveNav = (nav: NavItem) => {
+    sessionStorage.setItem("thodemy-superadmin-nav", nav);
+    setActiveNavRaw(nav);
+  };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     activeCourses: 0,

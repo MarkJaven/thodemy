@@ -158,45 +158,70 @@ const UploadWidget = ({
             {assignedProjects.map((project) => {
               const submission = getSubmissionForProject(project.id);
               const hasSubmitted = Boolean(submission);
+              const submissionStatus = submission?.status?.toLowerCase();
+              const isCompleted = submissionStatus === "completed" || submissionStatus === "approved";
+              const isRejected = submissionStatus === "rejected";
+              const needsResubmit = submissionStatus === "resubmit";
+              const canResubmit = hasSubmitted && !isCompleted;
               return (
                 <div
                   key={project.id}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-ink-800/40 px-5 py-4"
+                  className={`rounded-xl border px-5 py-4 ${
+                    isCompleted
+                      ? "border-emerald-400/20 bg-emerald-400/5"
+                      : isRejected
+                        ? "border-rose-400/20 bg-rose-400/5"
+                        : needsResubmit
+                          ? "border-amber-400/20 bg-amber-400/5"
+                          : "border-white/10 bg-ink-800/40"
+                  }`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-white">{project.title}</p>
-                    {project.description && (
-                      <p className="mt-1 text-xs text-slate-400">{project.description}</p>
-                    )}
-                    {hasSubmitted && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <span
-                          className={`rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-[0.2em] ${statusColor(submission?.status)}`}
-                        >
-                          {submission?.status ?? "submitted"}
-                        </span>
-                        {submission?.score !== null && submission?.score !== undefined && (
-                          <span className="text-[11px] text-slate-300">
-                            Score: {submission.score}
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-3">
+                        <p className="font-medium text-white">{project.title}</p>
+                        {hasSubmitted && (
+                          <span
+                            className={`rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-[0.2em] ${statusColor(submission?.status)}`}
+                          >
+                            {submission?.status ?? "submitted"}
                           </span>
                         )}
-                        <span className="text-[11px] text-slate-500">
-                          {formatDate(submission?.created_at)}
-                        </span>
                       </div>
+                      {project.description && (
+                        <p className="mt-1.5 text-xs text-slate-400">{project.description}</p>
+                      )}
+                      {hasSubmitted && (
+                        <div className="mt-2.5 flex items-center gap-3">
+                          {submission?.score !== null && submission?.score !== undefined && (
+                            <span className="text-sm font-semibold text-white">
+                              Score: <span className="text-base text-emerald-300">{submission.score}</span>
+                            </span>
+                          )}
+                          <span className="text-[11px] text-slate-500">
+                            {formatDate(submission?.created_at)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {isCompleted ? (
+                      <span className="ml-4 shrink-0 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-emerald-300">
+                        Completed
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openModal(project.id)}
+                        className={`ml-4 shrink-0 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] transition ${
+                          canResubmit
+                            ? "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                            : "bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] text-white shadow-[0_6px_20px_rgba(94,59,219,0.35)] hover:opacity-90"
+                        }`}
+                      >
+                        {canResubmit ? "Resubmit" : "Submit"}
+                      </button>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openModal(project.id)}
-                    className={`ml-4 shrink-0 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] transition ${
-                      hasSubmitted
-                        ? "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                        : "bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] text-white shadow-[0_6px_20px_rgba(94,59,219,0.35)] hover:opacity-90"
-                    }`}
-                  >
-                    {hasSubmitted ? "Resubmit" : "Submit"}
-                  </button>
                 </div>
               );
             })}
