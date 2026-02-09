@@ -6,6 +6,7 @@ const {
   NotFoundError,
 } = require("../utils/errors");
 const { auditLogService } = require("../services/auditLogService");
+const { scheduleService } = require("../services/scheduleService");
 const { calculateCourseEndDate, generateCourseCode } = require("../utils/courseUtils");
 
 const ensureUniqueLPCode = async (attempts = 6) => {
@@ -47,6 +48,16 @@ const resolveLPTotals = async (courseIds) => {
   );
   const totalDays = totalHours > 0 ? Math.ceil(totalHours / 8) : 0;
   return { totalHours, totalDays };
+};
+
+const areSameIdSet = (left, right) => {
+  const leftSet = new Set((Array.isArray(left) ? left : []).map((id) => String(id)));
+  const rightSet = new Set((Array.isArray(right) ? right : []).map((id) => String(id)));
+  if (leftSet.size !== rightSet.size) return false;
+  for (const id of leftSet) {
+    if (!rightSet.has(id)) return false;
+  }
+  return true;
 };
 
 const listLearningPaths = async (_req, res, next) => {
@@ -262,7 +273,7 @@ const upsertLearningPath = async (req, res, next) => {
     if (learningPathId) {
       const { data, error: existingError } = await supabaseAdmin
         .from("learning_paths")
-        .select("id, title, status")
+        .select("id, title, status, start_at, course_ids")
         .eq("id", learningPathId)
         .maybeSingle();
       if (existingError) {
@@ -307,6 +318,17 @@ const upsertLearningPath = async (req, res, next) => {
           to: nextStatus,
         },
       });
+      const previousStartAt = existingPath?.start_at ?? null;
+      const nextStartAt = lpPayload.start_at ?? null;
+      const startAtChanged = previousStartAt !== nextStartAt;
+      const courseIdsChanged = !areSameIdSet(courseIds, existingPath?.course_ids ?? []);
+
+      if (nextStartAt && (startAtChanged || courseIdsChanged)) {
+        await scheduleService.scheduleLearningPathCourses({
+          learningPathId,
+          updatedBy: userId,
+        });
+      }
       return res.json({ learningPathId });
     }
 
@@ -339,6 +361,12 @@ const upsertLearningPath = async (req, res, next) => {
         courses: data.course_ids?.length ?? 0,
       },
     });
+    if (data.start_at) {
+      await scheduleService.scheduleLearningPathCourses({
+        learningPathId: data.id,
+        updatedBy: userId,
+      });
+    }
     return res.status(201).json({ learningPath: data });
   } catch (error) {
     return next(error);
