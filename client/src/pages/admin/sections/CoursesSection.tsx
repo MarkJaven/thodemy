@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Modal from "../../../components/admin/Modal";
 import { adminCourseService, CourseDetail, CourseSummary } from "../../../services/adminCourseService";
 import { superAdminService } from "../../../services/superAdminService";
@@ -62,9 +62,36 @@ const normalizeRelationMap = (
     const filtered = Array.isArray(list)
       ? list.filter((id) => typeof id === "string" && (!keepIds || keepIds.has(id)))
       : [];
-    acc[key] = Array.from(new Set(filtered));
+    const unique = Array.from(new Set(filtered));
+    if (unique.length > 0) {
+      acc[key] = unique;
+    }
     return acc;
   }, {});
+};
+
+const normalizeCoreqAdjacency = (coreqMap: Record<string, string[]>, orderedIds: string[]) => {
+  const indexById = new Map(orderedIds.map((id, index) => [id, index]));
+  const pairs = new Set<string>();
+  Object.entries(coreqMap).forEach(([topicId, list]) => {
+    list.forEach((coreqId) => {
+      if (!indexById.has(topicId) || !indexById.has(coreqId)) return;
+      const left = topicId < coreqId ? topicId : coreqId;
+      const right = topicId < coreqId ? coreqId : topicId;
+      pairs.add(`${left}|${right}`);
+    });
+  });
+
+  const nextMap: Record<string, string[]> = {};
+  for (let i = 0; i < orderedIds.length - 1; i += 1) {
+    const left = orderedIds[i];
+    const right = orderedIds[i + 1];
+    const key = left < right ? `${left}|${right}` : `${right}|${left}`;
+    if (!pairs.has(key)) continue;
+    nextMap[left] = nextMap[left] ? [...nextMap[left], right] : [right];
+    nextMap[right] = nextMap[right] ? [...nextMap[right], left] : [left];
+  }
+  return nextMap;
 };
 
 const MAX_COURSE_DESCRIPTION_LENGTH = 5000;
@@ -81,6 +108,7 @@ const CoursesSection = () => {
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published" | "archived">("all");
   const [pageSize, setPageSize] = useState(6);
   const [currentPage, setCurrentPage] = useState(1);
+  const [lastClickedTopicId, setLastClickedTopicId] = useState<string | null>(null);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<CourseSummary | null>(null);
@@ -213,8 +241,11 @@ const CoursesSection = () => {
       description: course.description ?? "",
       status: course.status ?? "draft",
       topic_ids: uniqueTopicIds,
-      topic_prerequisites: normalizeRelationMap(course.topic_prerequisites, keepIds),
-      topic_corequisites: normalizeRelationMap(course.topic_corequisites, keepIds),
+      topic_prerequisites: {},
+      topic_corequisites: normalizeCoreqAdjacency(
+        normalizeRelationMap(course.topic_corequisites, keepIds),
+        uniqueTopicIds
+      ),
     });
     setActionError(null);
     setIsFormOpen(true);
@@ -234,8 +265,11 @@ const CoursesSection = () => {
         description: detailCourse.description ?? "",
         status: detailCourse.status ?? "draft",
         topic_ids: detailTopicIds,
-        topic_prerequisites: normalizeRelationMap(detailCourse.topic_prerequisites, detailKeepIds),
-        topic_corequisites: normalizeRelationMap(detailCourse.topic_corequisites, detailKeepIds),
+        topic_prerequisites: {},
+        topic_corequisites: normalizeCoreqAdjacency(
+          normalizeRelationMap(detailCourse.topic_corequisites, detailKeepIds),
+          detailTopicIds
+        ),
       });
     } catch (detailError) {
       setActionError(
@@ -250,13 +284,87 @@ const CoursesSection = () => {
     const uniqueIds = normalizeTopicIds(nextIds, topicLookup);
     const keepIds = new Set(uniqueIds);
     setFormState((prev) => {
+      const normalizedCoreqs = normalizeRelationMap(prev.topic_corequisites, keepIds);
+      const adjacentCoreqs = normalizeCoreqAdjacency(normalizedCoreqs, uniqueIds);
       return {
         ...prev,
         topic_ids: uniqueIds,
-        topic_prerequisites: normalizeRelationMap(prev.topic_prerequisites, keepIds),
-        topic_corequisites: normalizeRelationMap(prev.topic_corequisites, keepIds),
+        topic_prerequisites: {},
+        topic_corequisites: adjacentCoreqs,
       };
     });
+  };
+
+  const addCoreqEdge = (leftId: string, rightId: string) => {
+    setFormState((prev) => {
+      const nextCoreqs = { ...prev.topic_corequisites };
+      const leftList = new Set(nextCoreqs[leftId] ?? []);
+      leftList.add(rightId);
+      const rightList = new Set(nextCoreqs[rightId] ?? []);
+      rightList.add(leftId);
+      const updated = {
+        ...nextCoreqs,
+        [leftId]: Array.from(leftList),
+        [rightId]: Array.from(rightList),
+      };
+      return {
+        ...prev,
+        topic_prerequisites: {},
+        topic_corequisites: normalizeCoreqAdjacency(updated, prev.topic_ids),
+      };
+    });
+  };
+
+  const removeCoreqEdge = (leftId: string, rightId: string) => {
+    setFormState((prev) => {
+      const nextCoreqs = { ...prev.topic_corequisites };
+      const leftList = (nextCoreqs[leftId] ?? []).filter((id) => id !== rightId);
+      const rightList = (nextCoreqs[rightId] ?? []).filter((id) => id !== leftId);
+      if (leftList.length > 0) {
+        nextCoreqs[leftId] = leftList;
+      } else {
+        delete nextCoreqs[leftId];
+      }
+      if (rightList.length > 0) {
+        nextCoreqs[rightId] = rightList;
+      } else {
+        delete nextCoreqs[rightId];
+      }
+      return {
+        ...prev,
+        topic_prerequisites: {},
+        topic_corequisites: normalizeCoreqAdjacency(nextCoreqs, prev.topic_ids),
+      };
+    });
+  };
+
+  const getAdjacentTopicIds = (topicId: string) => {
+    const index = formState.topic_ids.indexOf(topicId);
+    if (index === -1) return { prevId: null, nextId: null };
+    const prevId = index > 0 ? formState.topic_ids[index - 1] : null;
+    const nextId =
+      index < formState.topic_ids.length - 1 ? formState.topic_ids[index + 1] : null;
+    return { prevId, nextId };
+  };
+
+  const hasCoreqEdge = (topicId: string, otherId: string | null) => {
+    if (!otherId) return false;
+    return (formState.topic_corequisites[topicId] ?? []).includes(otherId);
+  };
+
+  const handleTopicClick = (topicId: string, event: MouseEvent<HTMLDivElement>) => {
+    if (event.shiftKey && lastClickedTopicId && lastClickedTopicId !== topicId) {
+      const index = formState.topic_ids.indexOf(topicId);
+      const lastIndex = formState.topic_ids.indexOf(lastClickedTopicId);
+      if (index !== -1 && lastIndex !== -1 && Math.abs(index - lastIndex) === 1) {
+        if (hasCoreqEdge(topicId, lastClickedTopicId)) {
+          removeCoreqEdge(topicId, lastClickedTopicId);
+        } else {
+          addCoreqEdge(topicId, lastClickedTopicId);
+        }
+      }
+    }
+    setLastClickedTopicId(topicId);
   };
 
   const handleAddTopic = (topicId: string) => {
@@ -285,20 +393,6 @@ const CoursesSection = () => {
     next.splice(to, 0, draggingId);
     updateTopicIds(next);
     setDraggingId(null);
-  };
-
-  const handleRelationChange = (
-    topicId: string,
-    type: "pre" | "co",
-    values: string[]
-  ) => {
-    setFormState((prev) => ({
-      ...prev,
-      topic_prerequisites:
-        type === "pre" ? { ...prev.topic_prerequisites, [topicId]: values } : prev.topic_prerequisites,
-      topic_corequisites:
-        type === "co" ? { ...prev.topic_corequisites, [topicId]: values } : prev.topic_corequisites,
-    }));
   };
 
   const handleSave = async () => {
@@ -330,8 +424,11 @@ const CoursesSection = () => {
       description: formState.description.trim(),
       status: formState.status,
       topic_ids: uniqueTopicIds,
-      topic_prerequisites: normalizeRelationMap(formState.topic_prerequisites, keepIds),
-      topic_corequisites: normalizeRelationMap(formState.topic_corequisites, keepIds),
+      topic_prerequisites: {},
+      topic_corequisites: normalizeCoreqAdjacency(
+        normalizeRelationMap(formState.topic_corequisites, keepIds),
+        uniqueTopicIds
+      ),
       enrollment_enabled: selectedCourse?.enrollment_enabled ?? true,
       enrollment_limit: selectedCourse?.enrollment_limit ?? null,
       start_at: selectedCourse?.start_at ?? null,
@@ -367,8 +464,11 @@ const CoursesSection = () => {
         description: course.description ?? "",
         status: nextStatus,
         topic_ids: normalizedTopicIds,
-        topic_prerequisites: normalizeRelationMap(course.topic_prerequisites, keepIds),
-        topic_corequisites: normalizeRelationMap(course.topic_corequisites, keepIds),
+        topic_prerequisites: {},
+        topic_corequisites: normalizeCoreqAdjacency(
+          normalizeRelationMap(course.topic_corequisites, keepIds),
+          normalizedTopicIds
+        ),
         enrollment_enabled: course.enrollment_enabled ?? true,
         enrollment_limit: course.enrollment_limit ?? null,
         start_at: course.start_at ?? null,
@@ -721,6 +821,7 @@ const CoursesSection = () => {
                         onDragStart={() => handleDragStart(topic.id)}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={() => handleDrop(topic.id)}
+                        onClick={(event) => handleTopicClick(topic.id, event)}
                         className="group flex cursor-grab items-center gap-3 rounded-xl border border-white/10 bg-gradient-to-r from-white/[0.03] to-transparent px-3 py-2.5 transition hover:border-indigo-500/30 hover:from-indigo-500/5 active:cursor-grabbing"
                       >
                         <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-indigo-500/20 text-xs font-semibold text-indigo-300">
@@ -732,9 +833,22 @@ const CoursesSection = () => {
                             {topic.time_allocated} {topic.time_unit === "hours" ? "hrs" : "days"}
                           </p>
                         </div>
+                        {(() => {
+                          const { prevId, nextId } = getAdjacentTopicIds(topic.id);
+                          const isGrouped =
+                            hasCoreqEdge(topic.id, prevId) || hasCoreqEdge(topic.id, nextId);
+                          return isGrouped ? (
+                            <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-amber-200">
+                              Coreq
+                            </span>
+                          ) : null;
+                        })()}
                         <button
                           type="button"
-                          onClick={() => handleRemoveTopic(topic.id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleRemoveTopic(topic.id);
+                          }}
                           className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-slate-500 opacity-0 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:opacity-100"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -746,6 +860,10 @@ const CoursesSection = () => {
                   </div>
                 )}
               </div>
+
+              <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                Tip: Shift+click two adjacent topics to group them as corequisites.
+              </p>
 
               {/* Available Topics */}
               {availableTopics.length > 0 && (
@@ -774,73 +892,6 @@ const CoursesSection = () => {
                 <p className="text-center text-xs text-slate-500">No topics available. Create topics in Superadmin first.</p>
               )}
             </div>
-
-            {/* Prerequisites Section */}
-            {selectedTopics.length > 1 && (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-                <div className="mb-5 flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-white">Topic Dependencies</h4>
-                    <p className="text-xs text-slate-400">Define prerequisites and corequisites</p>
-                  </div>
-                </div>
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {selectedTopics.map((topic) => {
-                    const otherTopics = selectedTopics.filter((t) => t.id !== topic.id);
-                    return (
-                      <div key={`relations-${topic.id}`} className="rounded-xl border border-white/5 bg-black/20 p-4">
-                        <p className="mb-3 text-sm font-medium text-white">{topic.title}</p>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div>
-                            <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.15em] text-slate-500">
-                              Prerequisites
-                            </label>
-                            <select
-                              multiple
-                              value={formState.topic_prerequisites[topic.id] ?? []}
-                              onChange={(e) =>
-                                handleRelationChange(topic.id, "pre", Array.from(e.target.selectedOptions).map((o) => o.value))
-                              }
-                              className="h-20 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white focus:border-indigo-500/50 focus:outline-none"
-                            >
-                              {otherTopics.map((t) => (
-                                <option key={`pre-${topic.id}-${t.id}`} value={t.id} className="bg-[#1c1436] py-1">
-                                  {t.title}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.15em] text-slate-500">
-                              Corequisites
-                            </label>
-                            <select
-                              multiple
-                              value={formState.topic_corequisites[topic.id] ?? []}
-                              onChange={(e) =>
-                                handleRelationChange(topic.id, "co", Array.from(e.target.selectedOptions).map((o) => o.value))
-                              }
-                              className="h-20 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white focus:border-indigo-500/50 focus:outline-none"
-                            >
-                              {otherTopics.map((t) => (
-                                <option key={`co-${topic.id}-${t.id}`} value={t.id} className="bg-[#1c1436] py-1">
-                                  {t.title}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Sidebar - Right Side */}

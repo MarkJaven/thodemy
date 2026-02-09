@@ -10,6 +10,7 @@ import { useTopicsData } from "../hooks/useTopicsData";
 import { useUserRole } from "../hooks/useUserRole";
 import { useUser } from "../hooks/useUser";
 import { supabase } from "../lib/supabaseClient";
+import { calculateCourseEndDate, calculateTopicEndDate } from "../lib/topicDates";
 import { dashboardApi } from "../services/dashboardApi";
 import logoThodemy from "../assets/images/logo-thodemy.png";
 import type {
@@ -155,6 +156,393 @@ const formatDate = (value?: string | null) => {
     day: "numeric",
     year: "numeric",
   });
+};
+
+const WORK_HOURS_PER_DAY = 8;
+const CURSOR_EPSILON = 1e-6;
+
+const parseDate = (value?: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const ensureWorkingDay = (date: Date) => calculateCourseEndDate(date, 1);
+
+const nextWorkingDay = (date: Date) => {
+  const next = new Date(date.getTime());
+  next.setDate(next.getDate() + 1);
+  return calculateCourseEndDate(next, 1);
+};
+
+type ScheduleCursor = {
+  date: Date;
+  remainingHours: number;
+};
+
+const normalizeCursor = (cursor: ScheduleCursor) => {
+  let workingDate = ensureWorkingDay(cursor.date);
+  let remainingHours = cursor.remainingHours;
+  if (workingDate.getTime() !== cursor.date.getTime()) {
+    remainingHours = WORK_HOURS_PER_DAY;
+  }
+  if (remainingHours <= CURSOR_EPSILON) {
+    workingDate = nextWorkingDay(workingDate);
+    remainingHours = WORK_HOURS_PER_DAY;
+  }
+  return { date: workingDate, remainingHours };
+};
+
+const compareCursor = (left: ScheduleCursor, right: ScheduleCursor) => {
+  const leftTime = left.date.getTime();
+  const rightTime = right.date.getTime();
+  if (leftTime > rightTime) return left;
+  if (rightTime > leftTime) return right;
+  return left.remainingHours <= right.remainingHours ? left : right;
+};
+
+const addWorkingHours = (cursor: ScheduleCursor, hours: number) => {
+  let remainingToAllocate = Number.isFinite(hours) ? Math.max(0, hours) : 0;
+  let { date, remainingHours } = normalizeCursor(cursor);
+  if (remainingToAllocate <= CURSOR_EPSILON) {
+    return { endDate: new Date(date.getTime()), cursor: { date, remainingHours } };
+  }
+
+  while (remainingToAllocate > CURSOR_EPSILON) {
+    if (remainingHours <= CURSOR_EPSILON) {
+      date = nextWorkingDay(date);
+      remainingHours = WORK_HOURS_PER_DAY;
+    }
+    const chunk = Math.min(remainingHours, remainingToAllocate);
+    remainingHours -= chunk;
+    remainingToAllocate -= chunk;
+
+    if (remainingToAllocate <= CURSOR_EPSILON) {
+      return { endDate: new Date(date.getTime()), cursor: { date, remainingHours } };
+    }
+  }
+
+  return { endDate: new Date(date.getTime()), cursor: { date, remainingHours } };
+};
+
+const normalizeRelationMap = (
+  value: Record<string, string[]> | null | undefined,
+  keepSet: Set<string>
+) => {
+  if (!value) return {};
+  return Object.entries(value).reduce<Record<string, string[]>>((acc, [key, list]) => {
+    if (!keepSet.has(key)) return acc;
+    const filtered = Array.isArray(list)
+      ? list.map(String).filter((id) => keepSet.has(id))
+      : [];
+    const unique = Array.from(new Set(filtered));
+    if (unique.length > 0) {
+      acc[key] = unique;
+    }
+    return acc;
+  }, {});
+};
+
+const buildEffectivePrereqs = (
+  topicIds: string[],
+  prereqMap: Record<string, string[]>,
+  coreqMap: Record<string, string[]>
+) => {
+  const { groupList, groupByTopic } = buildCoreqGroups(topicIds, coreqMap);
+  const groupIndexById = new Map(groupList.map((group, index) => [group.id, index]));
+  const effective: Record<string, string[]> = {};
+  topicIds.forEach((topicId, index) => {
+    if (Object.prototype.hasOwnProperty.call(prereqMap, topicId)) {
+      effective[topicId] = prereqMap[topicId];
+      return;
+    }
+    const groupId = groupByTopic.get(topicId);
+    const groupIndex = groupId ? groupIndexById.get(groupId) ?? -1 : -1;
+    if (groupIndex > 0) {
+      effective[topicId] = [...groupList[groupIndex - 1].topics];
+      return;
+    }
+    if (groupIndex === -1 && index > 0) {
+      effective[topicId] = [topicIds[index - 1]];
+      return;
+    }
+    effective[topicId] = [];
+  });
+  return effective;
+};
+
+const buildEffectiveCoreqs = (topicIds: string[], coreqMap: Record<string, string[]>) => {
+  const effective: Record<string, string[]> = {};
+  topicIds.forEach((topicId) => {
+    if (Object.prototype.hasOwnProperty.call(coreqMap, topicId)) {
+      effective[topicId] = coreqMap[topicId];
+      return;
+    }
+    effective[topicId] = [];
+  });
+  return effective;
+};
+
+const buildCoreqGroups = (topicIds: string[], coreqMap: Record<string, string[]>) => {
+  const parent = new Map<string, string>();
+  topicIds.forEach((id) => parent.set(id, id));
+
+  const find = (id: string): string => {
+    const current = parent.get(id);
+    if (!current) return id;
+    if (current === id) return id;
+    const root = find(current);
+    parent.set(id, root);
+    return root;
+  };
+
+  const union = (left: string, right: string) => {
+    const rootLeft = find(left);
+    const rootRight = find(right);
+    if (rootLeft === rootRight) return;
+    parent.set(rootRight, rootLeft);
+  };
+
+  topicIds.forEach((id) => {
+    const coreqs = coreqMap[id] || [];
+    coreqs.forEach((coreqId) => {
+      if (!parent.has(coreqId)) return;
+      union(id, coreqId);
+    });
+  });
+
+  const groupsByRoot = new Map<string, { id: string; topics: string[]; firstIndex: number }>();
+  topicIds.forEach((id, index) => {
+    const root = find(id);
+    const existing = groupsByRoot.get(root);
+    if (!existing) {
+      groupsByRoot.set(root, { id: root, topics: [id], firstIndex: index });
+      return;
+    }
+    existing.topics.push(id);
+    existing.firstIndex = Math.min(existing.firstIndex, index);
+  });
+
+  const groupList = Array.from(groupsByRoot.values()).sort(
+    (left, right) => left.firstIndex - right.firstIndex
+  );
+  const groupById = new Map(groupList.map((group) => [group.id, group]));
+  const groupByTopic = new Map<string, string>();
+  groupList.forEach((group) => {
+    group.topics.forEach((topicId) => {
+      groupByTopic.set(topicId, group.id);
+    });
+  });
+
+  return { groupList, groupById, groupByTopic };
+};
+
+const buildSchedule = ({
+  startCursor,
+  topicIds,
+  topicsById,
+  effectivePrereqs,
+  effectiveCoreqs,
+}: {
+  startCursor: ScheduleCursor;
+  topicIds: string[];
+  topicsById: Map<string, Topic>;
+  effectivePrereqs: Record<string, string[]>;
+  effectiveCoreqs: Record<string, string[]>;
+}) => {
+  const normalizedStart = normalizeCursor(startCursor);
+  const { groupList, groupById, groupByTopic } = buildCoreqGroups(topicIds, effectiveCoreqs);
+  const groupPrereqs = new Map<string, Set<string>>();
+  groupList.forEach((group) => groupPrereqs.set(group.id, new Set()));
+
+  topicIds.forEach((topicId) => {
+    const groupId = groupByTopic.get(topicId);
+    const prereqs = effectivePrereqs[topicId] || [];
+    prereqs.forEach((prereqId) => {
+      const prereqGroup = groupByTopic.get(prereqId);
+      if (!prereqGroup || prereqGroup === groupId) return;
+      groupPrereqs.get(groupId)?.add(prereqGroup);
+    });
+  });
+
+  const schedule = new Map<string, { start: Date; end: Date }>();
+  const groupEnd = new Map<string, ScheduleCursor>();
+  const pending = new Set(groupList.map((group) => group.id));
+  const orderedGroupIds = groupList.map((group) => group.id);
+
+  const scheduleGroup = (groupId: string, groupStart: ScheduleCursor) => {
+    const group = groupById.get(groupId);
+    if (!group) return;
+    let topicCursor = groupStart;
+    group.topics.forEach((topicId) => {
+      const topic = topicsById.get(topicId);
+      if (!topic) return;
+      const hours =
+        (Number(topic.time_allocated ?? 0) || 0) *
+        (topic.time_unit === "days" ? WORK_HOURS_PER_DAY : 1);
+      const result = addWorkingHours(topicCursor, hours);
+      schedule.set(topicId, { start: topicCursor.date, end: result.endDate });
+      topicCursor = result.cursor;
+    });
+    groupEnd.set(groupId, topicCursor);
+  };
+
+  let progressed = true;
+  while (pending.size > 0 && progressed) {
+    progressed = false;
+    for (const groupId of orderedGroupIds) {
+      if (!pending.has(groupId)) continue;
+      const prereqGroups = groupPrereqs.get(groupId) || new Set();
+      let latestPrereqEnd: ScheduleCursor | null = null;
+      let ready = true;
+      prereqGroups.forEach((prereqGroup) => {
+        const prereqCursor = groupEnd.get(prereqGroup);
+        if (!prereqCursor) {
+          ready = false;
+          return;
+        }
+        latestPrereqEnd = latestPrereqEnd
+          ? compareCursor(latestPrereqEnd, prereqCursor)
+          : prereqCursor;
+      });
+      if (!ready) continue;
+
+      let groupStart = normalizedStart;
+      if (latestPrereqEnd) {
+        groupStart = normalizeCursor(latestPrereqEnd);
+      }
+      scheduleGroup(groupId, groupStart);
+      pending.delete(groupId);
+      progressed = true;
+    }
+  }
+
+  if (pending.size > 0) {
+    let cursor: ScheduleCursor | null = null;
+    for (const groupId of orderedGroupIds) {
+      if (!pending.has(groupId)) {
+        const knownEnd = groupEnd.get(groupId);
+        if (knownEnd) {
+          cursor = cursor ? compareCursor(cursor, knownEnd) : knownEnd;
+        }
+        continue;
+      }
+      const prereqGroups = groupPrereqs.get(groupId) || new Set();
+      let latestPrereqEnd: ScheduleCursor | null = null;
+      prereqGroups.forEach((prereqGroup) => {
+        const prereqCursor = groupEnd.get(prereqGroup);
+        if (!prereqCursor) return;
+        latestPrereqEnd = latestPrereqEnd
+          ? compareCursor(latestPrereqEnd, prereqCursor)
+          : prereqCursor;
+      });
+
+      let groupStart = normalizedStart;
+      if (cursor) {
+        groupStart = normalizeCursor(cursor);
+      }
+      if (latestPrereqEnd) {
+        const candidate = normalizeCursor(latestPrereqEnd);
+        groupStart = compareCursor(groupStart, candidate);
+      }
+      scheduleGroup(groupId, groupStart);
+      pending.delete(groupId);
+      const newEnd = groupEnd.get(groupId);
+      if (newEnd) {
+        cursor = cursor ? compareCursor(cursor, newEnd) : newEnd;
+      }
+    }
+  }
+
+  let latestCursor = normalizedStart;
+  groupEnd.forEach((entry) => {
+    latestCursor = compareCursor(latestCursor, entry);
+  });
+
+  return { schedule, startCursor: normalizedStart, endCursor: latestCursor };
+};
+
+const buildCourseSchedule = (
+  course: Course,
+  topicsById: Map<string, Topic>,
+  startCursor: ScheduleCursor
+) => {
+  const rawTopicIds = (course.topic_ids ?? []).map(String).filter(Boolean);
+  const topicIds = Array.from(new Set(rawTopicIds));
+  const keepSet = new Set(topicIds);
+  const prereqMap = normalizeRelationMap(course.topic_prerequisites ?? null, keepSet);
+  const coreqMap = normalizeRelationMap(course.topic_corequisites ?? null, keepSet);
+  const effectiveCoreqs = buildEffectiveCoreqs(topicIds, coreqMap);
+  const effectivePrereqs = buildEffectivePrereqs(topicIds, prereqMap, effectiveCoreqs);
+
+  const { schedule, startCursor: normalizedStart, endCursor } = buildSchedule({
+    startCursor,
+    topicIds,
+    topicsById,
+    effectivePrereqs,
+    effectiveCoreqs,
+  });
+
+  let courseStart: Date | null = null;
+  let courseEnd: Date | null = null;
+  schedule.forEach((entry) => {
+    if (!courseStart || entry.start.getTime() < courseStart.getTime()) {
+      courseStart = entry.start;
+    }
+    if (!courseEnd || entry.end.getTime() > courseEnd.getTime()) {
+      courseEnd = entry.end;
+    }
+  });
+
+  if (!courseStart) {
+    courseStart = normalizedStart.date;
+  }
+  if (endCursor?.date) {
+    courseEnd = !courseEnd || endCursor.date.getTime() > courseEnd.getTime()
+      ? endCursor.date
+      : courseEnd;
+  }
+  if (!courseEnd) {
+    const totalDays = Number(course.total_days ?? 0);
+    courseEnd =
+      totalDays > 0 ? calculateCourseEndDate(normalizedStart.date, totalDays) : normalizedStart.date;
+  }
+
+  return { courseStart, courseEnd, topicSchedule: schedule, endCursor };
+};
+
+const buildLearningPathSchedule = (
+  path: LearningPath,
+  enrollment: LearningPathEnrollment | null,
+  courseLookup: Map<string, Course>,
+  topicsById: Map<string, Topic>
+) => {
+  const startDateValue = enrollment?.start_date ?? path.start_at ?? null;
+  const startDate = parseDate(startDateValue);
+  const courseDates = new Map<string, { start: Date; end: Date | null }>();
+  const topicDates = new Map<string, { start: Date; end: Date }>();
+
+  if (!startDate) {
+    return { courseDates, topicDates };
+  }
+
+  let cursor: ScheduleCursor = { date: startDate, remainingHours: WORK_HOURS_PER_DAY };
+  (path.course_ids ?? []).forEach((courseId) => {
+    const course = courseLookup.get(courseId);
+    if (!course) return;
+    const { courseStart, courseEnd, topicSchedule, endCursor } = buildCourseSchedule(
+      course,
+      topicsById,
+      cursor
+    );
+    courseDates.set(course.id, { start: courseStart, end: courseEnd });
+    topicSchedule.forEach((entry, topicId) => {
+      topicDates.set(topicId, entry);
+    });
+    cursor = endCursor;
+  });
+
+  return { courseDates, topicDates };
 };
 
 const buildLatestByQuizId = <T extends { quiz_id: string; submitted_at?: string | null }>(
@@ -1189,6 +1577,12 @@ const Dashboard = () => {
             const pathCourses = (path.course_ids ?? [])
               .map((courseId) => courseLookup.get(courseId))
               .filter(Boolean) as Course[];
+            const { courseDates, topicDates } = buildLearningPathSchedule(
+              path,
+              enrollment ?? null,
+              courseLookup,
+              topicLookup
+            );
             const pathTopicIds = Array.from(
               new Set(
                 pathCourses.flatMap((course) => course?.topic_ids ?? []).filter(Boolean)
@@ -1317,6 +1711,12 @@ const Dashboard = () => {
                       filteredCourses.map((course) => {
                         const meta = courseMetaLookup.get(course.id);
                         if (!meta) return null;
+                        const courseSchedule = courseDates.get(course.id);
+                        const courseStartValue =
+                          courseSchedule?.start?.toISOString() ?? course?.start_at ?? null;
+                        const courseEndValue = courseSchedule?.end
+                          ? courseSchedule.end.toISOString()
+                          : course?.end_at ?? null;
                         const {
                           orderedTopics,
                           completion,
@@ -1330,17 +1730,22 @@ const Dashboard = () => {
                             ? orderedTopics.filter((topic) => topic.id === selectedTopicId)
                             : orderedTopics;
 
-                        const topicSequenceLockLookup = new Map<string, boolean>();
-                        let previousTopicComplete = true;
-                        orderedTopics.forEach((topic) => {
-                          const progress = progressLookup.get(topic.id);
-                          const submission = topicSubmissionLookup.get(topic.id);
-                          const status = getTopicStatusLabel(progress, submission);
-                          const isApproved = status === "Completed";
-                          const isSequenceLocked = !previousTopicComplete;
-                          topicSequenceLockLookup.set(topic.id, isSequenceLocked);
-                          previousTopicComplete = isApproved;
-                        });
+                        const orderedTopicIds = orderedTopics.map((topic) => topic.id);
+                        const keepSet = new Set(orderedTopicIds);
+                        const prereqMap = normalizeRelationMap(
+                          course.topic_prerequisites ?? null,
+                          keepSet
+                        );
+                        const coreqMap = normalizeRelationMap(
+                          course.topic_corequisites ?? null,
+                          keepSet
+                        );
+                        const effectiveCoreqs = buildEffectiveCoreqs(orderedTopicIds, coreqMap);
+                        const effectivePrereqs = buildEffectivePrereqs(
+                          orderedTopicIds,
+                          prereqMap,
+                          effectiveCoreqs
+                        );
 
                         return (
                       <details
@@ -1361,6 +1766,14 @@ const Dashboard = () => {
                                   <p className="mt-2 text-sm text-slate-300">
                                     {course?.description}
                                   </p>
+                                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                                    <span className="rounded-full border border-white/10 px-3 py-1">
+                                      Start: {formatDate(courseStartValue)}
+                                    </span>
+                                    <span className="rounded-full border border-white/10 px-3 py-1">
+                                      End: {formatDate(courseEndValue)}
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {isCourseComplete && (
@@ -1394,7 +1807,13 @@ const Dashboard = () => {
                                   const status = getTopicStatusLabel(progress, submission);
                                   const statusStyle =
                                     topicStatusStyles[status] ?? topicStatusStyles["Not Started"];
-                                  const prereqs = topic.pre_requisites ?? [];
+                                  const topicSchedule = topicDates.get(topic.id);
+                                  const topicStartValue =
+                                    topicSchedule?.start?.toISOString() ?? topic.start_date ?? null;
+                                  const topicEndValue = topicSchedule?.end
+                                    ? topicSchedule.end.toISOString()
+                                    : topic.end_date ?? null;
+                                  const prereqs = effectivePrereqs[topic.id] ?? [];
                                   const missingPrereqs = prereqs.filter((id) => {
                                     const prereqProgress = progressLookup.get(id);
                                     const prereqSubmission = topicSubmissionLookup.get(id);
@@ -1406,21 +1825,12 @@ const Dashboard = () => {
                                   const missingPrereqLabels = missingPrereqs
                                     .map((id) => topicLookup.get(id)?.title)
                                     .filter((title): title is string => Boolean(title));
-                                  const topicIndex = orderedTopics.findIndex(
-                                    (item) => item.id === topic.id
-                                  );
-                                  const previousTopicLabel =
-                                    topicIndex > 0 ? orderedTopics[topicIndex - 1]?.title : null;
                                   const isApproved = status === "Completed";
                                   const isPending = submission?.status === "pending";
                                   const isNeedsInfo = submission?.status === "in_progress";
                                   const isRejected = submission?.status === "rejected";
-                                  const isSequenceLocked =
-                                    topicSequenceLockLookup.get(topic.id) ?? false;
                                   const isTopicUnlocked =
-                                    isCourseUnlocked &&
-                                    !isSequenceLocked &&
-                                    missingPrereqs.length === 0;
+                                    isCourseUnlocked && missingPrereqs.length === 0;
                                   const canSubmit =
                                     Boolean(user?.id) &&
                                     isTopicUnlocked &&
@@ -1457,6 +1867,12 @@ const Dashboard = () => {
                                           {topic.time_allocated}{" "}
                                           {topic.time_unit === "hours" ? "hours" : "days"}
                                         </span>
+                                        <span className="rounded-full border border-white/10 px-3 py-1">
+                                          Start: {formatDate(topicStartValue)}
+                                        </span>
+                                        <span className="rounded-full border border-white/10 px-3 py-1">
+                                          End: {formatDate(topicEndValue)}
+                                        </span>
                                         {topic.link_url ? (
                                           <span className="rounded-full border border-white/10 px-3 py-1">
                                             Link available
@@ -1467,14 +1883,7 @@ const Dashboard = () => {
                                           </span>
                                         )}
                                       </div>
-                                      {isSequenceLocked && (
-                                        <p className="mt-3 text-xs text-slate-400">
-                                          Await approval of{" "}
-                                          {previousTopicLabel ?? "the previous topic"} before
-                                          continuing.
-                                        </p>
-                                      )}
-                                      {!isSequenceLocked && missingPrereqs.length > 0 && (
+                                      {missingPrereqs.length > 0 && (
                                         <p className="mt-3 text-xs text-slate-400">
                                           Complete prerequisites
                                           {missingPrereqLabels.length
@@ -2011,16 +2420,23 @@ const Dashboard = () => {
         const isCourseComplete =
           orderedTopics.length > 0 && completedCount === orderedTopics.length;
         const isCourseUnlocked = hasStarted && (courseIndex === 0 || previousCourseComplete);
-        let previousTopicComplete = true;
-        let previousTopicLabel: string | null = null;
+        const orderedTopicIds = orderedTopics.map((topic) => topic.id);
+        const keepSet = new Set(orderedTopicIds);
+        const prereqMap = normalizeRelationMap(course.topic_prerequisites ?? null, keepSet);
+        const coreqMap = normalizeRelationMap(course.topic_corequisites ?? null, keepSet);
+        const effectiveCoreqs = buildEffectiveCoreqs(orderedTopicIds, coreqMap);
+        const effectivePrereqs = buildEffectivePrereqs(
+          orderedTopicIds,
+          prereqMap,
+          effectiveCoreqs
+        );
 
         for (const topic of orderedTopics) {
           const progress = progressLookup.get(topic.id);
           const submission = topicSubmissionLookup.get(topic.id);
           const status = getTopicStatusLabel(progress, submission);
           const isApproved = status === "Completed";
-          const isSequenceLocked = !previousTopicComplete;
-          const prereqs = topic.pre_requisites ?? [];
+          const prereqs = effectivePrereqs[topic.id] ?? [];
           const missingPrereqs = prereqs.filter((id) => {
             const prereqProgress = progressLookup.get(id);
             const prereqSubmission = topicSubmissionLookup.get(id);
@@ -2029,14 +2445,11 @@ const Dashboard = () => {
           const missingPrereqLabels = missingPrereqs
             .map((id) => topicLookup.get(id)?.title)
             .filter((title): title is string => Boolean(title));
-          const isTopicUnlocked =
-            isCourseUnlocked && !isSequenceLocked && missingPrereqs.length === 0;
+          const isTopicUnlocked = isCourseUnlocked && missingPrereqs.length === 0;
           if (!isApproved) {
             let note: string | null = null;
             if (!hasStarted) {
               note = "Start the learning path to unlock this topic.";
-            } else if (isSequenceLocked) {
-              note = `Await approval of ${previousTopicLabel ?? "the previous topic"} before continuing.`;
             } else if (missingPrereqLabels.length > 0) {
               note = `Complete prerequisites: ${missingPrereqLabels.join(", ")}.`;
             }
@@ -2048,8 +2461,6 @@ const Dashboard = () => {
               canContinue: Boolean(topic.link_url) && isTopicUnlocked,
             };
           }
-          previousTopicComplete = isApproved;
-          previousTopicLabel = topic.title;
         }
 
         previousCourseComplete = isCourseComplete;

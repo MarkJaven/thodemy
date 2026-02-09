@@ -5,6 +5,7 @@ const {
   NotFoundError,
 } = require("../utils/errors");
 const { auditLogService } = require("../services/auditLogService");
+const { scheduleService } = require("../services/scheduleService");
 const {
   calculateCourseTotals,
   calculateCourseEndDate,
@@ -22,7 +23,10 @@ const normalizeRelationMap = (value, keepIds) => {
     const filtered = Array.isArray(list)
       ? list.map(String).filter((id) => (keepIds ? keepIds.has(id) : true))
       : [];
-    acc[key] = Array.from(new Set(filtered));
+    const unique = Array.from(new Set(filtered));
+    if (unique.length > 0) {
+      acc[key] = unique;
+    }
     return acc;
   }, {});
 };
@@ -329,6 +333,14 @@ const upsertCourse = async (req, res, next) => {
           to: nextStatus,
         },
       });
+      await scheduleService.scheduleCourseTopics({
+        courseId,
+        topicIds: normalizedTopicIds,
+        topicPrerequisites: normalizedPrereqs,
+        topicCorequisites: normalizedCoreqs,
+        fallbackStartAt: coursePayload.start_at,
+        updatedBy: userId,
+      });
       return res.json({ courseId });
     }
 
@@ -360,7 +372,25 @@ const upsertCourse = async (req, res, next) => {
         topics: data.topic_ids?.length ?? 0,
       },
     });
-    return res.status(201).json({ course: data });
+    const scheduleResult = await scheduleService.scheduleCourseTopics({
+      courseId: data.id,
+      topicIds: normalizedTopicIds,
+      topicPrerequisites: normalizedPrereqs,
+      topicCorequisites: normalizedCoreqs,
+      fallbackStartAt: coursePayload.start_at,
+      updatedBy: userId,
+    });
+
+    const scheduledCourse =
+      scheduleResult?.scheduled
+        ? {
+            ...data,
+            start_at: scheduleResult.courseStart ?? data.start_at,
+            end_at: scheduleResult.courseEnd ?? data.end_at,
+          }
+        : data;
+
+    return res.status(201).json({ course: scheduledCourse });
   } catch (error) {
     return next(error);
   }

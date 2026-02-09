@@ -7,6 +7,7 @@ const {
 } = require("../utils/errors");
 const { auditLogService } = require("../services/auditLogService");
 const { topicService } = require("../services/topicService");
+const { scheduleService } = require("../services/scheduleService");
 const { calculateCourseTotals, calculateCourseEndDate } = require("../utils/courseUtils");
 
 const TOPIC_SELECT_FIELDS =
@@ -480,6 +481,10 @@ const updateTopic = async (req, res, next) => {
         userId,
         existing.title ? String(existing.title) : null
       );
+      await scheduleService.scheduleCoursesForTopic({
+        topicId,
+        updatedBy: userId,
+      });
     }
 
     if (payload.status !== undefined && payload.status !== existing.status) {
