@@ -39,7 +39,7 @@ type ActivitiesSectionProps = {
     | "course_enrollments"
     | null;
   onFocusHandled?: () => void;
-  variant?: "full" | "approvals";
+  variant?: "full" | "approvals" | "projects";
 };
 
 const ActivitiesSection = ({
@@ -48,6 +48,9 @@ const ActivitiesSection = ({
   onFocusHandled,
   variant = "full",
 }: ActivitiesSectionProps) => {
+  const showApprovals = variant === "full" || variant === "approvals";
+  const showProjects = variant === "full" || variant === "projects";
+
   const [activities, setActivities] = useState<Activity[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -1071,7 +1074,7 @@ const ActivitiesSection = ({
   );
 
   if (loading) {
-    return <p className="text-sm text-slate-400">Loading projects...</p>;
+    return <p className="text-sm text-slate-400">Loading...</p>;
   }
 
   if (error) {
@@ -1080,33 +1083,37 @@ const ActivitiesSection = ({
 
   return (
     <div className="space-y-6">
-      <div ref={learningPathEnrollmentsRef} className="space-y-4">
-        <div>
-          <h2 className="font-display text-2xl text-white">Learning path enrollments</h2>
-          <p className="text-sm text-slate-300">
-            Review users who requested access via learning path code.
-          </p>
-        </div>
-        <DataTable
-          columns={learningPathEnrollmentColumns}
-          data={learningPathEnrollmentRows}
-          emptyMessage="No learning path enrollment requests yet."
-        />
-      </div>
+      {showApprovals && (
+        <>
+          <div ref={learningPathEnrollmentsRef} className="space-y-4">
+            <div>
+              <h2 className="font-display text-2xl text-white">Learning path enrollments</h2>
+              <p className="text-sm text-slate-300">
+                Review users who requested access via learning path code.
+              </p>
+            </div>
+            <DataTable
+              columns={learningPathEnrollmentColumns}
+              data={learningPathEnrollmentRows}
+              emptyMessage="No learning path enrollment requests yet."
+            />
+          </div>
 
-      <div ref={courseEnrollmentsRef} className="space-y-4">
-        <div>
-          <h2 className="font-display text-2xl text-white">Course progress</h2>
-          <p className="text-sm text-slate-300">Track enrollment progress by user.</p>
-        </div>
-        <DataTable
-          columns={progressColumns}
-          data={progressRows}
-          emptyMessage="No enrollments available."
-        />
-      </div>
+          <div ref={courseEnrollmentsRef} className="space-y-4">
+            <div>
+              <h2 className="font-display text-2xl text-white">Course progress</h2>
+              <p className="text-sm text-slate-300">Track enrollment progress by user.</p>
+            </div>
+            <DataTable
+              columns={progressColumns}
+              data={progressRows}
+              emptyMessage="No enrollments available."
+            />
+          </div>
+        </>
+      )}
 
-      {variant === "full" && (
+      {showProjects && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -1143,112 +1150,116 @@ const ActivitiesSection = ({
         </>
       )}
 
-      <div ref={topicSubmissionsRef} className="space-y-3">
-        <div>
-          <h3 className="font-display text-xl text-white">Topic submissions</h3>
-          <p className="text-sm text-slate-400">
-            Review learner-uploaded certificates and mark completion status.
-          </p>
-        </div>
-        <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300 md:grid-cols-5">
-          <label className="flex flex-col gap-2">
-            Status
-            <select
-              value={submissionFilters.status}
-              onChange={(event) =>
-                setSubmissionFilters((prev) => ({ ...prev, status: event.target.value }))
-              }
-              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
-            >
-              <option value="">All</option>
-              <option value="pending">pending</option>
-              <option value="in_progress">in_progress</option>
-              <option value="completed">completed</option>
-              <option value="rejected">rejected</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-2">
-            Topic
-            <select
-              value={submissionFilters.topicId}
-              onChange={(event) =>
-                setSubmissionFilters((prev) => ({ ...prev, topicId: event.target.value }))
-              }
-              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
-            >
-              <option value="">All topics</option>
-              {topics.map((topic) => (
-                <option key={topic.id} value={topic.id}>
-                  {topic.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-2">
-            User
-            <select
-              value={submissionFilters.userId}
-              onChange={(event) =>
-                setSubmissionFilters((prev) => ({ ...prev, userId: event.target.value }))
-              }
-              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
-            >
-              <option value="">All users</option>
-              {users.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.email ?? entry.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-2">
-            From
-            <input
-              type="date"
-              value={submissionFilters.from}
-              onChange={(event) =>
-                setSubmissionFilters((prev) => ({ ...prev, from: event.target.value }))
-              }
-              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
-            />
-          </label>
-          <label className="flex flex-col gap-2">
-            To
-            <input
-              type="date"
-              value={submissionFilters.to}
-              onChange={(event) =>
-                setSubmissionFilters((prev) => ({ ...prev, to: event.target.value }))
-              }
-              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
-            />
-          </label>
-        </div>
-        {submissionsLoading ? (
-          <p className="text-sm text-slate-400">Loading submissions...</p>
-        ) : (
-          <DataTable
-            columns={topicSubmissionColumns}
-            data={topicSubmissionRows}
-            emptyMessage="No topic submissions yet."
-          />
-        )}
-        {submissionError && <p className="text-xs text-rose-200">{submissionError}</p>}
-      </div>
+      {showApprovals && (
+        <>
+          <div ref={topicSubmissionsRef} className="space-y-3">
+            <div>
+              <h3 className="font-display text-xl text-white">Topic submissions</h3>
+              <p className="text-sm text-slate-400">
+                Review learner-uploaded certificates and mark completion status.
+              </p>
+            </div>
+            <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300 md:grid-cols-5">
+              <label className="flex flex-col gap-2">
+                Status
+                <select
+                  value={submissionFilters.status}
+                  onChange={(event) =>
+                    setSubmissionFilters((prev) => ({ ...prev, status: event.target.value }))
+                  }
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                >
+                  <option value="">All</option>
+                  <option value="pending">pending</option>
+                  <option value="in_progress">in_progress</option>
+                  <option value="completed">completed</option>
+                  <option value="rejected">rejected</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-2">
+                Topic
+                <select
+                  value={submissionFilters.topicId}
+                  onChange={(event) =>
+                    setSubmissionFilters((prev) => ({ ...prev, topicId: event.target.value }))
+                  }
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                >
+                  <option value="">All topics</option>
+                  {topics.map((topic) => (
+                    <option key={topic.id} value={topic.id}>
+                      {topic.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2">
+                User
+                <select
+                  value={submissionFilters.userId}
+                  onChange={(event) =>
+                    setSubmissionFilters((prev) => ({ ...prev, userId: event.target.value }))
+                  }
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                >
+                  <option value="">All users</option>
+                  {users.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.email ?? entry.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2">
+                From
+                <input
+                  type="date"
+                  value={submissionFilters.from}
+                  onChange={(event) =>
+                    setSubmissionFilters((prev) => ({ ...prev, from: event.target.value }))
+                  }
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                To
+                <input
+                  type="date"
+                  value={submissionFilters.to}
+                  onChange={(event) =>
+                    setSubmissionFilters((prev) => ({ ...prev, to: event.target.value }))
+                  }
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                />
+              </label>
+            </div>
+            {submissionsLoading ? (
+              <p className="text-sm text-slate-400">Loading submissions...</p>
+            ) : (
+              <DataTable
+                columns={topicSubmissionColumns}
+                data={topicSubmissionRows}
+                emptyMessage="No topic submissions yet."
+              />
+            )}
+            {submissionError && <p className="text-xs text-rose-200">{submissionError}</p>}
+          </div>
 
-      <div ref={courseProofsRef} className="space-y-3">
-        <div>
-          <h3 className="font-display text-xl text-white">Course completion proofs</h3>
-          <p className="text-sm text-slate-400">
-            Review uploaded course proofs before unlocking the next course.
-          </p>
-        </div>
-        <DataTable
-          columns={courseCompletionColumns}
-          data={pendingCourseCompletionRequests}
-          emptyMessage="No course proofs yet."
-        />
-      </div>
+          <div ref={courseProofsRef} className="space-y-3">
+            <div>
+              <h3 className="font-display text-xl text-white">Course completion proofs</h3>
+              <p className="text-sm text-slate-400">
+                Review uploaded course proofs before unlocking the next course.
+              </p>
+            </div>
+            <DataTable
+              columns={courseCompletionColumns}
+              data={pendingCourseCompletionRequests}
+              emptyMessage="No course proofs yet."
+            />
+          </div>
+        </>
+      )}
 
       {actionError && <p className="text-xs text-rose-200">{actionError}</p>}
       {viewError && <p className="text-xs text-rose-200">{viewError}</p>}

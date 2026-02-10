@@ -53,6 +53,12 @@ const UsersIcon = () => (
   </svg>
 );
 
+const ActivityIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+  </svg>
+);
+
 const QuizIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="10" />
@@ -103,6 +109,7 @@ type NavItem =
   | "learning-paths"
   | "topics"
   | "users"
+  | "projects"
   | "quiz"
   | "approvals"
   | "reports";
@@ -599,6 +606,7 @@ const SuperAdminDashboard = () => {
     { key: "learning-paths", label: "Learning Paths", icon: <LearningPathIcon /> },
     { key: "topics", label: "Topics", icon: <TopicsIcon /> },
     { key: "users", label: "Users", icon: <UsersIcon /> },
+    { key: "projects", label: "Projects", icon: <ActivityIcon /> },
     { key: "quiz", label: "Quiz", icon: <QuizIcon /> },
     { key: "approvals", label: "Approvals", icon: <ApprovalsIcon /> },
     { key: "reports", label: "Reports", icon: <ReportsIcon /> },
@@ -614,6 +622,8 @@ const SuperAdminDashboard = () => {
         return <TopicsSection />;
       case "users":
         return <UsersSection />;
+      case "projects":
+        return <ActivitiesSection variant="projects" />;
       case "quiz":
         return <QuizzesSection />;
       case "approvals":
