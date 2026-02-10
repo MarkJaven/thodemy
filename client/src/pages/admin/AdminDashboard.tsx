@@ -68,6 +68,13 @@ const QuizIcon = () => (
   </svg>
 );
 
+const ApprovalsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M9 11l3 3L22 4" />
+    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+  </svg>
+);
+
 const FormsIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -92,7 +99,16 @@ const CloseIcon = () => (
   </svg>
 );
 
-type NavItem = "overview" | "courses" | "learning-paths" | "topics" | "users" | "activity" | "quiz" | "forms";
+type NavItem =
+  | "overview"
+  | "courses"
+  | "learning-paths"
+  | "topics"
+  | "users"
+  | "projects"
+  | "activity"
+  | "quiz"
+  | "forms";
 
 interface DashboardStats {
   activeCourses: number;
@@ -585,7 +601,8 @@ const AdminDashboard = () => {
     { key: "learning-paths", label: "Learning Paths", icon: <LearningPathIcon /> },
     { key: "topics", label: "Topics", icon: <TopicsIcon /> },
     { key: "users", label: "Users", icon: <UsersIcon /> },
-    { key: "activity", label: "Projects", icon: <ActivityIcon /> },
+    { key: "projects", label: "Projects", icon: <ActivityIcon /> },
+    { key: "activity", label: "Approvals", icon: <ApprovalsIcon /> },
     { key: "quiz", label: "Quiz", icon: <QuizIcon /> },
     { key: "forms", label: "Forms", icon: <FormsIcon /> },
   ];
@@ -600,12 +617,15 @@ const AdminDashboard = () => {
         return <TopicsSection role="admin" />;
       case "users":
         return <UsersSection readOnly />;
+      case "projects":
+        return <ActivitiesSection variant="projects" />;
       case "activity":
         return (
           <ActivitiesSection
             focusSubmissionId={approvalFocus?.submissionId ?? null}
             focusSection={approvalFocus?.section ?? null}
             onFocusHandled={() => setApprovalFocus(null)}
+            variant="approvals"
           />
         );
       case "quiz":
