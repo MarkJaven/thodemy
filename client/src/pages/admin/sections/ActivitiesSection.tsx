@@ -590,7 +590,7 @@ const ActivitiesSection = ({
                   disabled={isUpdating}
                   className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
                 >
-                  {isUpdating ? "Removing..." : "Kick"}
+                  {isUpdating ? "Removing..." : "Remove"}
                 </button>
               )}
             </div>
@@ -895,7 +895,7 @@ const ActivitiesSection = ({
                   disabled={isUpdating}
                   className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
                 >
-                  {isUpdating ? "Removing..." : "Kick"}
+                  {isUpdating ? "Removing..." : "Remove"}
                 </button>
               )}
             </div>
