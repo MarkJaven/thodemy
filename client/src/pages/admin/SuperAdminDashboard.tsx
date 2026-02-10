@@ -12,6 +12,7 @@ import LearningPathsSection from "./sections/LearningPathsSection";
 import CoursesSection from "./sections/CoursesSection";
 import ActivitiesSection from "./sections/ActivitiesSection";
 import QuizzesSection from "./sections/QuizzesSection";
+import ReportsSection from "./sections/ReportsSection";
 
 // Navigation icons
 const OverviewIcon = () => (
@@ -636,7 +637,7 @@ const SuperAdminDashboard = () => {
           />
         );
       case "reports":
-        return <div className="text-slate-400">Reports section coming soon...</div>;
+        return <ReportsSection />;
       default:
         return renderOverview();
     }
