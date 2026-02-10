@@ -13,6 +13,7 @@ import CoursesSection from "./sections/CoursesSection";
 import ActivitiesSection from "./sections/ActivitiesSection";
 import QuizzesSection from "./sections/QuizzesSection";
 import FormsSection from "./sections/FormsSection";
+import ReportsSection from "./sections/ReportsSection";
 
 // Navigation icons
 const OverviewIcon = () => (
@@ -99,6 +100,12 @@ const CloseIcon = () => (
   </svg>
 );
 
+const ReportsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+    <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+  </svg>
+);
 type NavItem =
   | "overview"
   | "courses"
@@ -108,7 +115,8 @@ type NavItem =
   | "projects"
   | "activity"
   | "quiz"
-  | "forms";
+  | "forms"
+  | "reports";
 
 interface DashboardStats {
   activeCourses: number;
@@ -605,6 +613,7 @@ const AdminDashboard = () => {
     { key: "activity", label: "Approvals", icon: <ApprovalsIcon /> },
     { key: "quiz", label: "Quiz", icon: <QuizIcon /> },
     { key: "forms", label: "Forms", icon: <FormsIcon /> },
+    { key: "reports", label: "Reports", icon: <ReportsIcon /> },
   ];
 
   const renderContent = () => {
@@ -632,6 +641,8 @@ const AdminDashboard = () => {
         return <QuizzesSection />;
       case "forms":
         return <FormsSection />;
+      case "reports":
+        return <ReportsSection />;
       default:
         return renderOverview();
     }
