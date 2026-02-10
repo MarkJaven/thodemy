@@ -1,5 +1,6 @@
 const { adminUserService } = require("../services/adminUserService");
 const { auditLogService } = require("../services/auditLogService");
+const { adminReportService } = require("../services/adminReportService");
 
 /**
  * Create a new user (superadmin only).
@@ -106,4 +107,56 @@ const listUsers = async (req, res, next) => {
   }
 };
 
-module.exports = { adminController: { createUser, updateUser, deleteUser, listUsers } };
+/**
+ * Download user checklist report as CSV.
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ * @returns {Promise<void>}
+ */
+const downloadUserChecklistReport = async (req, res, next) => {
+  try {
+    const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+    const { csv, fileName } = await adminReportService.buildUserChecklistCsv({ userId });
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.status(200).send(csv);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Download user checklist report as Excel.
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ * @returns {Promise<void>}
+ */
+const downloadUserChecklistReportXlsx = async (req, res, next) => {
+  try {
+    const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+    const { buffer, fileName } = await adminReportService.buildUserChecklistWorkbook({
+      userId,
+    });
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.status(200).send(buffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  adminController: {
+    createUser,
+    updateUser,
+    deleteUser,
+    listUsers,
+    downloadUserChecklistReport,
+    downloadUserChecklistReportXlsx,
+  },
+};

@@ -23,6 +23,20 @@ const {
 const router = express.Router();
 
 router.get("/users", generalLimiter, requireAuth, requireAdmin, adminController.listUsers);
+router.get(
+  "/reports/user-checklist.csv",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  adminController.downloadUserChecklistReport
+);
+router.get(
+  "/reports/user-checklist.xlsx",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  adminController.downloadUserChecklistReportXlsx
+);
 
 router.post(
   "/users",
