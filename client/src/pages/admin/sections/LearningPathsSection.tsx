@@ -1041,7 +1041,7 @@ const LearningPathsSection = () => {
                               ? "Removed"
                               : removingEnrollmentId === enrollment.id
                               ? "Removing..."
-                              : "Kick"}
+                              : "Remove"}
                           </button>
                         )}
                       </div>
