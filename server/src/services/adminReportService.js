@@ -1,6 +1,24 @@
-const ExcelJS = require("exceljs");
 const { supabaseAdmin } = require("../config/supabase");
-const { ExternalServiceError } = require("../utils/errors");
+const { AppError, ExternalServiceError } = require("../utils/errors");
+
+let cachedExcelJs = null;
+
+const getExcelJs = () => {
+  if (cachedExcelJs) return cachedExcelJs;
+  try {
+    // Lazily load ExcelJS so the server can still start even if the dependency
+    // isn't installed (only the XLSX export route depends on it).
+    cachedExcelJs = require("exceljs");
+    return cachedExcelJs;
+  } catch (error) {
+    throw new AppError(
+      "Excel export is unavailable because the 'exceljs' dependency is missing.",
+      500,
+      "DEPENDENCY_MISSING",
+      { dependency: "exceljs", originalError: error.message }
+    );
+  }
+};
 
 const csvEscape = (value) => {
   if (value === null || value === undefined) return "";
@@ -348,6 +366,7 @@ const applyRowStyle = (row, fillColor) => {
 
 const buildUserChecklistWorkbook = async ({ userId } = {}) => {
   const rows = await loadUserChecklistRows({ userId });
+  const ExcelJS = getExcelJs();
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("User Checklist");
 
