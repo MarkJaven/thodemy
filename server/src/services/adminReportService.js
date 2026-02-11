@@ -36,6 +36,12 @@ const formatDate = (value) => {
   return date.toISOString();
 };
 
+const formatUserName = (profile) =>
+  [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+  profile?.username ||
+  profile?.email ||
+  "";
+
 const chunk = (items, size) => {
   const result = [];
   for (let i = 0; i < items.length; i += size) {
@@ -53,6 +59,56 @@ const fetchInChunks = async (items, size, handler) => {
     results.push(...(data ?? []));
   }
   return results;
+};
+
+const loadChecklistUsers = async ({ userId } = {}) => {
+  let profileQuery = supabaseAdmin
+    .from("profiles")
+    .select("id, first_name, last_name, username, email, created_at");
+  if (userId) {
+    profileQuery = profileQuery.eq("id", userId);
+  }
+  const { data: profiles, error: profileError } = await profileQuery;
+  if (profileError) {
+    throw new ExternalServiceError("Unable to load user profiles for checklist export", {
+      code: profileError.code,
+      details: profileError.message,
+    });
+  }
+
+  let roleQuery = supabaseAdmin.from("user_roles").select("user_id, role");
+  if (userId) {
+    roleQuery = roleQuery.eq("user_id", userId);
+  }
+  const { data: roles, error: roleError } = await roleQuery;
+  if (roleError) {
+    throw new ExternalServiceError("Unable to load user roles for checklist export", {
+      code: roleError.code,
+      details: roleError.message,
+    });
+  }
+
+  const roleMap = new Map((roles ?? []).map((entry) => [entry.user_id, entry.role]));
+  const normalized = (profiles ?? []).map((profile) => ({
+    id: profile.id,
+    role: roleMap.get(profile.id) || "user",
+    userName: formatUserName(profile),
+    userEmail: profile.email || "",
+    createdAt: profile.created_at || "",
+  }));
+
+  const filtered = userId
+    ? normalized
+    : normalized.filter((entry) => entry.role === "user");
+
+  return filtered.sort((left, right) => {
+    const leftName = String(left.userName || left.userEmail || "").toLowerCase();
+    const rightName = String(right.userName || right.userEmail || "").toLowerCase();
+    if (leftName && rightName && leftName !== rightName) {
+      return leftName.localeCompare(rightName);
+    }
+    return String(left.createdAt || "").localeCompare(String(right.createdAt || ""));
+  });
 };
 
 const loadUserChecklistRows = async ({ userId } = {}) => {
@@ -214,10 +270,7 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
 
   for (const enrollment of enrollmentRows) {
     const profile = profileMap.get(enrollment.user_id) || {};
-    const userName =
-      [profile.first_name, profile.last_name].filter(Boolean).join(" ") ||
-      profile.username ||
-      "";
+    const userName = formatUserName(profile);
     const userEmail = profile.email || "";
     const learningPath = learningPathMap.get(enrollment.learning_path_id);
     const learningPathTitle = learningPath?.title || "";
@@ -239,6 +292,7 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
         const notesEntry = notesMap.get(`${enrollment.user_id}:${topicId}`);
         const notes = notesEntry?.review_notes || "";
         rows.push({
+          userId: enrollment.user_id,
           userName,
           userEmail,
           learningPathTitle,
@@ -308,6 +362,56 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
   return { csv: `${lines.join("\n")}\n`, fileName };
 };
 
+const CHECKLIST_HEADER_LABELS = [
+  "Course Name",
+  "Topic Name",
+  "Topic Status",
+  "Topic Start Date",
+  "Topic End Date",
+  "Remarks",
+];
+
+const CHECKLIST_COLUMNS = [
+  { key: "courseTitle", width: 28 },
+  { key: "topicTitle", width: 36 },
+  { key: "status", width: 14 },
+  { key: "topicStartDate", width: 16 },
+  { key: "topicEndDate", width: 16 },
+  { key: "notes", width: 30 },
+];
+
+const sanitizeSheetName = (value) => {
+  const cleaned = String(value || "")
+    .replace(/[\\/*?:[\]]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || "User Checklist";
+};
+
+const buildUniqueSheetName = (baseName, usedNames) => {
+  const normalizedBase = sanitizeSheetName(baseName);
+  const baseTrimmed = normalizedBase.slice(0, 31) || "User Checklist";
+  const register = (name) => {
+    usedNames.add(name.toLowerCase());
+    return name;
+  };
+  if (!usedNames.has(baseTrimmed.toLowerCase())) {
+    return register(baseTrimmed);
+  }
+
+  let suffix = 2;
+  while (suffix < 10000) {
+    const suffixText = ` (${suffix})`;
+    const basePart = baseTrimmed.slice(0, Math.max(1, 31 - suffixText.length)).trim();
+    const candidate = `${basePart}${suffixText}`;
+    if (!usedNames.has(candidate.toLowerCase())) {
+      return register(candidate);
+    }
+    suffix += 1;
+  }
+  return register(`User Checklist (${Date.now() % 1000})`.slice(0, 31));
+};
+
 const applyHeaderStyle = (row) => {
   row.eachCell((cell) => {
     cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
@@ -364,14 +468,9 @@ const applyRowStyle = (row, fillColor) => {
   });
 };
 
-const buildUserChecklistWorkbook = async ({ userId } = {}) => {
-  const rows = await loadUserChecklistRows({ userId });
-  const ExcelJS = getExcelJs();
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("User Checklist");
-
-  const summaryUserName = rows[0]?.userName || "";
-  const summaryUserEmail = rows[0]?.userEmail || "";
+const populateUserChecklistSheet = (sheet, rows, userSummary = {}) => {
+  const summaryUserName = userSummary.userName || rows[0]?.userName || "";
+  const summaryUserEmail = userSummary.userEmail || rows[0]?.userEmail || "";
   const uniqueLearningPaths = Array.from(
     new Set(rows.map((row) => row.learningPathTitle).filter(Boolean))
   );
@@ -391,25 +490,7 @@ const buildUserChecklistWorkbook = async ({ userId } = {}) => {
         ? "Multiple"
         : "";
 
-  const headerLabels = [
-    "Course Name",
-    "Topic Name",
-    "Topic Status",
-    "Topic Start Date",
-    "Topic End Date",
-    "Remarks",
-  ];
-
-  sheet.columns = [
-    { key: "courseTitle", width: 28 },
-    { key: "topicTitle", width: 36 },
-    { key: "status", width: 14 },
-    { key: "topicStartDate", width: 16 },
-    { key: "topicEndDate", width: 16 },
-    { key: "notes", width: 30 },
-  ];
-
-  const totalColumns = sheet.columns.length;
+  sheet.columns = CHECKLIST_COLUMNS.map((column) => ({ ...column }));
 
   const infoRows = [
     ["Name", summaryUserName],
@@ -447,7 +528,7 @@ const buildUserChecklistWorkbook = async ({ userId } = {}) => {
     };
   });
 
-  sheet.getRow(6).values = headerLabels;
+  sheet.getRow(6).values = CHECKLIST_HEADER_LABELS;
   const headerRow = sheet.getRow(6);
   headerRow.height = 24;
   applyHeaderStyle(headerRow);
@@ -521,6 +602,67 @@ const buildUserChecklistWorkbook = async ({ userId } = {}) => {
   }
 
   applyAllBorders(sheet);
+};
+
+const buildUserChecklistWorkbook = async ({ userId } = {}) => {
+  const [rows, users] = await Promise.all([
+    loadUserChecklistRows({ userId }),
+    loadChecklistUsers({ userId }),
+  ]);
+  const ExcelJS = getExcelJs();
+  const workbook = new ExcelJS.Workbook();
+  const rowsByUserId = new Map();
+
+  rows.forEach((row, index) => {
+    const fallbackKey = `${row.userName || ""}|${row.userEmail || ""}`;
+    const key = row.userId
+      ? String(row.userId)
+      : fallbackKey !== "|"
+        ? fallbackKey
+        : `unknown-${index}`;
+    if (!rowsByUserId.has(key)) {
+      rowsByUserId.set(key, []);
+    }
+    rowsByUserId.get(key).push(row);
+  });
+
+  if (userId) {
+    const summary = users[0] || { id: userId, userName: "", userEmail: "" };
+    const scopedRows = rowsByUserId.get(String(summary.id)) || rows;
+    const sheet = workbook.addWorksheet("User Checklist");
+    populateUserChecklistSheet(sheet, scopedRows, summary);
+  } else {
+    const usedSheetNames = new Set();
+    const renderedUserIds = new Set();
+
+    users.forEach((user) => {
+      const userKey = String(user.id);
+      renderedUserIds.add(userKey);
+      const userRows = rowsByUserId.get(userKey) || [];
+      const displayName = user.userName || user.userEmail || userKey || "User Checklist";
+      const sheetName = buildUniqueSheetName(displayName, usedSheetNames);
+      const sheet = workbook.addWorksheet(sheetName);
+      populateUserChecklistSheet(sheet, userRows, user);
+    });
+
+    rowsByUserId.forEach((userRows, key) => {
+      if (renderedUserIds.has(key)) return;
+      const userSummary = {
+        id: key,
+        userName: userRows[0]?.userName || "",
+        userEmail: userRows[0]?.userEmail || "",
+      };
+      const displayName = userSummary.userName || userSummary.userEmail || key;
+      const sheetName = buildUniqueSheetName(displayName, usedSheetNames);
+      const sheet = workbook.addWorksheet(sheetName);
+      populateUserChecklistSheet(sheet, userRows, userSummary);
+    });
+
+    if (workbook.worksheets.length === 0) {
+      const emptySheet = workbook.addWorksheet("User Checklist");
+      populateUserChecklistSheet(emptySheet, []);
+    }
+  }
 
   const buffer = await workbook.xlsx.writeBuffer();
   const fileName = buildChecklistFileName({ rows, ext: "xlsx" });

@@ -145,6 +145,34 @@ const StatSkeleton = () => (
   </div>
 );
 
+type TrendPeriod = "weekly" | "monthly" | "quarterly";
+
+const TREND_PERIOD_CONFIG: Record<
+  TrendPeriod,
+  {
+    label: string;
+    subtitle: string;
+  }
+> = {
+  weekly: {
+    label: "Weekly",
+    subtitle: "Working days (Mon-Fri)",
+  },
+  monthly: {
+    label: "Monthly",
+    subtitle: "Monthly view (Jan-Dec)",
+  },
+  quarterly: {
+    label: "Quarterly",
+    subtitle: "Quarterly view (Q1-Q4)",
+  },
+};
+
+const toDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`;
+
 /* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
@@ -164,8 +192,9 @@ const ReportsSection = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Trend date range filter (always 7-day windows)
-  const [trendDaysAgo, setTrendDaysAgo] = useState(0); // 0 = latest 7 days, 7 = 7-14 days ago, etc.
+  // Trend date range filter
+  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>("weekly");
+  const [trendOffset, setTrendOffset] = useState(0); // 0 = current window
 
   /* ---- data loading ---- */
 
@@ -221,7 +250,7 @@ const ReportsSection = () => {
           user.username ||
           user.email ||
           "Unknown user";
-        const label = user.email ? `${name} · ${user.email}` : name;
+        const label = user.email ? `${name} | ${user.email}` : name;
         return { id: user.id, label, name };
       });
     return mapped;
@@ -266,44 +295,104 @@ const ReportsSection = () => {
     [progressSummary]
   );
 
+  const trendConfig = TREND_PERIOD_CONFIG[trendPeriod];
+
   const trendWindow = useMemo(() => {
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
-    end.setDate(end.getDate() - trendDaysAgo);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 6);
-    start.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    if (trendPeriod === "weekly") {
+      const anchor = new Date(now);
+      anchor.setDate(anchor.getDate() - trendOffset * 7);
+      const weekday = anchor.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+      const deltaToMonday = weekday === 0 ? -6 : 1 - weekday;
+
+      const start = new Date(anchor);
+      start.setDate(start.getDate() + deltaToMonday);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(start);
+      end.setDate(start.getDate() + 4);
+      end.setHours(23, 59, 59, 999);
+      return { start, end };
+    }
+
+    const year = now.getFullYear() - trendOffset;
+    const start = new Date(year, 0, 1, 0, 0, 0, 0);
+    const end = new Date(year, 11, 31, 23, 59, 59, 999);
     return { start, end };
-  }, [trendDaysAgo]);
+  }, [trendOffset, trendPeriod]);
 
   const trendWindowLabel = useMemo(() => {
-    const fmt = (d: Date) => d.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" });
-    return `${fmt(trendWindow.start)} – ${fmt(trendWindow.end)}`;
-  }, [trendWindow]);
+    if (trendPeriod !== "weekly") {
+      return `${trendWindow.start.getFullYear()}`;
+    }
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" });
+    return `${fmt(trendWindow.start)} - ${fmt(trendWindow.end)}`;
+  }, [trendPeriod, trendWindow]);
 
   const completionTrend = useMemo(() => {
-    // Build a map of actual data
-    const dataMap = new Map<string, number>();
+    const dailyCounts = new Map<string, number>();
     scopedProgress.forEach((entry) => {
       if (entry.status !== "completed" || !entry.end_date) return;
       const date = new Date(entry.end_date);
       if (Number.isNaN(date.getTime())) return;
       if (date < trendWindow.start || date > trendWindow.end) return;
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-      dataMap.set(key, (dataMap.get(key) || 0) + 1);
+      const key = toDateKey(date);
+      dailyCounts.set(key, (dailyCounts.get(key) || 0) + 1);
     });
 
-    // Always show all 7 days in the window so the chart is consistent
-    const days: { month: string; completed: number }[] = [];
-    const cursor = new Date(trendWindow.start);
-    while (cursor <= trendWindow.end) {
-      const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
-      const label = cursor.toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" });
-      days.push({ month: label, completed: dataMap.get(key) || 0 });
-      cursor.setDate(cursor.getDate() + 1);
+    if (trendPeriod === "weekly") {
+      const days: { label: string; completed: number }[] = [];
+      const cursor = new Date(trendWindow.start);
+      while (cursor <= trendWindow.end) {
+        const key = toDateKey(cursor);
+        const label = cursor.toLocaleDateString("en", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        });
+        days.push({ label, completed: dailyCounts.get(key) || 0 });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return days;
     }
-    return days;
-  }, [scopedProgress, trendWindow]);
+
+    const monthTotals = Array.from({ length: 12 }, (_, monthIndex) => {
+      const start = new Date(trendWindow.start.getFullYear(), monthIndex, 1);
+      const end = new Date(trendWindow.start.getFullYear(), monthIndex + 1, 0);
+      let completed = 0;
+      const cursor = new Date(start);
+      while (cursor <= end) {
+        completed += dailyCounts.get(toDateKey(cursor)) || 0;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return completed;
+    });
+
+    if (trendPeriod === "monthly") {
+      return monthTotals.map((completed, monthIndex) => ({
+        label: new Date(
+          trendWindow.start.getFullYear(),
+          monthIndex,
+          1
+        ).toLocaleDateString("en", { month: "short" }),
+        completed,
+      }));
+    }
+
+    const quarterRanges = [
+      { label: "Q1", from: 0, to: 2 },
+      { label: "Q2", from: 3, to: 5 },
+      { label: "Q3", from: 6, to: 8 },
+      { label: "Q4", from: 9, to: 11 },
+    ];
+
+    return quarterRanges.map((q) => ({
+      label: `${q.label} ${trendWindow.start.getFullYear()}`,
+      completed: monthTotals.slice(q.from, q.to + 1).reduce((sum, value) => sum + value, 0),
+    }));
+  }, [scopedProgress, trendPeriod, trendWindow]);
 
   const topLearners = useMemo(() => {
     const counts = new Map<string, number>();
@@ -551,7 +640,7 @@ const ReportsSection = () => {
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-medium">{opt.name}</p>
                             <p className="truncate text-[11px] text-slate-500">
-                              {opt.label.includes("·") ? opt.label.split("·")[1].trim() : ""}
+                              {opt.label.includes("|") ? opt.label.split("|")[1].trim() : ""}
                             </p>
                           </div>
                           {selectedUserId === opt.id && (
@@ -751,13 +840,33 @@ const ReportsSection = () => {
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-sm font-semibold text-white">Completion Trend</h3>
-              <p className="text-xs text-slate-500">7-day view</p>
+              <p className="text-xs text-slate-500">{trendConfig.subtitle}</p>
             </div>
-            <div className="flex items-center gap-2">
-              {/* Previous 7 days */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <select
+                  value={trendPeriod}
+                  onChange={(e) => {
+                    setTrendPeriod(e.target.value as TrendPeriod);
+                    setTrendOffset(0);
+                  }}
+                  className="h-8 appearance-none rounded-lg border border-white/10 bg-ink-700/60 pl-3 pr-8 text-xs font-medium text-slate-200 outline-none transition-colors hover:border-white/20 focus:border-accent-purple/60"
+                >
+                  {(Object.keys(TREND_PERIOD_CONFIG) as TrendPeriod[]).map((period) => (
+                    <option key={period} value={period}>
+                      {TREND_PERIOD_CONFIG[period].label}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-slate-400">
+                  <ChevronDownIcon />
+                </span>
+              </div>
+
+              {/* Previous window */}
               <button
                 type="button"
-                onClick={() => setTrendDaysAgo((prev) => prev + 7)}
+                onClick={() => setTrendOffset((prev) => prev + 1)}
                 className="flex h-7 w-7 items-center justify-center rounded-lg bg-ink-700/50 text-slate-400 transition-colors hover:bg-ink-700 hover:text-white"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -770,11 +879,11 @@ const ReportsSection = () => {
                 {trendWindowLabel}
               </span>
 
-              {/* Next 7 days */}
+              {/* Next window */}
               <button
                 type="button"
-                onClick={() => setTrendDaysAgo((prev) => Math.max(0, prev - 7))}
-                disabled={trendDaysAgo === 0}
+                onClick={() => setTrendOffset((prev) => Math.max(0, prev - 1))}
+                disabled={trendOffset === 0}
                 className="flex h-7 w-7 items-center justify-center rounded-lg bg-ink-700/50 text-slate-400 transition-colors hover:bg-ink-700 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -782,14 +891,14 @@ const ReportsSection = () => {
                 </svg>
               </button>
 
-              {/* Today button */}
-              {trendDaysAgo > 0 && (
+              {/* Current button */}
+              {trendOffset > 0 && (
                 <button
                   type="button"
-                  onClick={() => setTrendDaysAgo(0)}
+                  onClick={() => setTrendOffset(0)}
                   className="rounded-lg bg-accent-purple/15 px-2.5 py-1 text-[11px] font-medium text-accent-purple transition-colors hover:bg-accent-purple/25"
                 >
-                  Today
+                  Current
                 </button>
               )}
 
@@ -807,7 +916,7 @@ const ReportsSection = () => {
               <EmptyChart message="No completed topics yet" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={completionTrend} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+                <AreaChart data={completionTrend} margin={{ top: 16, right: 16, bottom: 0, left: -8 }}>
                   <defs>
                     <linearGradient id="purpleGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={CHART_COLORS.purple} stopOpacity={0.3} />
@@ -816,11 +925,15 @@ const ReportsSection = () => {
                   </defs>
                   <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" vertical={false} fillOpacity={0} />
                   <XAxis
-                    dataKey="month"
+                    dataKey="label"
                     stroke="#475569"
                     tickLine={false}
                     axisLine={false}
-                    tick={{ fontSize: 11 }}
+                    interval={0}
+                    minTickGap={0}
+                    tickMargin={8}
+                    padding={{ left: 8, right: 20 }}
+                    tick={{ fontSize: 11, fill: "#94A3B8" }}
                   />
                   <YAxis
                     stroke="#475569"
@@ -828,16 +941,17 @@ const ReportsSection = () => {
                     axisLine={false}
                     tick={{ fontSize: 11 }}
                     allowDecimals={false}
+                    domain={[0, (dataMax: number) => Math.max(dataMax + 1, 1)]}
                   />
                   <Tooltip content={chartTooltip} cursor={false} />
                   <Area
-                    type="monotone"
+                    type="linear"
                     dataKey="completed"
                     stroke={CHART_COLORS.purple}
                     strokeWidth={2.5}
                     fill="url(#purpleGradient)"
-                    dot={{ r: 4, fill: CHART_COLORS.purple, strokeWidth: 0 }}
-                    activeDot={{ r: 6, fill: CHART_COLORS.purple, stroke: "#fff", strokeWidth: 2 }}
+                    dot={{ r: 3, fill: CHART_COLORS.purple, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: CHART_COLORS.purple, stroke: "#fff", strokeWidth: 2 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
