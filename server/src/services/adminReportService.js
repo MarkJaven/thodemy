@@ -330,14 +330,28 @@ const buildChecklistFileName = ({ rows, ext }) => {
 
 const buildUserChecklistCsv = async ({ userId } = {}) => {
   const rows = await loadUserChecklistRows({ userId });
-  const header = [
-    "Course Name",
-    "Topic Name",
-    "Topic Status",
-    "Topic Start Date",
-    "Topic End Date",
-    "Remarks",
-  ];
+  const includeUserColumns = !userId;
+  const header = includeUserColumns
+    ? [
+        "Name",
+        "Email",
+        "Learning Path",
+        "Status",
+        "Course Name",
+        "Topic Name",
+        "Topic Status",
+        "Topic Start Date",
+        "Topic End Date",
+        "Remarks",
+      ]
+    : [
+        "Course Name",
+        "Topic Name",
+        "Topic Status",
+        "Topic Start Date",
+        "Topic End Date",
+        "Remarks",
+      ];
   const fileName = buildChecklistFileName({ rows, ext: "csv" });
   if (rows.length === 0) {
     return { csv: `\ufeff${header.map(csvEscape).join(",")}\n`, fileName };
@@ -345,18 +359,24 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
 
   const lines = [`\ufeff${header.map(csvEscape).join(",")}`];
   rows.forEach((row) => {
-    lines.push(
-      [
-        row.courseTitle,
-        row.topicTitle,
-        row.status,
-        row.topicStartDate,
-        row.topicEndDate,
-        row.notes,
-      ]
-        .map(csvEscape)
-        .join(",")
-    );
+    const baseColumns = [
+      row.courseTitle,
+      row.topicTitle,
+      row.status,
+      row.topicStartDate,
+      row.topicEndDate,
+      row.notes,
+    ];
+    const columns = includeUserColumns
+      ? [
+          row.userName,
+          row.userEmail,
+          row.learningPathTitle,
+          row.enrollmentStatus,
+          ...baseColumns,
+        ]
+      : baseColumns;
+    lines.push(columns.map(csvEscape).join(","));
   });
 
   return { csv: `${lines.join("\n")}\n`, fileName };
