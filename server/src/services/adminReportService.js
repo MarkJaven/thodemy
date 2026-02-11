@@ -239,6 +239,7 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
         const notesEntry = notesMap.get(`${enrollment.user_id}:${topicId}`);
         const notes = notesEntry?.review_notes || "";
         rows.push({
+          userId: enrollment.user_id,
           userName,
           userEmail,
           learningPathTitle,
@@ -276,14 +277,28 @@ const buildChecklistFileName = ({ rows, ext }) => {
 
 const buildUserChecklistCsv = async ({ userId } = {}) => {
   const rows = await loadUserChecklistRows({ userId });
-  const header = [
-    "Course Name",
-    "Topic Name",
-    "Topic Status",
-    "Topic Start Date",
-    "Topic End Date",
-    "Remarks",
-  ];
+  const includeUserColumns = !userId;
+  const header = includeUserColumns
+    ? [
+        "Name",
+        "Email",
+        "Learning Path",
+        "Status",
+        "Course Name",
+        "Topic Name",
+        "Topic Status",
+        "Topic Start Date",
+        "Topic End Date",
+        "Remarks",
+      ]
+    : [
+        "Course Name",
+        "Topic Name",
+        "Topic Status",
+        "Topic Start Date",
+        "Topic End Date",
+        "Remarks",
+      ];
   const fileName = buildChecklistFileName({ rows, ext: "csv" });
   if (rows.length === 0) {
     return { csv: `\ufeff${header.map(csvEscape).join(",")}\n`, fileName };
@@ -291,18 +306,24 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
 
   const lines = [`\ufeff${header.map(csvEscape).join(",")}`];
   rows.forEach((row) => {
-    lines.push(
-      [
-        row.courseTitle,
-        row.topicTitle,
-        row.status,
-        row.topicStartDate,
-        row.topicEndDate,
-        row.notes,
-      ]
-        .map(csvEscape)
-        .join(",")
-    );
+    const baseColumns = [
+      row.courseTitle,
+      row.topicTitle,
+      row.status,
+      row.topicStartDate,
+      row.topicEndDate,
+      row.notes,
+    ];
+    const columns = includeUserColumns
+      ? [
+          row.userName,
+          row.userEmail,
+          row.learningPathTitle,
+          row.enrollmentStatus,
+          ...baseColumns,
+        ]
+      : baseColumns;
+    lines.push(columns.map(csvEscape).join(","));
   });
 
   return { csv: `${lines.join("\n")}\n`, fileName };
@@ -370,27 +391,6 @@ const buildUserChecklistWorkbook = async ({ userId } = {}) => {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("User Checklist");
 
-  const summaryUserName = rows[0]?.userName || "";
-  const summaryUserEmail = rows[0]?.userEmail || "";
-  const uniqueLearningPaths = Array.from(
-    new Set(rows.map((row) => row.learningPathTitle).filter(Boolean))
-  );
-  const uniqueStatuses = Array.from(
-    new Set(rows.map((row) => row.enrollmentStatus).filter(Boolean))
-  );
-  const summaryLearningPath =
-    uniqueLearningPaths.length === 1
-      ? uniqueLearningPaths[0]
-      : uniqueLearningPaths.length > 1
-        ? "Multiple"
-        : "";
-  const summaryStatus =
-    uniqueStatuses.length === 1
-      ? uniqueStatuses[0]
-      : uniqueStatuses.length > 1
-        ? "Multiple"
-        : "";
-
   const headerLabels = [
     "Course Name",
     "Topic Name",
@@ -409,94 +409,90 @@ const buildUserChecklistWorkbook = async ({ userId } = {}) => {
     { key: "notes", width: 30 },
   ];
 
-  const totalColumns = sheet.columns.length;
+  const writeInfoRows = (startRowIndex, summary) => {
+    const infoRows = [
+      ["Name", summary.userName],
+      ["Email", summary.userEmail],
+      ["Learning Path", summary.learningPath],
+      ["Status", summary.status],
+    ];
 
-  const infoRows = [
-    ["Name", summaryUserName],
-    ["Email", summaryUserEmail],
-    ["Learning Path", summaryLearningPath],
-    ["Status", summaryStatus],
-  ];
+    infoRows.forEach((entry, index) => {
+      const rowIndex = startRowIndex + index;
+      const labelCell = sheet.getCell(rowIndex, 1);
+      labelCell.value = entry[0];
+      labelCell.font = { bold: true };
+      labelCell.alignment = { vertical: "middle", horizontal: "left" };
+      labelCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE9F6E4" },
+      };
+      labelCell.border = {
+        top: { style: "thin", color: { argb: "FF000000" } },
+        left: { style: "thin", color: { argb: "FF000000" } },
+        bottom: { style: "thin", color: { argb: "FF000000" } },
+        right: { style: "thin", color: { argb: "FF000000" } },
+      };
 
-  infoRows.forEach((entry, index) => {
-    const rowIndex = 1 + index;
-    const labelCell = sheet.getCell(rowIndex, 1);
-    labelCell.value = entry[0];
-    labelCell.font = { bold: true };
-    labelCell.alignment = { vertical: "middle", horizontal: "left" };
-    labelCell.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFE9F6E4" },
-    };
-    labelCell.border = {
-      top: { style: "thin", color: { argb: "FF000000" } },
-      left: { style: "thin", color: { argb: "FF000000" } },
-      bottom: { style: "thin", color: { argb: "FF000000" } },
-      right: { style: "thin", color: { argb: "FF000000" } },
-    };
+      const valueCell = sheet.getCell(rowIndex, 2);
+      valueCell.value = entry[1];
+      valueCell.alignment = { vertical: "middle", horizontal: "left" };
+      valueCell.border = {
+        top: { style: "thin", color: { argb: "FF000000" } },
+        left: { style: "thin", color: { argb: "FF000000" } },
+        bottom: { style: "thin", color: { argb: "FF000000" } },
+        right: { style: "thin", color: { argb: "FF000000" } },
+      };
+    });
+  };
 
-    const valueCell = sheet.getCell(rowIndex, 2);
-    valueCell.value = entry[1];
-    valueCell.alignment = { vertical: "middle", horizontal: "left" };
-    valueCell.border = {
-      top: { style: "thin", color: { argb: "FF000000" } },
-      left: { style: "thin", color: { argb: "FF000000" } },
-      bottom: { style: "thin", color: { argb: "FF000000" } },
-      right: { style: "thin", color: { argb: "FF000000" } },
-    };
-  });
+  const addChecklistRows = (sectionRows) => {
+    let currentCourse = null;
+    let courseIndex = -1;
+    sectionRows.forEach((row) => {
+      const rowData = {
+        ...row,
+        topicStartDate: row.topicStartDate ? new Date(row.topicStartDate) : null,
+        topicEndDate: row.topicEndDate ? new Date(row.topicEndDate) : null,
+      };
+      const worksheetRow = sheet.addRow(rowData);
+      const startCell = worksheetRow.getCell("topicStartDate");
+      const endCell = worksheetRow.getCell("topicEndDate");
+      if (rowData.topicStartDate) {
+        startCell.numFmt = "mm/dd/yyyy";
+      }
+      if (rowData.topicEndDate) {
+        endCell.numFmt = "mm/dd/yyyy";
+      }
+      const statusCell = worksheetRow.getCell("status");
+      statusCell.font = { bold: true, underline: true };
+      if (row.courseTitle !== currentCourse) {
+        currentCourse = row.courseTitle;
+        courseIndex += 1;
+      }
+      const fillColor = courseIndex % 2 === 1 ? "FFE4F5D7" : null;
+      applyRowStyle(worksheetRow, fillColor);
 
-  sheet.getRow(6).values = headerLabels;
-  const headerRow = sheet.getRow(6);
-  headerRow.height = 24;
-  applyHeaderStyle(headerRow);
+      if (!rowData.topicStartDate) {
+        startCell.value = "-";
+        startCell.font = { color: { argb: "FF64748B" } };
+        startCell.alignment = { vertical: "middle", horizontal: "center" };
+      }
+      if (!rowData.topicEndDate) {
+        endCell.value = "-";
+        endCell.font = { color: { argb: "FF64748B" } };
+        endCell.alignment = { vertical: "middle", horizontal: "center" };
+      }
+    });
+  };
 
-  const dataStartRow = 7;
-  let currentCourse = null;
-  let courseIndex = -1;
-
-  rows.forEach((row) => {
-    const rowData = {
-      ...row,
-      topicStartDate: row.topicStartDate ? new Date(row.topicStartDate) : null,
-      topicEndDate: row.topicEndDate ? new Date(row.topicEndDate) : null,
-    };
-    const worksheetRow = sheet.addRow(rowData);
-    const startCell = worksheetRow.getCell("topicStartDate");
-    const endCell = worksheetRow.getCell("topicEndDate");
-    if (rowData.topicStartDate) {
-      startCell.numFmt = "mm/dd/yyyy";
-    }
-    if (rowData.topicEndDate) {
-      endCell.numFmt = "mm/dd/yyyy";
-    }
-    const statusCell = worksheetRow.getCell("status");
-    statusCell.font = { bold: true, underline: true };
-    if (row.courseTitle !== currentCourse) {
-      currentCourse = row.courseTitle;
-      courseIndex += 1;
-    }
-    const fillColor = courseIndex % 2 === 1 ? "FFE4F5D7" : null;
-    applyRowStyle(worksheetRow, fillColor);
-
-    if (!rowData.topicStartDate) {
-      startCell.value = "-";
-      startCell.font = { color: { argb: "FF64748B" } };
-      startCell.alignment = { vertical: "middle", horizontal: "center" };
-    }
-    if (!rowData.topicEndDate) {
-      endCell.value = "-";
-      endCell.font = { color: { argb: "FF64748B" } };
-      endCell.alignment = { vertical: "middle", horizontal: "center" };
-    }
-  });
-
-  if (rows.length > 0) {
+  const mergeCourseCells = (startRowIndex, rowCount) => {
+    if (rowCount === 0) return;
     const courseColumnIndex = sheet.columns.findIndex((col) => col.key === "courseTitle") + 1;
-    let mergeStart = dataStartRow;
-    let currentValue = sheet.getCell(dataStartRow, courseColumnIndex).value;
-    for (let rowIndex = dataStartRow + 1; rowIndex < dataStartRow + rows.length; rowIndex += 1) {
+    let mergeStart = startRowIndex;
+    let currentValue = sheet.getCell(startRowIndex, courseColumnIndex).value;
+    for (let rowIndex = startRowIndex + 1; rowIndex < startRowIndex + rowCount; rowIndex += 1) {
       const cellValue = sheet.getCell(rowIndex, courseColumnIndex).value;
       if (cellValue !== currentValue) {
         if (rowIndex - 1 > mergeStart) {
@@ -508,16 +504,116 @@ const buildUserChecklistWorkbook = async ({ userId } = {}) => {
         currentValue = cellValue;
       }
     }
-    if (dataStartRow + rows.length - 1 > mergeStart) {
+    if (startRowIndex + rowCount - 1 > mergeStart) {
       sheet.mergeCells(
         mergeStart,
         courseColumnIndex,
-        dataStartRow + rows.length - 1,
+        startRowIndex + rowCount - 1,
         courseColumnIndex
       );
       const mergedCell = sheet.getCell(mergeStart, courseColumnIndex);
       mergedCell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
     }
+  };
+
+  const hasSingleUser =
+    Boolean(userId) || new Set(rows.map((row) => row.userId).filter(Boolean)).size <= 1;
+
+  if (hasSingleUser) {
+    const summaryUserName = rows[0]?.userName || "";
+    const summaryUserEmail = rows[0]?.userEmail || "";
+    const uniqueLearningPaths = Array.from(
+      new Set(rows.map((row) => row.learningPathTitle).filter(Boolean))
+    );
+    const uniqueStatuses = Array.from(
+      new Set(rows.map((row) => row.enrollmentStatus).filter(Boolean))
+    );
+    const summaryLearningPath =
+      uniqueLearningPaths.length === 1
+        ? uniqueLearningPaths[0]
+        : uniqueLearningPaths.length > 1
+          ? "Multiple"
+          : "";
+    const summaryStatus =
+      uniqueStatuses.length === 1
+        ? uniqueStatuses[0]
+        : uniqueStatuses.length > 1
+          ? "Multiple"
+          : "";
+
+    writeInfoRows(1, {
+      userName: summaryUserName,
+      userEmail: summaryUserEmail,
+      learningPath: summaryLearningPath,
+      status: summaryStatus,
+    });
+
+    sheet.getRow(6).values = headerLabels;
+    const headerRow = sheet.getRow(6);
+    headerRow.height = 24;
+    applyHeaderStyle(headerRow);
+
+    const dataStartRow = 7;
+    addChecklistRows(rows);
+    mergeCourseCells(dataStartRow, rows.length);
+  } else {
+    const usersInOrder = [];
+    const userMap = new Map();
+    rows.forEach((row) => {
+      const key = row.userId || row.userEmail || row.userName || "unknown";
+      if (!userMap.has(key)) {
+        userMap.set(key, []);
+        usersInOrder.push(key);
+      }
+      userMap.get(key).push(row);
+    });
+
+    let currentRowIndex = 1;
+    usersInOrder.forEach((userKey, index) => {
+      const userRows = userMap.get(userKey);
+      const summaryUserName = userRows[0]?.userName || "";
+      const summaryUserEmail = userRows[0]?.userEmail || "";
+      const uniqueLearningPaths = Array.from(
+        new Set(userRows.map((row) => row.learningPathTitle).filter(Boolean))
+      );
+      const uniqueStatuses = Array.from(
+        new Set(userRows.map((row) => row.enrollmentStatus).filter(Boolean))
+      );
+      const summaryLearningPath =
+        uniqueLearningPaths.length === 1
+          ? uniqueLearningPaths[0]
+          : uniqueLearningPaths.length > 1
+            ? "Multiple"
+            : "";
+      const summaryStatus =
+        uniqueStatuses.length === 1
+          ? uniqueStatuses[0]
+          : uniqueStatuses.length > 1
+            ? "Multiple"
+            : "";
+
+      writeInfoRows(currentRowIndex, {
+        userName: summaryUserName,
+        userEmail: summaryUserEmail,
+        learningPath: summaryLearningPath,
+        status: summaryStatus,
+      });
+
+      const headerRowIndex = currentRowIndex + 5;
+      sheet.getRow(headerRowIndex).values = headerLabels;
+      const headerRow = sheet.getRow(headerRowIndex);
+      headerRow.height = 24;
+      applyHeaderStyle(headerRow);
+
+      const dataStartRow = headerRowIndex + 1;
+      addChecklistRows(userRows);
+      mergeCourseCells(dataStartRow, userRows.length);
+
+      currentRowIndex = sheet.rowCount + 2;
+      if (index < usersInOrder.length - 1) {
+        sheet.getRow(currentRowIndex - 1).height = 6;
+      }
+    });
   }
 
   applyAllBorders(sheet);
