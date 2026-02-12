@@ -8,6 +8,7 @@ const { adminController } = require("../controllers/adminController");
 const { adminTaskController } = require("../controllers/adminTaskController");
 const { courseController } = require("../controllers/courseController");
 const { learningPathController } = require("../controllers/learningPathController");
+const { evaluationController } = require("../controllers/evaluationController");
 const {
   validateCreateUser,
   validateUpdateUser,
@@ -172,5 +173,22 @@ router.post("/learning-paths", generalLimiter, requireAuth, requireAdmin, learni
 router.patch("/learning-paths/:learningPathId", generalLimiter, requireAuth, requireAdmin, learningPathController.upsertLearningPath);
 router.delete("/learning-paths/:learningPathId", generalLimiter, requireAuth, requireAdmin, learningPathController.deleteLearningPath);
 router.delete("/lp-enrollments/:enrollmentId", generalLimiter, requireAuth, requireAdmin, learningPathController.deleteLPEnrollment);
+
+// ── Evaluation routes ──
+router.get("/evaluations", generalLimiter, requireAuth, requireAdmin, evaluationController.listEvaluations);
+router.get("/evaluations/:evaluationId", generalLimiter, requireAuth, requireAdmin, evaluationController.getEvaluation);
+router.post("/evaluations", generalLimiter, requireAuth, requireAdmin, evaluationController.createEvaluation);
+router.patch("/evaluations/:evaluationId", generalLimiter, requireAuth, requireAdmin, evaluationController.updateEvaluation);
+router.delete("/evaluations/:evaluationId", generalLimiter, requireAuth, requireAdmin, evaluationController.deleteEvaluation);
+router.post("/evaluations/:evaluationId/scores", generalLimiter, requireAuth, requireAdmin, evaluationController.upsertScores);
+router.delete(
+  "/evaluations/:evaluationId/scores/:sheet/:criterionKey",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  evaluationController.deleteScore
+);
+router.post("/evaluations/:evaluationId/auto-populate", generalLimiter, requireAuth, requireAdmin, evaluationController.autoPopulate);
+router.get("/evaluations/:evaluationId/export.xlsx", generalLimiter, requireAuth, requireAdmin, evaluationController.downloadEvaluationXlsx);
 
 module.exports = router;

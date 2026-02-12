@@ -14,6 +14,7 @@ import ActivitiesSection from "./sections/ActivitiesSection";
 import QuizzesSection from "./sections/QuizzesSection";
 import FormsSection from "./sections/FormsSection";
 import ReportsSection from "./sections/ReportsSection";
+import EvaluationSection from "./sections/EvaluationSection";
 
 // Navigation icons
 const OverviewIcon = () => (
@@ -106,6 +107,15 @@ const ReportsIcon = () => (
     <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
   </svg>
 );
+
+const EvaluationIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+    <rect x="9" y="3" width="6" height="4" rx="1" />
+    <path d="M9 14l2 2 4-4" />
+  </svg>
+);
+
 type NavItem =
   | "overview"
   | "courses"
@@ -116,7 +126,8 @@ type NavItem =
   | "activity"
   | "quiz"
   | "forms"
-  | "reports";
+  | "reports"
+  | "evaluation";
 
 interface DashboardStats {
   activeCourses: number;
@@ -614,6 +625,7 @@ const AdminDashboard = () => {
     { key: "quiz", label: "Quiz", icon: <QuizIcon /> },
     { key: "forms", label: "Forms", icon: <FormsIcon /> },
     { key: "reports", label: "Reports", icon: <ReportsIcon /> },
+    { key: "evaluation", label: "Evaluation", icon: <EvaluationIcon /> },
   ];
 
   const renderContent = () => {
@@ -643,6 +655,8 @@ const AdminDashboard = () => {
         return <FormsSection />;
       case "reports":
         return <ReportsSection />;
+      case "evaluation":
+        return <EvaluationSection />;
       default:
         return renderOverview();
     }
