@@ -7,7 +7,9 @@
       "Bash(npx tsc:*)",
       "Bash(npx --no-install tsc:*)",
       "Bash(npm run build:*)",
-      "Bash(npx vite build)"
+      "Bash(npx vite build)",
+      "Bash(node:*)",
+      "Bash(python:*)"
     ]
   }
 }
