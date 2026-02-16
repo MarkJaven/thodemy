@@ -127,6 +127,22 @@ describe("evaluationExportService", () => {
           remarks: null,
           source: "manual",
         },
+        {
+          sheet: "behavioral",
+          criterion_key: "bh_interpersonal_relations",
+          criterion_label: "Interpersonal Relations",
+          score: 4,
+          max_score: 5,
+          remarks: null,
+        },
+        {
+          sheet: "behavioral",
+          criterion_key: "bh_handling_situations",
+          criterion_label: "Handling Situations",
+          score: 2,
+          max_score: 5,
+          remarks: null,
+        },
       ],
     });
 
@@ -141,11 +157,15 @@ describe("evaluationExportService", () => {
     const endorsement = workbook.getWorksheet("BootcampEndorsementScoreCard");
     const scorecard = workbook.getWorksheet("BootCampScoreCard");
     const scoreBoard = workbook.getWorksheet("ScoreBoard");
+    const behavioralSheet = workbook.getWorksheet("Behavioral Evaluation");
     const summary = workbook.getWorksheet("Performance Summary");
 
     // Header placement check: values should stay in yellow D:F cells, not overwrite green labels B:C.
     expect(String(scorecard.getCell("B3").value || "")).toContain("Employee Name");
     expect(scorecard.getCell("D3").value).toBe("JUAN DELA CRUZ");
+    expect(behavioralSheet.getCell("B6").value).toBe("JUAN DELA CRUZ");
+    expect(behavioralSheet.getCell("B7").value).toBe("TRAINEE");
+    expect(behavioralSheet.getCell("B8").value).toBeNull();
 
     // Formula preservation checks.
     expect(dashboard.getCell("F14").value).toEqual(
@@ -172,6 +192,29 @@ describe("evaluationExportService", () => {
     expect(scorecard.getCell("F47").value).toBe("☑");
     expect(scorecard.getCell("N15").value).toBeCloseTo(4.5, 4);
     expect(scorecard.getCell("N21").value).toBe(0);
+    expect(behavioralSheet.getCell("B13").value).toBeNull();
+    expect(behavioralSheet.getCell("B23").value).toBe(4);
+    expect(behavioralSheet.getCell("B28").value).toBe(2);
+    expect(behavioralSheet.getCell("C23").value).toBeNull();
+    expect(behavioralSheet.getCell("D23").value).toBeNull();
+    expect(behavioralSheet.getCell("C13").value).toBeNull();
+    expect(behavioralSheet.getCell("D13").value).toBeNull();
+    expect(behavioralSheet.getCell("E23").value).toEqual(
+      expect.objectContaining({ result: 4 })
+    );
+    expect(behavioralSheet.getCell("E28").value).toEqual(
+      expect.objectContaining({ result: 2 })
+    );
+    expect(behavioralSheet.getCell("B29").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: 6 })
+    );
+    expect(behavioralSheet.getCell("E29").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: 6 })
+    );
+    expect(behavioralSheet.getCell("E30").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
+    );
+    expect(behavioralSheet.getCell("E30").value.result).toBeCloseTo(0.4, 4);
 
     // Feedback propagation checks.
     expect(endorsement.getCell("F12").value).toBe("Strong ownership");
@@ -239,6 +282,14 @@ describe("evaluationExportService", () => {
       updated_at: "2026-02-16T00:00:00.000Z",
       scores: [
         {
+          sheet: "behavioral",
+          criterion_key: "bh_adaptability",
+          criterion_label: "Adaptability",
+          score: 5,
+          max_score: 5,
+          remarks: null,
+        },
+        {
           sheet: "quiz_grades",
           criterion_key: "quiz_missed",
           criterion_label: "Missed Quiz",
@@ -266,6 +317,7 @@ describe("evaluationExportService", () => {
 
     const scoreBoard = workbook.getWorksheet("ScoreBoard");
     const scorecard = workbook.getWorksheet("BootCampScoreCard");
+    const behavioralSheet = workbook.getWorksheet("Behavioral Evaluation");
 
     expect(scoreBoard.getCell("AO4").value).toBe("Missed Quiz");
     expect(scoreBoard.getCell("AQ4").value).toBe(0);
@@ -282,6 +334,22 @@ describe("evaluationExportService", () => {
     expect(scorecard.getCell("N36").value).toEqual(
       expect.objectContaining({ formula: expect.any(String) })
     );
+    expect(behavioralSheet.getCell("B13").value).toBe(5);
+    expect(behavioralSheet.getCell("C13").value).toBeNull();
+    expect(behavioralSheet.getCell("D13").value).toBeNull();
+    expect(behavioralSheet.getCell("E13").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: 5 })
+    );
+    expect(behavioralSheet.getCell("B29").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: 5 })
+    );
+    expect(behavioralSheet.getCell("E29").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: 5 })
+    );
+    expect(behavioralSheet.getCell("E30").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
+    );
+    expect(behavioralSheet.getCell("E30").value.result).toBeCloseTo(0.3333, 4);
     expect(scorecard.getCell("D47").value).toBe("☐");
     expect(scorecard.getCell("F47").value).toBe("☐");
   });

@@ -914,6 +914,10 @@ const toWholeScoreOption = (
 
   const applyDidNotSubmitScoreboardGrade = () => {
     if (!scoreboardModalDraft) return;
+    const trimmedRemarks = String(scoreboardModalDraft.remarks || "").trim();
+    const didNotSubmitRemarks = trimmedRemarks
+      ? `Did not submit - ${trimmedRemarks}`
+      : "Did not submit";
 
     const rows: ScoreInput[] = [
       {
@@ -923,7 +927,7 @@ const toWholeScoreOption = (
         category: SCOREBOARD_META_CATEGORY,
         score: null,
         max_score: 5,
-        remarks: scoreboardModalDraft.remarks || "Did not submit",
+        remarks: didNotSubmitRemarks,
         source: "manual",
       },
     ];
@@ -942,7 +946,7 @@ const toWholeScoreOption = (
         category: criterion.key,
         score: 0,
         max_score: safeMax,
-        remarks: scoreboardModalDraft.remarks || "Did not submit",
+        remarks: didNotSubmitRemarks,
         source: "manual",
       });
     }
@@ -1825,6 +1829,17 @@ const toWholeScoreOption = (
     const scoreboardActivities = getScoreboardActivities();
     const quizGrades = getQuizGradesEntries();
     const quizKeySet = new Set(quizGrades.map((q) => q.criterion_key));
+    const isDidNotSubmitActivity = (activity: ScoreboardActivity) =>
+      String(activity.remarks || "")
+        .trim()
+        .toLowerCase()
+        .includes("did not submit");
+    const getActivityStatus = (activity: ScoreboardActivity) => {
+      if (isDidNotSubmitActivity(activity)) return "did_not_submit";
+      return activity.criteriaGraded === SCOREBOARD_CRITERIA.length
+        ? "complete"
+        : "needs_grading";
+    };
 
     // Split: activities that are NOT quizzes vs quizzes
     const activityEntries = scoreboardActivities.filter(
@@ -1835,7 +1850,7 @@ const toWholeScoreOption = (
     );
 
     const completeCount = activityEntries.filter(
-      (activity) => activity.criteriaGraded === SCOREBOARD_CRITERIA.length,
+      (activity) => getActivityStatus(activity) === "complete",
     ).length;
 
     return (
@@ -1983,73 +1998,78 @@ const toWholeScoreOption = (
                   </tr>
                 </thead>
                 <tbody>
-                  {activityEntries.map((activity) => (
-                    <tr
-                      key={activity.activityKey}
-                      className="cursor-pointer border-b border-white/5 hover:bg-white/5"
-                      onClick={() => openScoreboardGradeModal(activity)}
-                    >
-                      <td className="px-2 py-2 text-white">
-                        {activity.activityLabel}
-                      </td>
-                      <td className="px-2 py-2 text-slate-300">
-                        {activity.criteriaGraded} / {SCOREBOARD_CRITERIA.length}
-                      </td>
-                      <td className="px-2 py-2 text-white">
-                        {activity.criteriaAverage != null
-                          ? `${activity.criteriaAverage.toFixed(2)} / 5`
-                          : "--"}
-                      </td>
-                      <td className="px-2 py-2">
-                        <span
-                          className={`rounded-full px-2 py-1 text-xs font-medium ${
-                            activity.criteriaGraded ===
-                            SCOREBOARD_CRITERIA.length
-                              ? "bg-emerald-600/20 text-emerald-300"
-                              : "bg-amber-600/20 text-amber-300"
-                          }`}
-                        >
-                          {activity.criteriaGraded ===
-                          SCOREBOARD_CRITERIA.length
-                            ? "Complete"
-                            : "Needs Grading"}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2">
-                        <span className="text-xs text-slate-400">
-                          {activity.source === "manual"
-                            ? "Manual"
-                            : activity.source === "auto_activity"
-                              ? "Activity"
-                              : "Auto"}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openScoreboardGradeModal(activity);
-                          }}
-                          className="mr-2 rounded border border-purple-500/40 px-2 py-1 text-xs text-purple-300 hover:bg-purple-500/10"
-                          title="Open grading modal"
-                        >
-                          Grade
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteScoreboardActivity(
-                              activity.activityKey,
-                            );
-                          }}
-                          className="rounded border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
-                          title="Delete activity entry"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {activityEntries.map((activity) => {
+                    const activityStatus = getActivityStatus(activity);
+                    return (
+                      <tr
+                        key={activity.activityKey}
+                        className="cursor-pointer border-b border-white/5 hover:bg-white/5"
+                        onClick={() => openScoreboardGradeModal(activity)}
+                      >
+                        <td className="px-2 py-2 text-white">
+                          {activity.activityLabel}
+                        </td>
+                        <td className="px-2 py-2 text-slate-300">
+                          {activity.criteriaGraded} / {SCOREBOARD_CRITERIA.length}
+                        </td>
+                        <td className="px-2 py-2 text-white">
+                          {activity.criteriaAverage != null
+                            ? `${activity.criteriaAverage.toFixed(2)} / 5`
+                            : "--"}
+                        </td>
+                        <td className="px-2 py-2">
+                          <span
+                            className={`rounded-full px-2 py-1 text-xs font-medium ${
+                              activityStatus === "did_not_submit"
+                                ? "bg-rose-600/20 text-rose-300"
+                                : activityStatus === "complete"
+                                  ? "bg-emerald-600/20 text-emerald-300"
+                                  : "bg-amber-600/20 text-amber-300"
+                            }`}
+                          >
+                            {activityStatus === "did_not_submit"
+                              ? "Did Not Submit"
+                              : activityStatus === "complete"
+                                ? "Complete"
+                                : "Needs Grading"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2">
+                          <span className="text-xs text-slate-400">
+                            {activity.source === "manual"
+                              ? "Manual"
+                              : activity.source === "auto_activity"
+                                ? "Activity"
+                                : "Auto"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openScoreboardGradeModal(activity);
+                            }}
+                            className="mr-2 rounded border border-purple-500/40 px-2 py-1 text-xs text-purple-300 hover:bg-purple-500/10"
+                            title="Open grading modal"
+                          >
+                            Grade
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteScoreboardActivity(
+                                activity.activityKey,
+                              );
+                            }}
+                            className="rounded border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
+                            title="Delete activity entry"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2189,14 +2209,101 @@ const toWholeScoreOption = (
 
   function renderBehavioral() {
     const behavioralCriteria = [
-      { key: "bh_adaptability", label: "Adaptability" },
-      { key: "bh_initiative", label: "Initiative" },
-      { key: "bh_dependability", label: "Dependability" },
-      { key: "bh_cooperation", label: "Cooperation" },
-      { key: "bh_communication", label: "Communication" },
-      { key: "bh_attitude", label: "Attitude" },
-      { key: "bh_professionalism", label: "Professionalism" },
-      { key: "bh_attendance", label: "Attendance and Punctuality" },
+      {
+        key: "bh_adaptability",
+        label: "Technical Knowledge and Skills",
+        description:
+          "Shows job relevant knowledge and skills, acquired from education, experience and specialized trainings, needed to perform the duties and requirements of the position.",
+      },
+      {
+        key: "bh_initiative",
+        label: "Judgement and Conflict Management",
+        description:
+          "Ability to evaluate situations and make sound decisions, and use of reasoning to identify, solve, prevent, and handle future conflicts.",
+      },
+      {
+        key: "bh_dependability",
+        label: "Reliability and Dependability",
+        description:
+          "Trustworthiness in carrying-out instructions, establishing procedures and performing work assignments with minimal supervision.",
+      },
+      {
+        key: "bh_attitude",
+        label: "Flexibility",
+        description:
+          "Ability to do other functions within and/or outside his/her scope and limitations without risking work quality.",
+      },
+      {
+        key: "bh_cooperation",
+        label: "Teamwork",
+        description:
+          "A team player. Ability to work with others with shared objectives and willingness to share/contribute new methods and ideas to the group.",
+      },
+      {
+        key: "bh_attendance",
+        label: "Drive for Excellence",
+        description:
+          "Ability to maximize full potential, consistently exceed standards, and execute tasks right the first time.",
+      },
+      {
+        key: "bh_professionalism",
+        label: "Integrity",
+        description:
+          "Able to live values and adhere to moral and ethical standards such as honesty and respect for others.",
+      },
+      {
+        key: "bh_information_security",
+        label: "Information Safety and Security",
+        description:
+          "Ability to protect Computer Information Systems security and the confidentiality of information available to or received by him/her.",
+      },
+      {
+        key: "bh_communication",
+        label: "Written Communication",
+        description:
+          "Ability to use various writing styles for effective communication and express messages clearly and informatively.",
+      },
+      {
+        key: "bh_oral_communication",
+        label: "Oral Communication",
+        description:
+          "Ability to speak clearly and persuasively, show language fluency, and respond to questions professionally.",
+      },
+      {
+        key: "bh_interpersonal_relations",
+        label: "Interpersonal Relations",
+        description:
+          "Able to establish good working relationships, with respect and courtesy with most of his/her peers, subordinates, superiors, clients and the general public.",
+      },
+      {
+        key: "section_professional_customer_service",
+        type: "section" as const,
+        label: "PROFESSIONAL AND CUSTOMER SERVICE",
+      },
+      {
+        key: "bh_grooming_attire",
+        label: "Grooming and Attire",
+        description:
+          "Maintains pleasant and professional image at all times and able to present himself/herself professionally and knowledgeably.",
+      },
+      {
+        key: "bh_service_professionalism",
+        label: "Professionalism",
+        description:
+          "Shows courtesy and sensitivity to clients and subordinates at all times, and values commitments and word of honor.",
+      },
+      {
+        key: "bh_accessibility",
+        label: "Accessibility",
+        description:
+          "Ability to stay available and approachable/accessible to clients and subordinates at all times.",
+      },
+      {
+        key: "bh_handling_situations",
+        label: "Handling Situations",
+        description:
+          "Able to follow procedure and carefully improvise to solve customer problems, handle difficult service routines politely, and respond to client needs promptly.",
+      },
     ];
 
     return (
@@ -2217,41 +2324,61 @@ const toWholeScoreOption = (
               </tr>
             </thead>
             <tbody>
-              {behavioralCriteria.map((item) => (
-                <tr key={item.key} className="border-b border-white/5">
-                  <td className="px-2 py-2 text-white">{item.label}</td>
-                  <td className="px-2 py-2">
-                    <input
-                      type="number"
-                      min={0}
-                      max={5}
-                      step={0.5}
-                      value={getScore("behavioral", item.key) ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value
-                          ? parseFloat(e.target.value)
-                          : null;
-                        setScoreValue("behavioral", item.key, val, {
-                          criterion_label: item.label,
-                          max_score: 5,
-                        });
-                      }}
-                      className="w-20 rounded border border-white/10 bg-ink-900 px-2 py-1 text-center text-white focus:border-purple-500 focus:outline-none"
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <input
-                      type="text"
-                      value={getRemarks("behavioral", item.key)}
-                      onChange={(e) =>
-                        setRemarksValue("behavioral", item.key, e.target.value)
-                      }
-                      placeholder="Optional remarks"
-                      className="w-full rounded border border-white/10 bg-ink-900 px-2 py-1 text-white placeholder-slate-600 focus:border-purple-500 focus:outline-none"
-                    />
-                  </td>
-                </tr>
-              ))}
+              {behavioralCriteria.map((item) => {
+                if (item.type === "section") {
+                  return (
+                    <tr key={item.key} className="border-b border-white/10 bg-white/5">
+                      <td
+                        colSpan={3}
+                        className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-yellow-200"
+                      >
+                        {item.label}
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return (
+                  <tr key={item.key} className="border-b border-white/5">
+                    <td className="px-2 py-2 text-white">
+                      <div className="font-medium">{item.label}</div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        {item.description}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={5}
+                        step={0.5}
+                        value={getScore("behavioral", item.key) ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value
+                            ? parseFloat(e.target.value)
+                            : null;
+                          setScoreValue("behavioral", item.key, val, {
+                            criterion_label: item.label,
+                            max_score: 5,
+                          });
+                        }}
+                        className="w-20 rounded border border-white/10 bg-ink-900 px-2 py-1 text-center text-white focus:border-purple-500 focus:outline-none"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="text"
+                        value={getRemarks("behavioral", item.key)}
+                        onChange={(e) =>
+                          setRemarksValue("behavioral", item.key, e.target.value)
+                        }
+                        placeholder="Optional remarks"
+                        className="w-full rounded border border-white/10 bg-ink-900 px-2 py-1 text-white placeholder-slate-600 focus:border-purple-500 focus:outline-none"
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

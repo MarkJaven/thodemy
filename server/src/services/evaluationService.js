@@ -589,7 +589,41 @@ const autoPopulateScores = async (evaluationId) => {
     });
   }
 
-  // 2. Get activity submissions for the trainee
+  // 2. Get activity assignments that should be visible for the trainee:
+  // - directly assigned projects (user_id = trainee)
+  // - course-scoped projects within evaluation learning path
+  // - global projects (no user_id and no course_id)
+  const { data: rawActivities, error: activitiesError } = await supabaseAdmin
+    .from("activities")
+    .select("id, title, course_id, user_id, status, created_at, updated_at");
+
+  if (activitiesError) {
+    throw new ExternalServiceError("Unable to load projects for auto-populate", {
+      code: activitiesError.code,
+      details: activitiesError.message,
+    });
+  }
+
+  const activityAssignments = (rawActivities ?? []).filter((activity) => {
+    const normalizedStatus = String(activity.status ?? "active")
+      .trim()
+      .toLowerCase();
+    if (["inactive", "archived", "deleted", "removed"].includes(normalizedStatus)) {
+      return false;
+    }
+
+    const assignedToUser =
+      activity.user_id && String(activity.user_id) === String(userId);
+    const scopedByCourse =
+      scopedCourseIds &&
+      activity.course_id &&
+      scopedCourseIds.has(String(activity.course_id));
+    const isGlobal = !activity.user_id && !activity.course_id;
+
+    return Boolean(assignedToUser || scopedByCourse || isGlobal);
+  });
+
+  // 3. Get activity submissions for the trainee
   const { data: rawActivitySubs, error: activitySubsError } = await supabaseAdmin
     .from("activity_submissions")
     .select("id, activity_id, user_id, course_id, title, score, status, reviewed_at, updated_at")
@@ -609,27 +643,55 @@ const autoPopulateScores = async (evaluationId) => {
     (row) => row.reviewed_at || row.updated_at
   );
 
-  if (activitySubs.length > 0) {
-    for (const sub of activitySubs) {
-      if (scopedCourseIds && sub.course_id && !scopedCourseIds.has(String(sub.course_id))) {
-        continue;
-      }
-
-      const normalizedScore = normalizeActivityScore(sub.score);
-      if (normalizedScore === null) continue;
-
-      populated.push({
-        sheet: "scoreboard",
-        category: null,
-        criterion_key: `activity_${sub.activity_id || sub.id}`,
-        criterion_label: sub.title || `Activity ${sub.activity_id}`,
-        score: round(normalizedScore, 2),
-        max_score: 5,
-        weight: null,
-        source: "auto_activity",
-        source_ref_id: sub.id,
-      });
+  const submissionsByActivityId = new Map();
+  for (const sub of activitySubs) {
+    if (sub.activity_id) {
+      submissionsByActivityId.set(String(sub.activity_id), sub);
     }
+  }
+
+  const includedActivityIds = new Set();
+  for (const activity of activityAssignments) {
+    const activityId = String(activity.id);
+    const sub = submissionsByActivityId.get(activityId);
+    const rawScore = sub ? (toNumber(sub.score) ?? 0) : 0;
+    const normalizedScore = normalizeActivityScore(rawScore);
+
+    populated.push({
+      sheet: "scoreboard",
+      category: null,
+      criterion_key: `activity_${activityId}`,
+      criterion_label: activity.title || sub?.title || `Activity ${activityId}`,
+      score: round(normalizedScore ?? 0, 2),
+      max_score: 5,
+      weight: null,
+      source: "auto_activity",
+      source_ref_id: sub?.id || activityId,
+    });
+    includedActivityIds.add(activityId);
+  }
+
+  // Keep fallback support for legacy submissions that may not have a matching
+  // activity assignment row (orphaned submissions, old data).
+  for (const sub of activitySubs) {
+    const activityId = sub.activity_id ? String(sub.activity_id) : null;
+    if (activityId && includedActivityIds.has(activityId)) continue;
+    if (scopedCourseIds && sub.course_id && !scopedCourseIds.has(String(sub.course_id))) {
+      continue;
+    }
+
+    const normalizedScore = normalizeActivityScore(sub.score);
+    populated.push({
+      sheet: "scoreboard",
+      category: null,
+      criterion_key: `activity_${activityId || sub.id}`,
+      criterion_label: sub.title || `Activity ${activityId || sub.id}`,
+      score: round(normalizedScore ?? 0, 2),
+      max_score: 5,
+      weight: null,
+      source: "auto_activity",
+      source_ref_id: sub.id,
+    });
   }
 
   if (populated.length === 0) {

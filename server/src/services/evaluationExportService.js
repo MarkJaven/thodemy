@@ -128,14 +128,21 @@ const TECHNICAL_CELL_MAP = [
 
 /** Maps behavioral evaluation criteria to their Excel cell references. */
 const BEHAVIORAL_CELL_MAP = [
-  { key: "bh_adaptability", cell: "B13" },
-  { key: "bh_initiative", cell: "B14" },
-  { key: "bh_dependability", cell: "B15" },
-  { key: "bh_cooperation", cell: "B16" },
-  { key: "bh_communication", cell: "B17" },
-  { key: "bh_attitude", cell: "B18" },
-  { key: "bh_professionalism", cell: "B19" },
-  { key: "bh_attendance", cell: "B20" },
+  { key: "bh_adaptability", cell: "B13" }, // Technical Knowledge and Skills
+  { key: "bh_initiative", cell: "B14" }, // Judgement and Conflict Management
+  { key: "bh_dependability", cell: "B15" }, // Reliability and Dependability
+  { key: "bh_attitude", cell: "B16" }, // Flexibility
+  { key: "bh_cooperation", cell: "B17" }, // Teamwork
+  { key: "bh_attendance", cell: "B18" }, // Drive for Excellence
+  { key: "bh_professionalism", cell: "B19" }, // Integrity
+  { key: "bh_information_security", cell: "B20" }, // Information Safety and Security
+  { key: "bh_communication", cell: "B21" }, // Written Communication
+  { key: "bh_oral_communication", cell: "B22" }, // Oral Communication
+  { key: "bh_interpersonal_relations", cell: "B23" },
+  { key: "bh_grooming_attire", cell: "B25" },
+  { key: "bh_service_professionalism", cell: "B26" },
+  { key: "bh_accessibility", cell: "B27" },
+  { key: "bh_handling_situations", cell: "B28" },
 ];
 
 /** Maps scoreboard criterion keys to row-3 header cells. Null means not displayed. */
@@ -553,6 +560,7 @@ const computeSummaryContributions = (scoreMap, scoreboardAverages) => {
   const communicationAvg = average([
     getBootcampCriterionScore(scoreMap, scoreboardAverages, "a3_communication"),
     getScoreValue(scoreMap, "behavioral", "bh_communication"),
+    getScoreValue(scoreMap, "behavioral", "bh_oral_communication"),
   ]);
 
   const collaborationAvg = average([
@@ -560,6 +568,7 @@ const computeSummaryContributions = (scoreMap, scoreboardAverages) => {
     getBootcampCriterionScore(scoreMap, scoreboardAverages, "a4_leadership"),
     getScoreValue(scoreMap, "behavioral", "bh_cooperation"),
     getScoreValue(scoreMap, "behavioral", "bh_professionalism"),
+    getScoreValue(scoreMap, "behavioral", "bh_interpersonal_relations"),
   ]);
 
   const scoreboardEntries = [];
@@ -636,12 +645,29 @@ const overwriteCellWithFormulaResult = (worksheet, cellRef, result) => {
   if (!worksheet) return;
   const nextResult = toNumber(result) ?? 0;
   const currentValue = worksheet.getCell(cellRef).value;
-  if (currentValue && typeof currentValue === "object" && currentValue.formula) {
-    overwriteCell(worksheet, cellRef, {
-      formula: currentValue.formula,
-      result: nextResult,
-    });
-    return;
+  if (currentValue && typeof currentValue === "object") {
+    if (currentValue.formula) {
+      const formulaValue = {
+        formula: currentValue.formula,
+        result: nextResult,
+      };
+      if (currentValue.shareType) {
+        formulaValue.shareType = currentValue.shareType;
+      }
+      if (currentValue.ref) {
+        formulaValue.ref = currentValue.ref;
+      }
+      overwriteCell(worksheet, cellRef, formulaValue);
+      return;
+    }
+
+    if (currentValue.sharedFormula) {
+      overwriteCell(worksheet, cellRef, {
+        sharedFormula: currentValue.sharedFormula,
+        result: nextResult,
+      });
+      return;
+    }
   }
   overwriteCell(worksheet, cellRef, nextResult);
 };
@@ -711,6 +737,11 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   overwriteCell(part1, "E6", dateHired);
   overwriteCell(part1, "E7", coveredPeriod);
   overwriteCell(part1, "E8", trainer);
+
+  const behavioral = workbook.getWorksheet("Behavioral Evaluation");
+  overwriteCell(behavioral, "B6", safeUpper(traineeName));
+  overwriteCell(behavioral, "B7", "TRAINEE");
+  overwriteCell(behavioral, "B8", null);
 
   const technical = workbook.getWorksheet("Technical Evaluation");
   overwriteCell(technical, "D5", safeUpper(traineeName));
@@ -798,11 +829,18 @@ const populateBootcampDerivedActuals = (workbook, scoreMap, scoreboardAverages) 
     getScoreValue(scoreMap, "behavioral", "bh_adaptability"),
     getScoreValue(scoreMap, "behavioral", "bh_initiative"),
     getScoreValue(scoreMap, "behavioral", "bh_dependability"),
-    getScoreValue(scoreMap, "behavioral", "bh_cooperation"),
-    getScoreValue(scoreMap, "behavioral", "bh_communication"),
     getScoreValue(scoreMap, "behavioral", "bh_attitude"),
-    getScoreValue(scoreMap, "behavioral", "bh_professionalism"),
+    getScoreValue(scoreMap, "behavioral", "bh_cooperation"),
     getScoreValue(scoreMap, "behavioral", "bh_attendance"),
+    getScoreValue(scoreMap, "behavioral", "bh_professionalism"),
+    getScoreValue(scoreMap, "behavioral", "bh_information_security"),
+    getScoreValue(scoreMap, "behavioral", "bh_communication"),
+    getScoreValue(scoreMap, "behavioral", "bh_oral_communication"),
+    getScoreValue(scoreMap, "behavioral", "bh_interpersonal_relations"),
+    getScoreValue(scoreMap, "behavioral", "bh_grooming_attire"),
+    getScoreValue(scoreMap, "behavioral", "bh_service_professionalism"),
+    getScoreValue(scoreMap, "behavioral", "bh_accessibility"),
+    getScoreValue(scoreMap, "behavioral", "bh_handling_situations"),
   ]);
 
   const ethicsFallback = average([
@@ -961,16 +999,36 @@ const populateBehavioralScores = (workbook, scoreMap) => {
   const behavioral = workbook.getWorksheet("Behavioral Evaluation");
   if (!behavioral) return;
 
+  let headTotal = 0;
+
   for (const config of BEHAVIORAL_CELL_MAP) {
     overwriteCell(behavioral, config.cell, null);
     const score = getScoreValue(scoreMap, "behavioral", config.key);
     overwriteCell(behavioral, config.cell, score !== null ? round(score, 2) : null);
+    if (score !== null) {
+      headTotal += score;
+    }
 
     // Keep colleague/self-eval columns empty for export-generated files.
     const row = config.cell.slice(1);
     overwriteCell(behavioral, `C${row}`, null);
     overwriteCell(behavioral, `D${row}`, null);
+
+    // Update the row average cached result so values are visible without manual recalc.
+    if (score !== null) {
+      overwriteCellWithFormulaResult(behavioral, `E${row}`, round(score, 2));
+    }
   }
+
+  // Keep template formulas intact while updating cached total results.
+  const roundedHeadTotal = round(headTotal, 2);
+  const weightedScore = round((roundedHeadTotal / 75) * 5, 4);
+
+  overwriteCellWithFormulaResult(behavioral, "B29", roundedHeadTotal);
+  overwriteCellWithFormulaResult(behavioral, "C29", 0);
+  overwriteCellWithFormulaResult(behavioral, "D29", 0);
+  overwriteCellWithFormulaResult(behavioral, "E29", roundedHeadTotal);
+  overwriteCellWithFormulaResult(behavioral, "E30", weightedScore);
 };
 
 /** Retrieves all quiz_grades entries from the score map, sorted by label. */
