@@ -38,12 +38,22 @@ CREATE TABLE IF NOT EXISTS public.learning_path_enrollments (
   enrolled_at timestamptz NOT NULL DEFAULT now(),
   start_date timestamptz,
   end_date timestamptz,
+  target_start_date timestamptz,
+  target_end_date timestamptz,
+  actual_start_date timestamptz,
+  actual_end_date timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   created_by uuid DEFAULT auth.uid() REFERENCES auth.users(id),
   updated_by uuid DEFAULT auth.uid() REFERENCES auth.users(id),
   UNIQUE (user_id, learning_path_id)
 );
+
+ALTER TABLE public.learning_path_enrollments
+  ADD COLUMN IF NOT EXISTS target_start_date timestamptz,
+  ADD COLUMN IF NOT EXISTS target_end_date timestamptz,
+  ADD COLUMN IF NOT EXISTS actual_start_date timestamptz,
+  ADD COLUMN IF NOT EXISTS actual_end_date timestamptz;
 
 CREATE INDEX IF NOT EXISTS lp_enrollments_user_idx ON public.learning_path_enrollments(user_id);
 CREATE INDEX IF NOT EXISTS lp_enrollments_lp_idx ON public.learning_path_enrollments(learning_path_id);

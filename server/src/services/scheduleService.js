@@ -184,15 +184,27 @@ const buildCoreqGroups = (topicIds, coreqMap) => {
   return { groupList, groupById, groupByTopic };
 };
 
-const buildSchedule = ({ startDate, topicIds, topicsById, effectivePrereqs, effectiveCoreqs }) => {
-  if (!startDate) {
+const buildSchedule = ({
+  startDate,
+  startCursor,
+  topicIds,
+  topicsById,
+  effectivePrereqs,
+  effectiveCoreqs,
+}) => {
+  if (!startDate && !startCursor) {
     return { schedule: new Map(), courseStart: null, courseEnd: null, endCursor: null };
   }
 
-  const normalizedStart = normalizeCursor({
-    date: startDate,
-    remainingHours: WORK_HOURS_PER_DAY,
-  });
+  const normalizedStart = startCursor
+    ? normalizeCursor({
+        date: new Date(startCursor.date.getTime()),
+        remainingHours: Number(startCursor.remainingHours) || WORK_HOURS_PER_DAY,
+      })
+    : normalizeCursor({
+        date: startDate,
+        remainingHours: WORK_HOURS_PER_DAY,
+      });
 
   const { groupList, groupById, groupByTopic } = buildCoreqGroups(topicIds, effectiveCoreqs);
 
@@ -317,6 +329,61 @@ const buildSchedule = ({ startDate, topicIds, topicsById, effectivePrereqs, effe
   }
 
   return { schedule, courseStart, courseEnd, endCursor };
+};
+
+const computeCourseTopicSchedule = ({
+  startCursor,
+  topicIds,
+  topicsById,
+  topicPrerequisites,
+  topicCorequisites,
+}) => {
+  if (!startCursor || !startCursor.date) {
+    return {
+      scheduled: false,
+      topicSchedule: new Map(),
+      courseStart: null,
+      courseEnd: null,
+      endCursor: null,
+    };
+  }
+
+  const orderedTopicIds = dedupeIds(topicIds);
+  if (orderedTopicIds.length === 0) {
+    return {
+      scheduled: false,
+      topicSchedule: new Map(),
+      courseStart: null,
+      courseEnd: null,
+      endCursor: { ...startCursor },
+    };
+  }
+
+  const keepSet = new Set(orderedTopicIds);
+  const normalizedPrereqs = normalizeRelationMap(topicPrerequisites, keepSet);
+  const normalizedCoreqs = normalizeRelationMap(topicCorequisites, keepSet);
+  const effectiveCoreqs = buildEffectiveCoreqs(orderedTopicIds, normalizedCoreqs);
+  const effectivePrereqs = buildEffectivePrereqs(
+    orderedTopicIds,
+    normalizedPrereqs,
+    effectiveCoreqs
+  );
+
+  const { schedule, courseStart, courseEnd, endCursor } = buildSchedule({
+    startCursor,
+    topicIds: orderedTopicIds,
+    topicsById,
+    effectivePrereqs,
+    effectiveCoreqs,
+  });
+
+  return {
+    scheduled: schedule.size > 0,
+    topicSchedule: schedule,
+    courseStart,
+    courseEnd,
+    endCursor,
+  };
 };
 
 const resolveLearningPathStartForCourse = async (courseId) => {
@@ -532,5 +599,10 @@ const scheduleCoursesForTopic = async ({ topicId, updatedBy }) => {
 };
 
 module.exports = {
-  scheduleService: { scheduleCourseTopics, scheduleLearningPathCourses, scheduleCoursesForTopic },
+  scheduleService: {
+    scheduleCourseTopics,
+    scheduleLearningPathCourses,
+    scheduleCoursesForTopic,
+    computeCourseTopicSchedule,
+  },
 };
