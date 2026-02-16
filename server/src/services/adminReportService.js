@@ -1,5 +1,6 @@
 const { supabaseAdmin } = require("../config/supabase");
 const { AppError, ExternalServiceError } = require("../utils/errors");
+const { scheduleService } = require("./scheduleService");
 
 let cachedExcelJs = null;
 
@@ -36,6 +37,12 @@ const formatDate = (value) => {
   return date.toISOString();
 };
 
+const parseDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 const formatUserName = (profile) =>
   [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
   profile?.username ||
@@ -65,6 +72,28 @@ const dedupeIds = (ids) =>
   Array.from(
     new Set((Array.isArray(ids) ? ids : []).map((id) => String(id)).filter(Boolean))
   );
+
+const mergeRelationMaps = (...maps) => {
+  const merged = new Map();
+  maps.forEach((map) => {
+    if (!map || typeof map !== "object") return;
+    Object.entries(map).forEach(([topicId, linkedIds]) => {
+      const values = Array.isArray(linkedIds)
+        ? linkedIds.map(String).filter(Boolean)
+        : [];
+      if (values.length === 0) return;
+      if (!merged.has(topicId)) merged.set(topicId, new Set());
+      const bucket = merged.get(topicId);
+      values.forEach((value) => bucket.add(value));
+    });
+  });
+
+  return Array.from(merged.entries()).reduce((acc, [topicId, values]) => {
+    const list = Array.from(values);
+    if (list.length > 0) acc[topicId] = list;
+    return acc;
+  }, {});
+};
 
 const normalizeGroupName = (value, fallbackLabel) => {
   const normalized = String(value || "")
@@ -123,6 +152,92 @@ const buildGroupedTopicNameMap = (course) => {
   return groupedByTopic;
 };
 
+const buildPrereqMapFromTopicGroups = (topicIds, topicGroups) => {
+  if (!Array.isArray(topicGroups) || topicGroups.length === 0) return {};
+  const keepSet = new Set((Array.isArray(topicIds) ? topicIds : []).map(String));
+  const indexById = new Map((Array.isArray(topicIds) ? topicIds : []).map((id, index) => [id, index]));
+  const edges = new Map();
+
+  topicGroups.forEach((group) => {
+    const members = Array.from(
+      new Set(
+        (Array.isArray(group?.topic_ids) ? group.topic_ids : [])
+          .map(String)
+          .filter((topicId) => keepSet.has(topicId))
+      )
+    );
+    if (members.length < 2) return;
+    members.sort(
+      (left, right) =>
+        (indexById.get(left) ?? Number.MAX_SAFE_INTEGER) -
+        (indexById.get(right) ?? Number.MAX_SAFE_INTEGER)
+    );
+    for (let index = 1; index < members.length; index += 1) {
+      const topicId = members[index];
+      const prerequisiteId = members[index - 1];
+      if (!topicId || !prerequisiteId || topicId === prerequisiteId) continue;
+      if (!edges.has(topicId)) edges.set(topicId, new Set());
+      edges.get(topicId).add(prerequisiteId);
+    }
+  });
+
+  return Array.from(edges.entries()).reduce((acc, [topicId, prereqs]) => {
+    const values = Array.from(prereqs);
+    if (values.length > 0) acc[topicId] = values;
+    return acc;
+  }, {});
+};
+
+const buildTargetTopicScheduleForEnrollment = ({
+  enrollment,
+  learningPath,
+  courseMap,
+  topicsById,
+}) => {
+  const scheduled = new Map();
+  if (!learningPath) return scheduled;
+
+  const startDate =
+    parseDate(enrollment?.target_start_date) ||
+    parseDate(enrollment?.start_date) ||
+    null;
+  if (!startDate) return scheduled;
+
+  let cursor = { date: startDate, remainingHours: 8 };
+
+  (Array.isArray(learningPath.course_ids) ? learningPath.course_ids : []).forEach((courseId) => {
+    const course = courseMap.get(String(courseId));
+    if (!course) return;
+
+    const topicIds = Array.isArray(course.topic_ids) ? course.topic_ids.map(String) : [];
+    if (topicIds.length === 0) return;
+
+    const groupPrereqMap = buildPrereqMapFromTopicGroups(topicIds, course.topic_groups);
+    const mergedPrereqMap = mergeRelationMaps(
+      course.topic_prerequisites ?? {},
+      groupPrereqMap
+    );
+    const result = scheduleService.computeCourseTopicSchedule({
+      startCursor: cursor,
+      topicIds,
+      topicsById,
+      topicPrerequisites: mergedPrereqMap,
+      topicCorequisites: {},
+    });
+
+    if (result?.topicSchedule) {
+      result.topicSchedule.forEach((value, topicId) => {
+        scheduled.set(String(topicId), value);
+      });
+    }
+    if (result?.endCursor) {
+      cursor = result.endCursor;
+    }
+  });
+
+  return scheduled;
+};
+
 const loadChecklistUsers = async ({ userId } = {}) => {
   let profileQuery = supabaseAdmin
     .from("profiles")
@@ -176,7 +291,9 @@ const loadChecklistUsers = async ({ userId } = {}) => {
 const loadUserChecklistRows = async ({ userId } = {}) => {
   let enrollmentQuery = supabaseAdmin
     .from("learning_path_enrollments")
-    .select("id, user_id, learning_path_id, status, enrolled_at, start_date, end_date")
+    .select(
+      "id, user_id, learning_path_id, status, enrolled_at, start_date, end_date, target_start_date, target_end_date, actual_start_date, actual_end_date"
+    )
     .order("enrolled_at", { ascending: false });
   if (userId) {
     enrollmentQuery = enrollmentQuery.eq("user_id", userId);
@@ -213,7 +330,7 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
     return data;
   });
 
-  const learningPathMap = new Map((learningPaths ?? []).map((lp) => [lp.id, lp]));
+  const learningPathMap = new Map((learningPaths ?? []).map((lp) => [String(lp.id), lp]));
 
   const courseIds = Array.from(
     new Set(
@@ -226,7 +343,7 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
   const courses = await fetchInChunks(courseIds, 200, async (ids) => {
     const { data, error } = await supabaseAdmin
       .from("courses")
-      .select("id, title, topic_ids, topic_groups")
+      .select("id, title, topic_ids, topic_prerequisites, topic_groups")
       .in("id", ids);
     if (error) {
       throw new ExternalServiceError("Unable to load courses", {
@@ -237,7 +354,7 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
     return data;
   });
 
-  const courseMap = new Map((courses ?? []).map((course) => [course.id, course]));
+  const courseMap = new Map((courses ?? []).map((course) => [String(course.id), course]));
 
   const topicIds = Array.from(
     new Set(
@@ -250,7 +367,7 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
   const topics = await fetchInChunks(topicIds, 200, async (ids) => {
     const { data, error } = await supabaseAdmin
       .from("topics")
-      .select("id, title, start_date, end_date")
+      .select("id, title, start_date, end_date, time_allocated, time_unit")
       .in("id", ids);
     if (error) {
       throw new ExternalServiceError("Unable to load topics", {
@@ -261,7 +378,17 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
     return data;
   });
 
-  const topicMap = new Map((topics ?? []).map((topic) => [topic.id, topic]));
+  const topicMap = new Map((topics ?? []).map((topic) => [String(topic.id), topic]));
+  const scheduleTopicMap = new Map(
+    (topics ?? []).map((topic) => [
+      String(topic.id),
+      {
+        id: String(topic.id),
+        time_allocated: topic.time_allocated,
+        time_unit: topic.time_unit,
+      },
+    ])
+  );
 
   const profiles = await fetchInChunks(userIds, 200, async (ids) => {
     const { data, error } = await supabaseAdmin
@@ -334,25 +461,36 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
     const profile = profileMap.get(enrollment.user_id) || {};
     const userName = formatUserName(profile);
     const userEmail = profile.email || "";
-    const learningPath = learningPathMap.get(enrollment.learning_path_id);
+    const learningPath = learningPathMap.get(String(enrollment.learning_path_id));
     const learningPathTitle = learningPath?.title || "";
     const enrollmentStatus = enrollment.status || "";
-    const pathCourseIds = learningPath?.course_ids ?? [];
+    const pathCourseIds = Array.isArray(learningPath?.course_ids)
+      ? learningPath.course_ids.map(String)
+      : [];
+    const targetTopicScheduleById = buildTargetTopicScheduleForEnrollment({
+      enrollment,
+      learningPath,
+      courseMap,
+      topicsById: scheduleTopicMap,
+    });
 
     for (const courseId of pathCourseIds) {
-      const course = courseMap.get(courseId);
+      const course = courseMap.get(String(courseId));
       const courseTitle = course?.title || "";
-      const courseTopicIds = course?.topic_ids ?? [];
+      const courseTopicIds = Array.isArray(course?.topic_ids) ? course.topic_ids.map(String) : [];
       const groupedTopicNameMap = buildGroupedTopicNameMap(course);
 
       for (const topicId of courseTopicIds) {
-        const topic = topicMap.get(topicId);
+        const topic = topicMap.get(String(topicId));
         const topicTitle = topic?.title || "";
         const groupedTopicName = groupedTopicNameMap.get(String(topicId)) || topicTitle;
         const progress = progressMap.get(`${enrollment.user_id}:${topicId}`);
         const status = progress?.status || "";
-        const topicStartDate = formatDate(progress?.start_date);
-        const topicEndDate = formatDate(progress?.end_date);
+        const targetSchedule = targetTopicScheduleById.get(String(topicId));
+        const topicTargetStartDate = formatDate(targetSchedule?.start);
+        const topicTargetEndDate = formatDate(targetSchedule?.end);
+        const topicActualStartDate = formatDate(progress?.start_date);
+        const topicActualEndDate = formatDate(progress?.end_date);
         const notesEntry = notesMap.get(`${enrollment.user_id}:${topicId}`);
         const notes = notesEntry?.review_notes || "";
         rows.push({
@@ -365,8 +503,10 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
           groupedTopicName,
           topicTitle,
           status,
-          topicStartDate,
-          topicEndDate,
+          topicTargetStartDate,
+          topicTargetEndDate,
+          topicActualStartDate,
+          topicActualEndDate,
           notes,
         });
       }
@@ -406,8 +546,10 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
           "Grouped Topics",
           "Topic Name",
           "Topic Status",
-          "Topic Start Date",
-          "Topic End Date",
+          "Target Start Date",
+          "Target End Date",
+          "Actual Start Date",
+          "Actual End Date",
           "Remarks",
         ]
       : [
@@ -415,10 +557,12 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
           "Grouped Topics",
           "Topic Name",
           "Topic Status",
-          "Topic Start Date",
-          "Topic End Date",
-        "Remarks",
-      ];
+          "Target Start Date",
+          "Target End Date",
+          "Actual Start Date",
+          "Actual End Date",
+          "Remarks",
+        ];
   const fileName = buildChecklistFileName({ rows, ext: "csv" });
   if (rows.length === 0) {
     return { csv: `\ufeff${header.map(csvEscape).join(",")}\n`, fileName };
@@ -431,8 +575,10 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
       row.groupedTopicName,
       row.topicTitle,
       row.status,
-      row.topicStartDate,
-      row.topicEndDate,
+      row.topicTargetStartDate,
+      row.topicTargetEndDate,
+      row.topicActualStartDate,
+      row.topicActualEndDate,
       row.notes,
     ];
     const columns = includeUserColumns
@@ -455,8 +601,10 @@ const CHECKLIST_HEADER_LABELS = [
   "Grouped Topics",
   "Topic Name",
   "Topic Status",
-  "Topic Start Date",
-  "Topic End Date",
+  "Target Start Date",
+  "Target End Date",
+  "Actual Start Date",
+  "Actual End Date",
   "Remarks",
 ];
 
@@ -465,8 +613,10 @@ const CHECKLIST_COLUMNS = [
   { key: "groupedTopicName", width: 24 },
   { key: "topicTitle", width: 36 },
   { key: "status", width: 14 },
-  { key: "topicStartDate", width: 16 },
-  { key: "topicEndDate", width: 16 },
+  { key: "topicTargetStartDate", width: 18 },
+  { key: "topicTargetEndDate", width: 18 },
+  { key: "topicActualStartDate", width: 18 },
+  { key: "topicActualEndDate", width: 18 },
   { key: "notes", width: 30 },
 ];
 
@@ -630,17 +780,27 @@ const populateUserChecklistSheet = (sheet, rows, userSummary = {}) => {
   rows.forEach((row) => {
     const rowData = {
       ...row,
-      topicStartDate: row.topicStartDate ? new Date(row.topicStartDate) : null,
-      topicEndDate: row.topicEndDate ? new Date(row.topicEndDate) : null,
+      topicTargetStartDate: row.topicTargetStartDate ? new Date(row.topicTargetStartDate) : null,
+      topicTargetEndDate: row.topicTargetEndDate ? new Date(row.topicTargetEndDate) : null,
+      topicActualStartDate: row.topicActualStartDate ? new Date(row.topicActualStartDate) : null,
+      topicActualEndDate: row.topicActualEndDate ? new Date(row.topicActualEndDate) : null,
     };
     const worksheetRow = sheet.addRow(rowData);
-    const startCell = worksheetRow.getCell("topicStartDate");
-    const endCell = worksheetRow.getCell("topicEndDate");
-    if (rowData.topicStartDate) {
-      startCell.numFmt = "mm/dd/yyyy";
+    const targetStartCell = worksheetRow.getCell("topicTargetStartDate");
+    const targetEndCell = worksheetRow.getCell("topicTargetEndDate");
+    const actualStartCell = worksheetRow.getCell("topicActualStartDate");
+    const actualEndCell = worksheetRow.getCell("topicActualEndDate");
+    if (rowData.topicTargetStartDate) {
+      targetStartCell.numFmt = "mm/dd/yyyy";
     }
-    if (rowData.topicEndDate) {
-      endCell.numFmt = "mm/dd/yyyy";
+    if (rowData.topicTargetEndDate) {
+      targetEndCell.numFmt = "mm/dd/yyyy";
+    }
+    if (rowData.topicActualStartDate) {
+      actualStartCell.numFmt = "mm/dd/yyyy";
+    }
+    if (rowData.topicActualEndDate) {
+      actualEndCell.numFmt = "mm/dd/yyyy";
     }
     const statusCell = worksheetRow.getCell("status");
     statusCell.font = { bold: true, underline: true };
@@ -651,15 +811,25 @@ const populateUserChecklistSheet = (sheet, rows, userSummary = {}) => {
     const fillColor = courseIndex % 2 === 1 ? "FFE4F5D7" : null;
     applyRowStyle(worksheetRow, fillColor);
 
-    if (!rowData.topicStartDate) {
-      startCell.value = "-";
-      startCell.font = { color: { argb: "FF64748B" } };
-      startCell.alignment = { vertical: "middle", horizontal: "center" };
+    if (!rowData.topicTargetStartDate) {
+      targetStartCell.value = "-";
+      targetStartCell.font = { color: { argb: "FF64748B" } };
+      targetStartCell.alignment = { vertical: "middle", horizontal: "center" };
     }
-    if (!rowData.topicEndDate) {
-      endCell.value = "-";
-      endCell.font = { color: { argb: "FF64748B" } };
-      endCell.alignment = { vertical: "middle", horizontal: "center" };
+    if (!rowData.topicTargetEndDate) {
+      targetEndCell.value = "-";
+      targetEndCell.font = { color: { argb: "FF64748B" } };
+      targetEndCell.alignment = { vertical: "middle", horizontal: "center" };
+    }
+    if (!rowData.topicActualStartDate) {
+      actualStartCell.value = "-";
+      actualStartCell.font = { color: { argb: "FF64748B" } };
+      actualStartCell.alignment = { vertical: "middle", horizontal: "center" };
+    }
+    if (!rowData.topicActualEndDate) {
+      actualEndCell.value = "-";
+      actualEndCell.font = { color: { argb: "FF64748B" } };
+      actualEndCell.alignment = { vertical: "middle", horizontal: "center" };
     }
   });
 

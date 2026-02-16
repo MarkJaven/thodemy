@@ -50,6 +50,10 @@ export type LearningPathDetail = {
     user_id: string;
     status?: string | null;
     enrolled_at?: string | null;
+    target_start_date?: string | null;
+    target_end_date?: string | null;
+    actual_start_date?: string | null;
+    actual_end_date?: string | null;
     user?: {
       id: string;
       first_name?: string | null;

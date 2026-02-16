@@ -186,12 +186,26 @@ CREATE TABLE IF NOT EXISTS public.learning_path_enrollments (
   learning_path_id uuid NOT NULL REFERENCES public.learning_paths(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   enrolled_at timestamptz NOT NULL DEFAULT now(),
+  start_date timestamptz,
+  end_date timestamptz,
+  target_start_date timestamptz,
+  target_end_date timestamptz,
+  actual_start_date timestamptz,
+  actual_end_date timestamptz,
   completed_at timestamptz,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'paused')),
   progress_percentage numeric DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.learning_path_enrollments
+  ADD COLUMN IF NOT EXISTS start_date timestamptz,
+  ADD COLUMN IF NOT EXISTS end_date timestamptz,
+  ADD COLUMN IF NOT EXISTS target_start_date timestamptz,
+  ADD COLUMN IF NOT EXISTS target_end_date timestamptz,
+  ADD COLUMN IF NOT EXISTS actual_start_date timestamptz,
+  ADD COLUMN IF NOT EXISTS actual_end_date timestamptz;
 
 CREATE UNIQUE INDEX IF NOT EXISTS learning_path_enrollments_unique_idx ON public.learning_path_enrollments(learning_path_id, user_id);
 CREATE INDEX IF NOT EXISTS learning_path_enrollments_user_id_idx ON public.learning_path_enrollments(user_id);

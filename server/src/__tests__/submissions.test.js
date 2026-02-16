@@ -93,6 +93,12 @@ describe("Topic submissions", () => {
     };
 
     const topicProgressQuery = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: null,
+        error: null,
+      }),
       upsert: jest.fn().mockResolvedValue({ error: null }),
     };
 

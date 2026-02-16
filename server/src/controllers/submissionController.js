@@ -259,11 +259,24 @@ const updateSubmissionStatus = async (req, res, next) => {
     }
 
     if (status === "completed") {
+      const { data: existingProgress, error: progressLoadError } = await supabaseAdmin
+        .from("topic_progress")
+        .select("id, start_date")
+        .eq("topic_id", existing.topic_id)
+        .eq("user_id", existing.user_id)
+        .maybeSingle();
+      if (progressLoadError) {
+        throw new ExternalServiceError("Unable to load topic progress", {
+          code: progressLoadError.code,
+          details: progressLoadError.message,
+        });
+      }
+
       const progressPayload = {
         topic_id: existing.topic_id,
         user_id: existing.user_id,
         status: "completed",
-        start_date: now,
+        start_date: existingProgress?.start_date ?? null,
         end_date: now,
       };
       const { error: progressError } = await supabaseAdmin
