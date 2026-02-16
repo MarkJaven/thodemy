@@ -1,12 +1,26 @@
+/**
+ * Schedule Service
+ * Computes topic and course schedules using working-day arithmetic,
+ * prerequisite/corequisite constraints, and learning path timelines.
+ * @module services/scheduleService
+ */
+
 const { supabaseAdmin } = require("../config/supabase");
 const { BadRequestError, ExternalServiceError } = require("../utils/errors");
 const { calculateCourseEndDate } = require("../utils/courseUtils");
 
+/** Deduplicates and stringifies an array of IDs. */
 const dedupeIds = (ids) =>
   Array.from(
     new Set((Array.isArray(ids) ? ids : []).map((id) => String(id)).filter(Boolean))
   );
 
+/**
+ * Filters and deduplicates a topic relation map (prereqs/coreqs).
+ * @param {object} value - Raw relation map { topicId: [relatedIds] }
+ * @param {Set<string>} [keepSet] - Only keep IDs present in this set
+ * @returns {object} Normalized relation map
+ */
 const normalizeRelationMap = (value, keepSet) => {
   if (!value || typeof value !== "object") return {};
   return Object.entries(value).reduce((acc, [key, list]) => {
@@ -23,6 +37,7 @@ const normalizeRelationMap = (value, keepSet) => {
   }, {});
 };
 
+/** Parses a value into a Date, returning null if invalid. */
 const parseDate = (value) => {
   if (!value) return null;
   const date = new Date(value);
@@ -32,6 +47,7 @@ const parseDate = (value) => {
 const WORK_HOURS_PER_DAY = 8;
 const CURSOR_EPSILON = 1e-6;
 
+/** Converts a topic's time_allocated into hours. */
 const toTopicHours = (topic) => {
   const time = Number(topic?.time_allocated) || 0;
   if (time <= 0) return 0;
@@ -41,8 +57,10 @@ const toTopicHours = (topic) => {
   return time;
 };
 
+/** Advances a date to the nearest working day if it falls on a weekend/holiday. */
 const ensureWorkingDay = (date) => calculateCourseEndDate(date, 1);
 
+/** Returns the next working day after the given date. */
 const nextWorkingDay = (date) => {
   if (!date) return null;
   const candidate = new Date(date.getTime());
@@ -50,6 +68,11 @@ const nextWorkingDay = (date) => {
   return calculateCourseEndDate(candidate, 1);
 };
 
+/**
+ * Ensures the scheduling cursor points to a valid working day with remaining hours.
+ * @param {{ date: Date, remainingHours: number }} cursor
+ * @returns {{ date: Date, remainingHours: number }}
+ */
 const normalizeCursor = (cursor) => {
   let workingDate = ensureWorkingDay(cursor.date);
   let remainingHours = cursor.remainingHours;
@@ -63,6 +86,7 @@ const normalizeCursor = (cursor) => {
   return { date: workingDate, remainingHours };
 };
 
+/** Returns whichever cursor is further ahead in time. */
 const compareCursor = (left, right) => {
   const leftTime = left.date.getTime();
   const rightTime = right.date.getTime();
@@ -71,6 +95,12 @@ const compareCursor = (left, right) => {
   return left.remainingHours <= right.remainingHours ? left : right;
 };
 
+/**
+ * Advances a cursor by the specified number of working hours.
+ * @param {{ date: Date, remainingHours: number }} cursor
+ * @param {number} hours - Hours to allocate
+ * @returns {{ endDate: Date, cursor: { date: Date, remainingHours: number } }}
+ */
 const addWorkingHours = (cursor, hours) => {
   let remainingToAllocate = Number.isFinite(hours) ? Math.max(0, hours) : 0;
   let { date, remainingHours } = normalizeCursor(cursor);
@@ -94,6 +124,13 @@ const addWorkingHours = (cursor, hours) => {
   return { endDate: new Date(date.getTime()), cursor: { date, remainingHours } };
 };
 
+/**
+ * Resolves effective prerequisites for each topic, inferring from order when not explicit.
+ * @param {string[]} topicIds - Ordered topic IDs
+ * @param {object} prereqMap - Explicit prerequisite mappings
+ * @param {object} coreqMap - Corequisite mappings used for grouping
+ * @returns {object} Effective prerequisites per topic
+ */
 const buildEffectivePrereqs = (topicIds, prereqMap, coreqMap) => {
   const { groupList, groupByTopic } = buildCoreqGroups(topicIds, coreqMap);
   const groupIndexById = new Map(groupList.map((group, index) => [group.id, index]));
@@ -118,6 +155,12 @@ const buildEffectivePrereqs = (topicIds, prereqMap, coreqMap) => {
   return effective;
 };
 
+/**
+ * Resolves effective corequisites for each topic.
+ * @param {string[]} topicIds
+ * @param {object} coreqMap - Explicit corequisite mappings
+ * @returns {object} Effective corequisites per topic
+ */
 const buildEffectiveCoreqs = (topicIds, coreqMap) => {
   const effective = {};
   topicIds.forEach((topicId) => {
@@ -130,6 +173,12 @@ const buildEffectiveCoreqs = (topicIds, coreqMap) => {
   return effective;
 };
 
+/**
+ * Groups corequisite topics together using a union-find algorithm.
+ * @param {string[]} topicIds
+ * @param {object} coreqMap
+ * @returns {{ groupList: Array, groupById: Map, groupByTopic: Map }}
+ */
 const buildCoreqGroups = (topicIds, coreqMap) => {
   const parent = new Map();
   topicIds.forEach((id) => parent.set(id, id));
@@ -184,6 +233,11 @@ const buildCoreqGroups = (topicIds, coreqMap) => {
   return { groupList, groupById, groupByTopic };
 };
 
+/**
+ * Builds a full topic schedule respecting prerequisites and corequisite groups.
+ * @param {{ startDate: Date, topicIds: string[], topicsById: Map, effectivePrereqs: object, effectiveCoreqs: object }} options
+ * @returns {{ schedule: Map, courseStart: Date|null, courseEnd: Date|null, endCursor: object }}
+ */
 const buildSchedule = ({ startDate, topicIds, topicsById, effectivePrereqs, effectiveCoreqs }) => {
   if (!startDate) {
     return { schedule: new Map(), courseStart: null, courseEnd: null, endCursor: null };
@@ -319,6 +373,11 @@ const buildSchedule = ({ startDate, topicIds, topicsById, effectivePrereqs, effe
   return { schedule, courseStart, courseEnd, endCursor };
 };
 
+/**
+ * Finds the earliest learning path start date that includes the given course.
+ * @param {string} courseId
+ * @returns {Promise<Date|null>}
+ */
 const resolveLearningPathStartForCourse = async (courseId) => {
   if (!courseId) return null;
   const { data, error } = await supabaseAdmin
@@ -341,6 +400,11 @@ const resolveLearningPathStartForCourse = async (courseId) => {
   );
 };
 
+/**
+ * Schedules all topics within a course and persists the computed dates.
+ * @param {{ courseId?: string, topicIds: string[], topicPrerequisites: object, topicCorequisites: object, startAtOverride?: string, fallbackStartAt?: string, updatedBy?: string }} options
+ * @returns {Promise<{ scheduled: boolean, courseStart: string|null, courseEnd: string|null }>}
+ */
 const scheduleCourseTopics = async ({
   courseId,
   topicIds,
@@ -458,6 +522,11 @@ const scheduleCourseTopics = async ({
   };
 };
 
+/**
+ * Schedules all courses and their topics within a learning path.
+ * @param {{ learningPathId: string, updatedBy?: string }} options
+ * @returns {Promise<void>}
+ */
 const scheduleLearningPathCourses = async ({ learningPathId, updatedBy }) => {
   if (!learningPathId) return;
   const { data: learningPath, error: lpError } = await supabaseAdmin
@@ -505,6 +574,11 @@ const scheduleLearningPathCourses = async ({ learningPathId, updatedBy }) => {
   }
 };
 
+/**
+ * Re-schedules all courses that contain the given topic.
+ * @param {{ topicId: string, updatedBy?: string }} options
+ * @returns {Promise<void>}
+ */
 const scheduleCoursesForTopic = async ({ topicId, updatedBy }) => {
   if (!topicId) return;
   const { data: courses, error: courseError } = await supabaseAdmin

@@ -1,13 +1,42 @@
+/**
+ * Admin Report Service
+ *
+ * This service handles the generation of comprehensive learning progress reports for administrators.
+ * It exports detailed user checklist data showing course enrollments, learning path progress,
+ * topic completion status, and review notes in both CSV and Excel formats.
+ *
+ * Key Features:
+ * - Aggregates data from multiple database tables (profiles, enrollments, courses, topics, progress)
+ * - Supports single-user and multi-user report exports
+ * - CSV exports with UTF-8 BOM for proper Excel compatibility
+ * - Excel workbooks with formatted sheets, merged cells, and alternating row colors
+ * - Efficient batch processing to handle large datasets without hitting query limits
+ *
+ * @module services/adminReportService
+ */
+
 const { supabaseAdmin } = require("../config/supabase");
 const { AppError, ExternalServiceError } = require("../utils/errors");
 
 let cachedExcelJs = null;
 
+/**
+ * Lazy-loads and caches the ExcelJS library to optimize server startup time.
+ *
+ * This function only loads the ExcelJS dependency when Excel export functionality is needed,
+ * allowing the server to start successfully even if the library isn't installed.
+ * The library is cached after first load to avoid repeated require() calls.
+ *
+ * @returns {Object} The ExcelJS library instance
+ * @throws {AppError} Throws a DEPENDENCY_MISSING error if the exceljs package is not installed
+ *
+ * @example
+ * const ExcelJS = getExcelJs();
+ * const workbook = new ExcelJS.Workbook();
+ */
 const getExcelJs = () => {
   if (cachedExcelJs) return cachedExcelJs;
   try {
-    // Lazily load ExcelJS so the server can still start even if the dependency
-    // isn't installed (only the XLSX export route depends on it).
     cachedExcelJs = require("exceljs");
     return cachedExcelJs;
   } catch (error) {
@@ -20,6 +49,23 @@ const getExcelJs = () => {
   }
 };
 
+/**
+ * Escapes a value for safe inclusion in CSV files according to RFC 4180 standards.
+ *
+ * This function handles special characters that could break CSV formatting:
+ * - Wraps values containing commas, quotes, or newlines in double quotes
+ * - Escapes internal double quotes by doubling them (" becomes "")
+ * - Converts null/undefined to empty strings
+ *
+ * @param {*} value - The value to escape (can be any type, will be converted to string)
+ * @returns {string} The escaped CSV-safe string
+ *
+ * @example
+ * csvEscape('Hello, World')  // Returns: "Hello, World"
+ * csvEscape('He said "Hi"')  // Returns: "He said ""Hi"""
+ * csvEscape('Simple text')   // Returns: Simple text
+ * csvEscape(null)            // Returns: ""
+ */
 const csvEscape = (value) => {
   if (value === null || value === undefined) return "";
   const text = String(value);
@@ -29,6 +75,22 @@ const csvEscape = (value) => {
   return text;
 };
 
+/**
+ * Formats a date value into an ISO 8601 string for consistent date representation.
+ *
+ * This function safely converts various date inputs (Date objects, timestamps, date strings)
+ * into a standardized ISO format (YYYY-MM-DDTHH:mm:ss.sssZ). Invalid dates return an empty string
+ * to prevent errors in reports.
+ *
+ * @param {Date|string|number|null|undefined} value - The date to format
+ * @returns {string} ISO 8601 formatted date string, or empty string if invalid/missing
+ *
+ * @example
+ * formatDate('2024-01-15')           // Returns: "2024-01-15T00:00:00.000Z"
+ * formatDate(new Date('2024-01-15')) // Returns: "2024-01-15T00:00:00.000Z"
+ * formatDate(null)                   // Returns: ""
+ * formatDate('invalid')              // Returns: ""
+ */
 const formatDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -36,12 +98,49 @@ const formatDate = (value) => {
   return date.toISOString();
 };
 
+/**
+ * Creates a human-readable display name from a user profile with graceful fallbacks.
+ *
+ * The function tries multiple strategies to generate a meaningful name:
+ * 1. First name + Last name (if both exist)
+ * 2. Username (if name fields are missing)
+ * 3. Email address (as last resort)
+ * 4. Empty string (if no identifying information exists)
+ *
+ * @param {Object} profile - User profile object from the database
+ * @param {string} [profile.first_name] - User's first name
+ * @param {string} [profile.last_name] - User's last name
+ * @param {string} [profile.username] - User's username
+ * @param {string} [profile.email] - User's email address
+ * @returns {string} The formatted display name
+ *
+ * @example
+ * formatUserName({ first_name: 'John', last_name: 'Doe' })  // Returns: "John Doe"
+ * formatUserName({ username: 'jdoe' })                      // Returns: "jdoe"
+ * formatUserName({ email: 'john@example.com' })             // Returns: "john@example.com"
+ */
 const formatUserName = (profile) =>
   [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
   profile?.username ||
   profile?.email ||
   "";
 
+/**
+ * Splits an array into smaller chunks of a specified size for batch processing.
+ *
+ * This utility is essential for working with database query limits. Many databases have
+ * restrictions on the number of items in an IN clause (e.g., "WHERE id IN (...)").
+ * By chunking large arrays, we can process them in multiple smaller queries.
+ *
+ * @param {Array} items - The array to split into chunks
+ * @param {number} size - Maximum number of items per chunk
+ * @returns {Array<Array>} Array of chunks, where each chunk is an array of up to 'size' items
+ *
+ * @example
+ * chunk([1, 2, 3, 4, 5], 2)  // Returns: [[1, 2], [3, 4], [5]]
+ * chunk(['a', 'b', 'c'], 10) // Returns: [['a', 'b', 'c']]
+ * chunk([], 5)               // Returns: []
+ */
 const chunk = (items, size) => {
   const result = [];
   for (let i = 0; i < items.length; i += size) {
@@ -50,6 +149,25 @@ const chunk = (items, size) => {
   return result;
 };
 
+/**
+ * Processes an array of items in batches using a custom handler function.
+ *
+ * This function is critical for efficiently querying large datasets without hitting database
+ * query limits or causing performance issues. It splits the items into chunks, processes each
+ * chunk sequentially (to avoid overwhelming the database), and aggregates all results.
+ *
+ * @param {Array} items - The items to process (typically IDs for database queries)
+ * @param {number} size - Maximum number of items to process per batch
+ * @param {Function} handler - Async function that processes one chunk and returns results
+ * @returns {Promise<Array>} Combined results from all chunks
+ *
+ * @example
+ * // Fetch user profiles in batches of 200
+ * const profiles = await fetchInChunks(userIds, 200, async (ids) => {
+ *   const { data } = await supabase.from('profiles').select('*').in('id', ids);
+ *   return data;
+ * });
+ */
 const fetchInChunks = async (items, size, handler) => {
   const chunks = chunk(items, size);
   const results = [];
@@ -61,6 +179,31 @@ const fetchInChunks = async (items, size, handler) => {
   return results;
 };
 
+/**
+ * Loads and prepares user profile data for checklist reports.
+ *
+ * This function fetches user profiles and their associated roles, then normalizes the data
+ * for report generation. When exporting all users, it filters to show only regular users
+ * (excluding admins/superadmins). The results are sorted alphabetically by name or email,
+ * with creation date as a secondary sort key.
+ *
+ * @param {Object} [options={}] - Query options
+ * @param {string} [options.userId] - Optional user ID to fetch a single user's data
+ * @returns {Promise<Array<Object>>} Array of normalized user objects with profile and role data
+ * @returns {string} return[].id - User's unique identifier
+ * @returns {string} return[].role - User's role (user, admin, superadmin)
+ * @returns {string} return[].userName - Formatted display name
+ * @returns {string} return[].userEmail - User's email address
+ * @returns {string} return[].createdAt - Account creation timestamp
+ * @throws {ExternalServiceError} If database queries fail
+ *
+ * @example
+ * // Get all regular users
+ * const users = await loadChecklistUsers();
+ *
+ * // Get a specific user
+ * const user = await loadChecklistUsers({ userId: '123' });
+ */
 const loadChecklistUsers = async ({ userId } = {}) => {
   let profileQuery = supabaseAdmin
     .from("profiles")
@@ -111,6 +254,45 @@ const loadChecklistUsers = async ({ userId } = {}) => {
   });
 };
 
+/**
+ * Aggregates comprehensive learning progress data for user checklist reports.
+ *
+ * This is the main data loading function that orchestrates fetching and combining data from
+ * multiple database tables to create a complete picture of user learning progress. It performs
+ * the following operations:
+ *
+ * 1. Fetches learning path enrollments for users
+ * 2. Loads all related learning paths, courses, and topics
+ * 3. Retrieves topic-level progress and submission data
+ * 4. Joins all data into flattened rows (one row per user-topic combination)
+ * 5. Uses batch processing to efficiently handle large datasets
+ *
+ * The resulting data structure shows every topic within every course within every learning path
+ * that users are enrolled in, along with their progress status and review notes.
+ *
+ * @param {Object} [options={}] - Query options
+ * @param {string} [options.userId] - Optional user ID to filter data for a single user
+ * @returns {Promise<Array<Object>>} Flattened array of user-topic progress rows
+ * @returns {string} return[].userId - User's unique identifier
+ * @returns {string} return[].userName - Formatted user display name
+ * @returns {string} return[].userEmail - User's email address
+ * @returns {string} return[].learningPathTitle - Name of the learning path
+ * @returns {string} return[].enrollmentStatus - User's enrollment status in the path
+ * @returns {string} return[].courseTitle - Name of the course
+ * @returns {string} return[].topicTitle - Name of the topic
+ * @returns {string} return[].status - Topic completion status
+ * @returns {string} return[].topicStartDate - When user started the topic (ISO format)
+ * @returns {string} return[].topicEndDate - When user completed the topic (ISO format)
+ * @returns {string} return[].notes - Review notes/feedback from instructors
+ * @throws {ExternalServiceError} If any database query fails
+ *
+ * @example
+ * // Get all user progress data
+ * const allProgress = await loadUserChecklistRows();
+ *
+ * // Get progress for a specific user
+ * const userProgress = await loadUserChecklistRows({ userId: '123' });
+ */
 const loadUserChecklistRows = async ({ userId } = {}) => {
   let enrollmentQuery = supabaseAdmin
     .from("learning_path_enrollments")
@@ -311,6 +493,28 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
   return rows;
 };
 
+/**
+ * Generates a descriptive filename for checklist exports with date and user information.
+ *
+ * The filename follows the pattern: {user_identifier}_checklist_{date}.{ext}
+ * - For single user: Uses their name (e.g., "john_doe_checklist_2024-01-15.csv")
+ * - For multiple users: Uses "multiple_users" (e.g., "multiple_users_checklist_2024-01-15.xlsx")
+ * - For no users: Uses "users" as default
+ *
+ * Special characters are sanitized to ensure filesystem compatibility across platforms.
+ *
+ * @param {Object} options - Filename generation options
+ * @param {Array<Object>} options.rows - The data rows containing user information
+ * @param {string} options.ext - File extension without the dot (e.g., "csv", "xlsx")
+ * @returns {string} The generated filename
+ *
+ * @example
+ * buildChecklistFileName({ rows: [{ userName: 'John Doe' }], ext: 'csv' })
+ * // Returns: "John_Doe_checklist_2024-01-15.csv"
+ *
+ * buildChecklistFileName({ rows: multipleUsers, ext: 'xlsx' })
+ * // Returns: "multiple_users_checklist_2024-01-15.xlsx"
+ */
 const buildChecklistFileName = ({ rows, ext }) => {
   const dateToken = new Date().toISOString().slice(0, 10);
   const uniqueNames = Array.from(new Set(rows.map((row) => row.userName).filter(Boolean)));
@@ -328,6 +532,34 @@ const buildChecklistFileName = ({ rows, ext }) => {
   return `${nameToken}_checklist_${dateToken}.${ext}`;
 };
 
+/**
+ * Generates a CSV file containing user learning progress checklist data.
+ *
+ * This function creates a RFC 4180 compliant CSV file with UTF-8 BOM (Byte Order Mark)
+ * to ensure proper character encoding when opened in Excel. The column structure adapts
+ * based on whether the export is for a single user or multiple users:
+ *
+ * - Single user: Excludes user identification columns (name, email, etc.)
+ * - All users: Includes full user identification for each row
+ *
+ * The UTF-8 BOM (\ufeff) is critical for Excel to correctly interpret special characters
+ * in names, notes, and other text fields.
+ *
+ * @param {Object} [options={}] - Export options
+ * @param {string} [options.userId] - Optional user ID to export data for a single user
+ * @returns {Promise<Object>} CSV export result
+ * @returns {string} return.csv - The complete CSV content with headers and data rows
+ * @returns {string} return.fileName - Generated filename based on user(s) and current date
+ *
+ * @example
+ * // Export all users
+ * const { csv, fileName } = await buildUserChecklistCsv();
+ * // csv contains: Name, Email, Learning Path, Status, Course, Topic, ...
+ *
+ * // Export single user
+ * const { csv, fileName } = await buildUserChecklistCsv({ userId: '123' });
+ * // csv contains: Course Name, Topic Name, Topic Status, ...
+ */
 const buildUserChecklistCsv = async ({ userId } = {}) => {
   const rows = await loadUserChecklistRows({ userId });
   const includeUserColumns = !userId;
@@ -382,6 +614,11 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
   return { csv: `${lines.join("\n")}\n`, fileName };
 };
 
+/**
+ * Column headers displayed in Excel worksheets for checklist reports.
+ * These labels appear in the header row with green background styling.
+ * @constant {string[]}
+ */
 const CHECKLIST_HEADER_LABELS = [
   "Course Name",
   "Topic Name",
@@ -391,6 +628,13 @@ const CHECKLIST_HEADER_LABELS = [
   "Remarks",
 ];
 
+/**
+ * Column configuration for Excel worksheets including property keys and column widths.
+ * The widths are set to accommodate typical content without excessive wrapping.
+ * @constant {Array<Object>}
+ * @property {string} key - Property name from the data object
+ * @property {number} width - Column width in Excel units (approximately characters)
+ */
 const CHECKLIST_COLUMNS = [
   { key: "courseTitle", width: 28 },
   { key: "topicTitle", width: 36 },
@@ -400,6 +644,25 @@ const CHECKLIST_COLUMNS = [
   { key: "notes", width: 30 },
 ];
 
+/**
+ * Sanitizes a string to be used as an Excel worksheet name.
+ *
+ * Excel has strict requirements for sheet names:
+ * - Cannot contain these characters: \ / * ? : [ ]
+ * - Maximum length is 31 characters (enforced elsewhere)
+ * - Cannot be empty
+ *
+ * This function removes invalid characters and provides a safe default if the
+ * result would be empty.
+ *
+ * @param {*} value - The value to sanitize (converted to string)
+ * @returns {string} A valid Excel sheet name
+ *
+ * @example
+ * sanitizeSheetName('John/Doe')      // Returns: "John Doe"
+ * sanitizeSheetName('Test: Report')  // Returns: "Test  Report"
+ * sanitizeSheetName('')              // Returns: "User Checklist"
+ */
 const sanitizeSheetName = (value) => {
   const cleaned = String(value || "")
     .replace(/[\\/*?:[\]]/g, " ")
@@ -408,6 +671,26 @@ const sanitizeSheetName = (value) => {
   return cleaned || "User Checklist";
 };
 
+/**
+ * Generates a unique worksheet name within an Excel workbook.
+ *
+ * Excel doesn't allow duplicate sheet names (case-insensitive) and enforces a 31-character
+ * limit. This function ensures uniqueness by:
+ * 1. Starting with the sanitized base name
+ * 2. Adding numeric suffixes (2), (3), etc. if duplicates exist
+ * 3. Truncating to fit within the 31-character limit while preserving the suffix
+ * 4. Maintaining a registry of used names (case-insensitive) to prevent collisions
+ *
+ * @param {string} baseName - The desired sheet name (will be sanitized)
+ * @param {Set<string>} usedNames - Set of lowercase sheet names already in use (mutated by this function)
+ * @returns {string} A unique sheet name that's been added to the usedNames set
+ *
+ * @example
+ * const used = new Set();
+ * buildUniqueSheetName('John Doe', used)  // Returns: "John Doe"
+ * buildUniqueSheetName('John Doe', used)  // Returns: "John Doe (2)"
+ * buildUniqueSheetName('John Doe', used)  // Returns: "John Doe (3)"
+ */
 const buildUniqueSheetName = (baseName, usedNames) => {
   const normalizedBase = sanitizeSheetName(baseName);
   const baseTrimmed = normalizedBase.slice(0, 31) || "User Checklist";
@@ -432,6 +715,22 @@ const buildUniqueSheetName = (baseName, usedNames) => {
   return register(`User Checklist (${Date.now() % 1000})`.slice(0, 31));
 };
 
+/**
+ * Applies professional header styling to an Excel worksheet row.
+ *
+ * This creates a visually distinct header with:
+ * - Green background color (#4C9A2A) for brand consistency
+ * - White, bold text for readability
+ * - Center alignment with text wrapping
+ * - Black borders around all cells
+ *
+ * @param {Object} row - ExcelJS Row object to style
+ *
+ * @example
+ * const headerRow = sheet.getRow(1);
+ * headerRow.values = ['Name', 'Email', 'Status'];
+ * applyHeaderStyle(headerRow);
+ */
 const applyHeaderStyle = (row) => {
   row.eachCell((cell) => {
     cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
@@ -450,6 +749,20 @@ const applyHeaderStyle = (row) => {
   });
 };
 
+/**
+ * Applies thin black borders to all cells in an Excel worksheet.
+ *
+ * This function ensures a consistent, professional table appearance by adding
+ * borders to every cell in the used range of the worksheet. It's typically called
+ * after all content and other styling has been applied to ensure borders are
+ * uniform across the entire sheet.
+ *
+ * @param {Object} sheet - ExcelJS Worksheet object
+ *
+ * @example
+ * // After populating and styling a worksheet
+ * applyAllBorders(sheet);
+ */
 const applyAllBorders = (sheet) => {
   const rowCount = sheet.rowCount;
   const columnCount = sheet.columnCount;
@@ -469,6 +782,27 @@ const applyAllBorders = (sheet) => {
   }
 };
 
+/**
+ * Applies styling to a data row in an Excel worksheet with optional alternating colors.
+ *
+ * This function styles data rows with:
+ * - Black borders around all cells for table structure
+ * - Top-aligned text with wrapping enabled for multi-line content
+ * - Optional background fill color for alternating row coloring (zebra striping)
+ *
+ * Alternating colors improve readability by visually separating rows, especially
+ * when topics are grouped by course.
+ *
+ * @param {Object} row - ExcelJS Row object to style
+ * @param {string} [fillColor] - Optional ARGB color code (e.g., "FFE4F5D7" for light green)
+ *
+ * @example
+ * // Apply style without background color
+ * applyRowStyle(row);
+ *
+ * // Apply style with light green background
+ * applyRowStyle(row, "FFE4F5D7");
+ */
 const applyRowStyle = (row, fillColor) => {
   row.eachCell({ includeEmpty: true }, (cell) => {
     cell.border = {
@@ -488,6 +822,32 @@ const applyRowStyle = (row, fillColor) => {
   });
 };
 
+/**
+ * Populates an Excel worksheet with user checklist data including summary info and detailed progress.
+ *
+ * This function creates a professionally formatted worksheet with:
+ *
+ * 1. Summary Section (Rows 1-4): User info including name, email, learning path, and enrollment status
+ * 2. Header Row (Row 6): Column labels with green background styling
+ * 3. Data Rows (Row 7+): Topic-by-topic progress with the following features:
+ *    - Alternating row colors by course for better readability
+ *    - Merged course name cells for topics within the same course
+ *    - Date formatting (mm/dd/yyyy) for start and end dates
+ *    - Bold, underlined status text
+ *    - Gray dashes for missing dates
+ *
+ * @param {Object} sheet - ExcelJS Worksheet object to populate
+ * @param {Array<Object>} rows - Array of user progress data (from loadUserChecklistRows)
+ * @param {Object} [userSummary={}] - User summary information for the header section
+ * @param {string} [userSummary.userName] - User's display name
+ * @param {string} [userSummary.userEmail] - User's email address
+ *
+ * @example
+ * const sheet = workbook.addWorksheet('John Doe');
+ * const rows = await loadUserChecklistRows({ userId: '123' });
+ * const user = { userName: 'John Doe', userEmail: 'john@example.com' };
+ * populateUserChecklistSheet(sheet, rows, user);
+ */
 const populateUserChecklistSheet = (sheet, rows, userSummary = {}) => {
   const summaryUserName = userSummary.userName || rows[0]?.userName || "";
   const summaryUserEmail = userSummary.userEmail || rows[0]?.userEmail || "";
@@ -624,6 +984,41 @@ const populateUserChecklistSheet = (sheet, rows, userSummary = {}) => {
   applyAllBorders(sheet);
 };
 
+/**
+ * Generates a complete Excel workbook containing user learning progress checklist data.
+ *
+ * This is the main Excel export function that orchestrates the creation of a multi-sheet
+ * workbook. The structure varies based on the export scope:
+ *
+ * - Single User Export (userId provided):
+ *   Creates one sheet named "User Checklist" with that user's data
+ *
+ * - All Users Export (no userId):
+ *   Creates one sheet per user, named after the user (e.g., "John Doe", "Jane Smith")
+ *   Each sheet contains only that user's progress data
+ *   Sheet names are sanitized and made unique to comply with Excel requirements
+ *
+ * The workbook uses batch loading for efficiency and handles edge cases like users with
+ * no progress data or missing profile information.
+ *
+ * @param {Object} [options={}] - Export options
+ * @param {string} [options.userId] - Optional user ID to export data for a single user
+ * @returns {Promise<Object>} Excel workbook export result
+ * @returns {Buffer} return.buffer - Binary Excel file data (XLSX format)
+ * @returns {string} return.fileName - Generated filename based on user(s) and current date
+ * @throws {AppError} If ExcelJS dependency is not installed
+ * @throws {ExternalServiceError} If database queries fail
+ *
+ * @example
+ * // Export all users to separate sheets
+ * const { buffer, fileName } = await buildUserChecklistWorkbook();
+ * fs.writeFileSync(fileName, buffer);
+ *
+ * // Export single user
+ * const { buffer, fileName } = await buildUserChecklistWorkbook({ userId: '123' });
+ * res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+ * res.send(buffer);
+ */
 const buildUserChecklistWorkbook = async ({ userId } = {}) => {
   const [rows, users] = await Promise.all([
     loadUserChecklistRows({ userId }),
