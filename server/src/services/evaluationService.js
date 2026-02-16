@@ -1,3 +1,9 @@
+/**
+ * Evaluation Service
+ * Manages trainee evaluations, scores, and auto-population from quiz/activity data.
+ * @module services/evaluationService
+ */
+
 const { supabaseAdmin } = require("../config/supabase");
 const {
   BadRequestError,
@@ -5,21 +11,47 @@ const {
   NotFoundError,
 } = require("../utils/errors");
 
+/**
+ * Safely converts a value to a number.
+ * @param {*} value - Value to convert
+ * @returns {number|null} Parsed number or null if invalid
+ */
 const toNumber = (value) => {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+/**
+ * Restricts a value within a min-max range.
+ * @param {number} value - Value to clamp
+ * @param {number} min - Minimum allowed value
+ * @param {number} max - Maximum allowed value
+ * @returns {number} Clamped value
+ */
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
+/**
+ * Rounds a number to specified decimal places.
+ * @param {number} value - Value to round
+ * @param {number} [places=2] - Number of decimal places
+ * @returns {number} Rounded value
+ */
 const round = (value, places = 2) => {
   const factor = 10 ** places;
   return Math.round(value * factor) / factor;
 };
 
+/** Allowed score source types */
 const ALLOWED_SCORE_SOURCES = new Set(["manual", "auto_quiz", "auto_activity"]);
 
+/**
+ * Filters an array to keep only the latest entry for each unique key.
+ * @param {Array} rows - Array of data rows
+ * @param {Function} keyGetter - Function to extract unique key from a row
+ * @param {Function} dateGetter - Function to extract timestamp from a row
+ * @returns {Array} Array of latest entries by key
+ */
 const pickLatestEntriesByKey = (rows, keyGetter, dateGetter) => {
   const latest = new Map();
 
@@ -39,6 +71,12 @@ const pickLatestEntriesByKey = (rows, keyGetter, dateGetter) => {
   return Array.from(latest.values());
 };
 
+/**
+ * Normalizes a score to a 5-point scale.
+ * @param {number} score - Raw score value
+ * @param {number} maxScore - Maximum possible score
+ * @returns {number|null} Score normalized to 0-5 scale
+ */
 const normalizeToFiveScale = (score, maxScore) => {
   const numericScore = toNumber(score);
   if (numericScore === null) return null;
@@ -47,6 +85,11 @@ const normalizeToFiveScale = (score, maxScore) => {
   return clamp((numericScore / safeMax) * 5, 0, 5);
 };
 
+/**
+ * Normalizes activity scores from various scales (5, 10, 20, 50, 100) to a 5-point scale.
+ * @param {number} rawScore - Raw activity score
+ * @returns {number|null} Normalized score on 0-5 scale
+ */
 const normalizeActivityScore = (rawScore) => {
   const score = toNumber(rawScore);
   if (score === null) return null;
@@ -57,6 +100,14 @@ const normalizeActivityScore = (rawScore) => {
   return clamp((score / 100) * 5, 0, 5);
 };
 
+/**
+ * Retrieves evaluations with enriched user and learning path data.
+ * @param {Object} [options={}] - Query options
+ * @param {string} [options.userId] - Filter by user ID
+ * @param {string} [options.status] - Filter by status (draft, completed)
+ * @returns {Promise<Array>} List of evaluations with trainee/evaluator names
+ * @throws {ExternalServiceError}
+ */
 const listEvaluations = async ({ userId, status } = {}) => {
   let query = supabaseAdmin
     .from("evaluations")
@@ -120,6 +171,13 @@ const listEvaluations = async ({ userId, status } = {}) => {
   }));
 };
 
+/**
+ * Retrieves a single evaluation with all scores and trainee info.
+ * @param {string} evaluationId - Evaluation ID
+ * @returns {Promise<Object>} Evaluation with scores array and trainee details
+ * @throws {NotFoundError}
+ * @throws {ExternalServiceError}
+ */
 const getEvaluation = async (evaluationId) => {
   const { data, error } = await supabaseAdmin
     .from("evaluations")
@@ -177,6 +235,18 @@ const getEvaluation = async (evaluationId) => {
   };
 };
 
+/**
+ * Creates a new evaluation in draft status.
+ * @param {Object} params - Evaluation parameters
+ * @param {string} params.userId - Trainee user ID
+ * @param {string} [params.learningPathId] - Associated learning path
+ * @param {string} [params.evaluatorId] - Evaluator user ID
+ * @param {Object} [params.traineeInfo] - Additional trainee metadata
+ * @param {string} [params.periodStart] - Evaluation period start date
+ * @param {string} [params.periodEnd] - Evaluation period end date
+ * @returns {Promise<Object>} Created evaluation with ID
+ * @throws {ExternalServiceError}
+ */
 const createEvaluation = async ({
   userId,
   learningPathId,
@@ -209,6 +279,14 @@ const createEvaluation = async ({
   return data;
 };
 
+/**
+ * Updates an evaluation's allowed fields.
+ * @param {string} evaluationId - Evaluation ID
+ * @param {Object} updates - Fields to update
+ * @returns {Promise<Object>} Updated evaluation
+ * @throws {NotFoundError}
+ * @throws {ExternalServiceError}
+ */
 const updateEvaluation = async (evaluationId, updates) => {
   const allowedFields = [
     "status",
@@ -243,6 +321,12 @@ const updateEvaluation = async (evaluationId, updates) => {
   return data;
 };
 
+/**
+ * Deletes an evaluation and all associated scores.
+ * @param {string} evaluationId - Evaluation ID
+ * @returns {Promise<void>}
+ * @throws {ExternalServiceError}
+ */
 const deleteEvaluation = async (evaluationId) => {
   const { error } = await supabaseAdmin
     .from("evaluations")
@@ -257,6 +341,16 @@ const deleteEvaluation = async (evaluationId) => {
   }
 };
 
+/**
+ * Creates or updates evaluation scores for specific criteria.
+ * Validates, normalizes, and deduplicates scores before upserting.
+ * @param {string} evaluationId - Evaluation ID
+ * @param {Array<Object>} scores - Array of score objects
+ * @returns {Promise<Array>} Upserted scores with IDs
+ * @throws {NotFoundError}
+ * @throws {BadRequestError}
+ * @throws {ExternalServiceError}
+ */
 const upsertScores = async (evaluationId, scores) => {
   // Verify evaluation exists
   const { data: evaluation, error: evalError } = await supabaseAdmin
@@ -330,6 +424,14 @@ const upsertScores = async (evaluationId, scores) => {
   return data ?? [];
 };
 
+/**
+ * Retrieves evaluation scores, optionally filtered by sheet.
+ * @param {string} evaluationId - Evaluation ID
+ * @param {Object} [options={}] - Query options
+ * @param {string} [options.sheet] - Filter by sheet name
+ * @returns {Promise<Array>} Array of scores ordered by sheet, category, and criterion
+ * @throws {ExternalServiceError}
+ */
 const getScores = async (evaluationId, { sheet } = {}) => {
   let query = supabaseAdmin
     .from("evaluation_scores")
@@ -352,6 +454,16 @@ const getScores = async (evaluationId, { sheet } = {}) => {
   return data ?? [];
 };
 
+/**
+ * Deletes a specific evaluation score by sheet and criterion key.
+ * @param {string} evaluationId - Evaluation ID
+ * @param {Object} params - Delete parameters
+ * @param {string} params.sheet - Sheet name
+ * @param {string} params.criterionKey - Criterion key
+ * @returns {Promise<Object>} Object with deleted flag
+ * @throws {BadRequestError}
+ * @throws {ExternalServiceError}
+ */
 const deleteScore = async (evaluationId, { sheet, criterionKey }) => {
   const normalizedSheet = String(sheet || "").trim();
   const normalizedCriterion = String(criterionKey || "").trim();
@@ -378,6 +490,14 @@ const deleteScore = async (evaluationId, { sheet, criterionKey }) => {
   return { deleted: Boolean(data?.id) };
 };
 
+/**
+ * Automatically populates evaluation scores from quiz and activity data.
+ * Creates normalized scores for both scoreboard (5-point scale) and quiz_grades (raw scores).
+ * Only overwrites auto-populated scores, preserving manual entries.
+ * @param {string} evaluationId - Evaluation ID
+ * @returns {Promise<Object>} Object with count and array of populated scores
+ * @throws {ExternalServiceError}
+ */
 const autoPopulateScores = async (evaluationId) => {
   const evaluation = await getEvaluation(evaluationId);
   const userId = evaluation.user_id;
@@ -405,7 +525,18 @@ const autoPopulateScores = async (evaluationId) => {
 
   const populated = [];
 
-  // 1. Get latest quiz scores for the trainee (one per quiz)
+  // 1. Get ALL quizzes and latest quiz scores for the trainee
+  const { data: allQuizzes, error: allQuizzesError } = await supabaseAdmin
+    .from("quizzes")
+    .select("id, title, max_score, total_questions, course_id");
+
+  if (allQuizzesError) {
+    throw new ExternalServiceError("Unable to load quizzes for auto-populate", {
+      code: allQuizzesError.code,
+      details: allQuizzesError.message,
+    });
+  }
+
   const { data: rawQuizScores, error: quizScoresError } = await supabaseAdmin
     .from("quiz_scores")
     .select("id, quiz_id, user_id, score, submitted_at")
@@ -425,64 +556,37 @@ const autoPopulateScores = async (evaluationId) => {
     (row) => row.submitted_at
   );
 
-  if (quizScores.length > 0) {
-    const quizIds = Array.from(
-      new Set(quizScores.map((quizScore) => quizScore.quiz_id).filter(Boolean))
-    );
-    const { data: quizzes, error: quizzesError } = await supabaseAdmin
-      .from("quizzes")
-      .select("id, title, max_score, total_questions, course_id")
-      .in("id", quizIds);
+  const quizScoreMap = new Map(quizScores.map((qs) => [qs.quiz_id, qs]));
 
-    if (quizzesError) {
-      throw new ExternalServiceError("Unable to load quizzes for auto-populate", {
-        code: quizzesError.code,
-        details: quizzesError.message,
-      });
-    }
+  for (const quiz of allQuizzes ?? []) {
+    const totalItems = toNumber(quiz.total_questions) || toNumber(quiz.max_score) || 100;
+    const qs = quizScoreMap.get(quiz.id);
+    const rawScore = qs ? (toNumber(qs.score) ?? 0) : 0;
+    const normalizedScore = normalizeToFiveScale(rawScore, quiz.max_score || 100);
 
-    const quizMap = new Map((quizzes ?? []).map((q) => [q.id, q]));
+    populated.push({
+      sheet: "scoreboard",
+      category: null,
+      criterion_key: `quiz_${quiz.id}`,
+      criterion_label: quiz.title || `Quiz ${quiz.id}`,
+      score: round(normalizedScore ?? 0, 2),
+      max_score: 5,
+      weight: null,
+      source: "auto_quiz",
+      source_ref_id: qs ? qs.id : null,
+    });
 
-    for (const qs of quizScores) {
-      const quiz = quizMap.get(qs.quiz_id);
-      if (!quiz) continue;
-
-      if (scopedCourseIds && quiz.course_id && !scopedCourseIds.has(String(quiz.course_id))) {
-        continue;
-      }
-
-      const normalizedScore = normalizeToFiveScale(qs.score, quiz.max_score || 100);
-      if (normalizedScore === null) continue;
-
-      populated.push({
-        sheet: "scoreboard",
-        category: null,
-        criterion_key: `quiz_${qs.quiz_id}`,
-        criterion_label: quiz.title || `Quiz ${qs.quiz_id}`,
-        score: round(normalizedScore, 2),
-        max_score: 5,
-        weight: null,
-        source: "auto_quiz",
-        source_ref_id: qs.id,
-      });
-
-      // Store raw quiz score + total items for quiz grades computation
-      const rawScore = toNumber(qs.score);
-      const totalItems = toNumber(quiz.total_questions) || toNumber(quiz.max_score) || 100;
-      if (rawScore !== null) {
-        populated.push({
-          sheet: "quiz_grades",
-          category: null,
-          criterion_key: `quiz_${qs.quiz_id}`,
-          criterion_label: quiz.title || `Quiz ${qs.quiz_id}`,
-          score: rawScore,
-          max_score: totalItems,
-          weight: null,
-          source: "auto_quiz",
-          source_ref_id: qs.id,
-        });
-      }
-    }
+    populated.push({
+      sheet: "quiz_grades",
+      category: null,
+      criterion_key: `quiz_${quiz.id}`,
+      criterion_label: quiz.title || `Quiz ${quiz.id}`,
+      score: rawScore,
+      max_score: totalItems,
+      weight: null,
+      source: "auto_quiz",
+      source_ref_id: qs ? qs.id : null,
+    });
   }
 
   // 2. Get activity submissions for the trainee
