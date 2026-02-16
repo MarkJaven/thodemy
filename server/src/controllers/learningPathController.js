@@ -126,7 +126,7 @@ const getLearningPathDetail = async (req, res, next) => {
       const { data: courseData, error: courseError } = await supabaseAdmin
         .from("courses")
         .select(
-          "id, title, description, topic_ids, total_hours, total_days, status, created_at"
+          "id, title, description, topic_ids, topic_groups, total_hours, total_days, status, created_at"
         )
         .in("id", courseIds);
       if (courseError) {

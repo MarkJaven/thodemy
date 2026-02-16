@@ -786,6 +786,8 @@ const LearningPathsSection = () => {
                           <p className="text-[10px] text-slate-400">
                             {course.topic_ids?.length ?? 0} topics
                             {" \u00B7 "}
+                            {course.topic_groups?.length ?? 0} grouped
+                            {" \u00B7 "}
                             {course.total_hours ?? 0}h
                           </p>
                         </div>
@@ -1051,6 +1053,12 @@ const LearningPathsSection = () => {
                     <div className="mt-3 space-y-3">
                       {detail.courses.map((course) => {
                         const courseTopicIds = course.topic_ids ?? [];
+                        const groupedTopicNameById = new Map<string, string>();
+                        (course.topic_groups ?? []).forEach((group) => {
+                          group.topic_ids.forEach((topicId) => {
+                            groupedTopicNameById.set(topicId, group.name);
+                          });
+                        });
                         const courseTopics = courseTopicIds
                           .map((tid) =>
                             detail.topics.find((t) => t.id === tid)
@@ -1092,12 +1100,20 @@ const LearningPathsSection = () => {
                                     ? "Completed"
                                     : "In Progress"
                                   : "Not Started";
+                                const groupName = groupedTopicNameById.get(topic.id);
                                 return (
                                   <div
                                     key={`tp-${enrollment.id}-${course.id}-${topic.id}`}
                                     className="flex items-center justify-between rounded-lg border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-slate-300"
                                   >
-                                    <span>{topic.title}</span>
+                                    <span className="flex items-center gap-2">
+                                      <span>{topic.title}</span>
+                                      {groupName ? (
+                                        <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.15em] text-amber-200">
+                                          {groupName}
+                                        </span>
+                                      ) : null}
+                                    </span>
                                     <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
                                       {topicStatus}
                                     </span>

@@ -9,6 +9,7 @@ export type Course = {
   topic_ids?: string[] | null;
   topic_prerequisites?: Record<string, string[]> | null;
   topic_corequisites?: Record<string, string[]> | null;
+  topic_groups?: Array<{ name: string; topic_ids: string[] }> | null;
   total_hours?: number | null;
   total_days?: number | null;
   course_code?: string | null;
