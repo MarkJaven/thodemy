@@ -16,6 +16,14 @@ const dedupeIds = (ids) =>
     new Set((Array.isArray(ids) ? ids : []).map((id) => String(id)).filter(Boolean))
   );
 
+const normalizeGroupName = (value, fallbackLabel) => {
+  const normalized = String(value || "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized || fallbackLabel;
+};
+
 const normalizeRelationMap = (value, keepIds) => {
   if (!value || typeof value !== "object") return {};
   return Object.entries(value).reduce((acc, [key, list]) => {
@@ -29,6 +37,138 @@ const normalizeRelationMap = (value, keepIds) => {
     }
     return acc;
   }, {});
+};
+
+const normalizeTopicGroups = (value, orderedTopicIds) => {
+  if (!Array.isArray(value) || !Array.isArray(orderedTopicIds) || orderedTopicIds.length === 0) {
+    return [];
+  }
+  const indexById = new Map(orderedTopicIds.map((id, index) => [String(id), index]));
+  const claimed = new Set();
+  let fallbackIndex = 1;
+
+  const groups = [];
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== "object") return;
+    const rawTopicIds = Array.isArray(entry.topic_ids) ? entry.topic_ids : [];
+    const uniqueTopicIds = dedupeIds(rawTopicIds)
+      .map(String)
+      .filter((topicId) => indexById.has(topicId))
+      .filter((topicId) => !claimed.has(topicId));
+    if (uniqueTopicIds.length < 2) return;
+
+    uniqueTopicIds.sort((left, right) => indexById.get(left) - indexById.get(right));
+    uniqueTopicIds.forEach((topicId) => claimed.add(topicId));
+
+    groups.push({
+      name: normalizeGroupName(entry.name, `Grouped Topics ${fallbackIndex}`),
+      topic_ids: uniqueTopicIds,
+      firstIndex: indexById.get(uniqueTopicIds[0]) ?? Number.MAX_SAFE_INTEGER,
+    });
+    fallbackIndex += 1;
+  });
+
+  groups.sort((left, right) => left.firstIndex - right.firstIndex);
+  return groups.map((group, index) => ({
+    name: normalizeGroupName(group.name, `Grouped Topics ${index + 1}`),
+    topic_ids: group.topic_ids,
+  }));
+};
+
+const buildTopicPrerequisitesFromGroups = (topicGroups) => {
+  const edgeMap = {};
+  (Array.isArray(topicGroups) ? topicGroups : []).forEach((group) => {
+    const topicIds = dedupeIds(group?.topic_ids ?? []).map(String);
+    for (let index = 1; index < topicIds.length; index += 1) {
+      const topicId = topicIds[index];
+      const prerequisiteId = topicIds[index - 1];
+      if (!topicId || !prerequisiteId || topicId === prerequisiteId) continue;
+      if (!edgeMap[topicId]) edgeMap[topicId] = new Set();
+      edgeMap[topicId].add(prerequisiteId);
+    }
+  });
+
+  return Object.entries(edgeMap).reduce((acc, [topicId, linkedIds]) => {
+    const values = Array.from(linkedIds);
+    if (values.length > 0) {
+      acc[topicId] = values;
+    }
+    return acc;
+  }, {});
+};
+
+const mergeRelationMaps = (...maps) => {
+  const merged = {};
+  maps.forEach((map) => {
+    if (!map || typeof map !== "object") return;
+    Object.entries(map).forEach(([key, list]) => {
+      const values = Array.isArray(list) ? list.map(String).filter(Boolean) : [];
+      if (values.length === 0) return;
+      if (!merged[key]) {
+        merged[key] = new Set();
+      }
+      values.forEach((value) => merged[key].add(value));
+    });
+  });
+  return Object.entries(merged).reduce((acc, [key, set]) => {
+    const values = Array.from(set);
+    if (values.length > 0) {
+      acc[key] = values;
+    }
+    return acc;
+  }, {});
+};
+
+const buildTopicGroupsFromCorequisites = (coreqMap, orderedTopicIds) => {
+  if (!Array.isArray(orderedTopicIds) || orderedTopicIds.length === 0) {
+    return [];
+  }
+  const keepIds = new Set(orderedTopicIds.map(String));
+  const normalizedCoreqs = normalizeRelationMap(coreqMap, keepIds);
+  const parent = new Map(orderedTopicIds.map((topicId) => [String(topicId), String(topicId)]));
+
+  const find = (topicId) => {
+    const parentId = parent.get(topicId);
+    if (!parentId || parentId === topicId) return topicId;
+    const root = find(parentId);
+    parent.set(topicId, root);
+    return root;
+  };
+
+  const union = (left, right) => {
+    const rootLeft = find(left);
+    const rootRight = find(right);
+    if (rootLeft === rootRight) return;
+    parent.set(rootRight, rootLeft);
+  };
+
+  Object.entries(normalizedCoreqs).forEach(([topicId, linked]) => {
+    linked.forEach((linkedId) => {
+      if (!parent.has(linkedId)) return;
+      union(topicId, linkedId);
+    });
+  });
+
+  const groupsByRoot = new Map();
+  orderedTopicIds.forEach((topicId, index) => {
+    const id = String(topicId);
+    const root = find(id);
+    const existing = groupsByRoot.get(root);
+    if (!existing) {
+      groupsByRoot.set(root, { firstIndex: index, topic_ids: [id] });
+      return;
+    }
+    existing.topic_ids.push(id);
+    existing.firstIndex = Math.min(existing.firstIndex, index);
+  });
+
+  return Array.from(groupsByRoot.values())
+    .filter((group) => group.topic_ids.length > 1)
+    .sort((left, right) => left.firstIndex - right.firstIndex)
+    .map((group, index) => ({
+      name: `Grouped Topics ${index + 1}`,
+      topic_ids: group.topic_ids,
+    }));
 };
 
 const normalizeTopicTitle = (value) =>
@@ -91,7 +231,7 @@ const listCourses = async (_req, res, next) => {
     const { data: courses, error } = await supabaseAdmin
       .from("courses")
       .select(
-        "id, title, description, topic_ids, topic_prerequisites, topic_corequisites, total_hours, total_days, course_code, status, enrollment_enabled, enrollment_limit, start_at, end_at, created_at, updated_at, created_by"
+        "id, title, description, topic_ids, topic_prerequisites, topic_corequisites, topic_groups, total_hours, total_days, course_code, status, enrollment_enabled, enrollment_limit, start_at, end_at, created_at, updated_at, created_by"
       )
       .order("created_at", { ascending: false });
     if (error) {
@@ -121,10 +261,28 @@ const listCourses = async (_req, res, next) => {
       counts.get(key).add(entry.user_id);
     });
 
-    const payload = (courses ?? []).map((course) => ({
-      ...course,
-      enrollment_count: counts.get(course.id)?.size ?? 0,
-    }));
+    const payload = (courses ?? []).map((course) => {
+      const normalizedTopicIds = dedupeIds(course.topic_ids ?? []);
+      const keepIds = new Set(normalizedTopicIds);
+      const normalizedGroups = normalizeTopicGroups(
+        course.topic_groups ?? buildTopicGroupsFromCorequisites(course.topic_corequisites, normalizedTopicIds),
+        normalizedTopicIds
+      );
+      const normalizedPrereqs = normalizeRelationMap(course.topic_prerequisites, keepIds);
+      const groupPrereqs = buildTopicPrerequisitesFromGroups(normalizedGroups);
+      const mergedPrereqs = normalizeRelationMap(
+        mergeRelationMaps(normalizedPrereqs, groupPrereqs),
+        keepIds
+      );
+      return {
+        ...course,
+        topic_ids: normalizedTopicIds,
+        topic_prerequisites: mergedPrereqs,
+        topic_groups: normalizedGroups,
+        topic_corequisites: {},
+        enrollment_count: counts.get(course.id)?.size ?? 0,
+      };
+    });
 
     return res.json({ courses: payload });
   } catch (error) {
@@ -138,7 +296,7 @@ const getCourseDetail = async (req, res, next) => {
     const { data: course, error } = await supabaseAdmin
       .from("courses")
       .select(
-        "id, title, description, topic_ids, topic_prerequisites, topic_corequisites, total_hours, total_days, course_code, status, enrollment_enabled, enrollment_limit, start_at, end_at, created_at, updated_at, created_by"
+        "id, title, description, topic_ids, topic_prerequisites, topic_corequisites, topic_groups, total_hours, total_days, course_code, status, enrollment_enabled, enrollment_limit, start_at, end_at, created_at, updated_at, created_by"
       )
       .eq("id", courseId)
       .single();
@@ -161,6 +319,18 @@ const getCourseDetail = async (req, res, next) => {
     const topicsById = new Map((topics ?? []).map((topic) => [topic.id, topic]));
     const normalized = normalizeTopicIdsByTitle(dedupeIds(topicIds), topicsById);
     const normalizedTopicIds = normalized.topicIds;
+    const normalizedGroups = normalizeTopicGroups(
+      course.topic_groups ??
+        buildTopicGroupsFromCorequisites(course.topic_corequisites, normalizedTopicIds),
+      normalizedTopicIds
+    );
+    const keepIds = new Set(normalizedTopicIds);
+    const normalizedPrereqs = normalizeRelationMap(course.topic_prerequisites, keepIds);
+    const groupPrereqs = buildTopicPrerequisitesFromGroups(normalizedGroups);
+    const mergedPrereqs = normalizeRelationMap(
+      mergeRelationMaps(normalizedPrereqs, groupPrereqs),
+      keepIds
+    );
 
     const { data: enrollments, error: enrollmentError } = await supabaseAdmin
       .from("enrollments")
@@ -213,7 +383,13 @@ const getCourseDetail = async (req, res, next) => {
     }));
 
     return res.json({
-      course: { ...course, topic_ids: normalizedTopicIds },
+      course: {
+        ...course,
+        topic_ids: normalizedTopicIds,
+        topic_prerequisites: mergedPrereqs,
+        topic_groups: normalizedGroups,
+        topic_corequisites: {},
+      },
       topics: normalized.topics,
       enrollments: enrichedEnrollments,
       topicProgress: topicProgress ?? [],
@@ -233,6 +409,7 @@ const upsertCourse = async (req, res, next) => {
       topic_ids: topicIds,
       topic_prerequisites,
       topic_corequisites,
+      topic_groups: topicGroups,
       status = "draft",
       enrollment_enabled = true,
       enrollment_limit,
@@ -268,7 +445,19 @@ const upsertCourse = async (req, res, next) => {
       await resolveCourseTotals(uniqueTopicIds);
     const keepIds = new Set(normalizedTopicIds);
     const normalizedPrereqs = normalizeRelationMap(topic_prerequisites, keepIds);
-    const normalizedCoreqs = normalizeRelationMap(topic_corequisites, keepIds);
+    const legacyCoreqs = normalizeRelationMap(topic_corequisites, keepIds);
+    const normalizedGroups = normalizeTopicGroups(
+      Array.isArray(topicGroups)
+        ? topicGroups
+        : buildTopicGroupsFromCorequisites(legacyCoreqs, normalizedTopicIds),
+      normalizedTopicIds
+    );
+    const groupPrereqs = buildTopicPrerequisitesFromGroups(normalizedGroups);
+    const mergedPrereqs = normalizeRelationMap(
+      mergeRelationMaps(normalizedPrereqs, groupPrereqs),
+      keepIds
+    );
+    const normalizedCoreqs = {};
 
     const startDate = start_at ? new Date(start_at) : null;
     const endDate =
@@ -278,8 +467,9 @@ const upsertCourse = async (req, res, next) => {
       title: title.trim(),
       description: description.trim(),
       topic_ids: normalizedTopicIds,
-      topic_prerequisites: normalizedPrereqs,
+      topic_prerequisites: mergedPrereqs,
       topic_corequisites: normalizedCoreqs,
+      topic_groups: normalizedGroups,
       total_hours: totalHours,
       total_days: totalDays,
       status,
@@ -336,7 +526,7 @@ const upsertCourse = async (req, res, next) => {
       await scheduleService.scheduleCourseTopics({
         courseId,
         topicIds: normalizedTopicIds,
-        topicPrerequisites: normalizedPrereqs,
+        topicPrerequisites: mergedPrereqs,
         topicCorequisites: normalizedCoreqs,
         fallbackStartAt: coursePayload.start_at,
         updatedBy: userId,
@@ -352,7 +542,7 @@ const upsertCourse = async (req, res, next) => {
       .from("courses")
       .insert(coursePayload)
       .select(
-        "id, title, description, topic_ids, topic_prerequisites, topic_corequisites, total_hours, total_days, course_code, status, enrollment_enabled, enrollment_limit, start_at, end_at, created_at, updated_at"
+        "id, title, description, topic_ids, topic_prerequisites, topic_corequisites, topic_groups, total_hours, total_days, course_code, status, enrollment_enabled, enrollment_limit, start_at, end_at, created_at, updated_at"
       )
       .single();
     if (error) {
@@ -375,7 +565,7 @@ const upsertCourse = async (req, res, next) => {
     const scheduleResult = await scheduleService.scheduleCourseTopics({
       courseId: data.id,
       topicIds: normalizedTopicIds,
-      topicPrerequisites: normalizedPrereqs,
+      topicPrerequisites: mergedPrereqs,
       topicCorequisites: normalizedCoreqs,
       fallbackStartAt: coursePayload.start_at,
       updatedBy: userId,

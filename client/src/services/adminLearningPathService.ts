@@ -33,6 +33,7 @@ export type LearningPathDetail = {
     title: string;
     description: string;
     topic_ids?: string[] | null;
+    topic_groups?: Array<{ name: string; topic_ids: string[] }> | null;
     total_hours?: number | null;
     total_days?: number | null;
     status?: string | null;

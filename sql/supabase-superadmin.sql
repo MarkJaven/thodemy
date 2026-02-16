@@ -36,6 +36,7 @@ alter table public.courses add column if not exists status text default 'draft';
 alter table public.courses add column if not exists topic_ids uuid[] not null default '{}'::uuid[];
 alter table public.courses add column if not exists topic_prerequisites jsonb not null default '{}'::jsonb;
 alter table public.courses add column if not exists topic_corequisites jsonb not null default '{}'::jsonb;
+alter table public.courses add column if not exists topic_groups jsonb not null default '[]'::jsonb;
 alter table public.courses add column if not exists total_hours numeric;
 alter table public.courses add column if not exists total_days integer;
 alter table public.courses add column if not exists course_code text;
