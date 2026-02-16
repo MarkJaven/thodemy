@@ -246,6 +246,10 @@ export type LearningPathEnrollment = {
   learning_path_id: string;
   enrolled_at?: string | null;
   status?: "pending" | "approved" | "rejected" | "active" | "completed" | "paused" | "removed" | null;
+  target_start_date?: string | null;
+  target_end_date?: string | null;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
   start_date?: string | null;
   end_date?: string | null;
 };

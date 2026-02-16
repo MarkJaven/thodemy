@@ -243,13 +243,36 @@ const normalizeRelationMap = (
   }, {});
 };
 
-const buildCoreqMapFromTopicGroups = (
+const mergeRelationMaps = (...maps: Array<Record<string, string[]> | null | undefined>) => {
+  const merged = new Map<string, Set<string>>();
+  maps.forEach((map) => {
+    if (!map) return;
+    Object.entries(map).forEach(([topicId, linkedIds]) => {
+      const values = Array.isArray(linkedIds)
+        ? linkedIds.map(String).filter(Boolean)
+        : [];
+      if (values.length === 0) return;
+      if (!merged.has(topicId)) merged.set(topicId, new Set());
+      const bucket = merged.get(topicId);
+      values.forEach((value) => bucket?.add(value));
+    });
+  });
+
+  return Array.from(merged.entries()).reduce<Record<string, string[]>>((acc, [topicId, linked]) => {
+    const values = Array.from(linked);
+    if (values.length > 0) acc[topicId] = values;
+    return acc;
+  }, {});
+};
+
+const buildPrereqMapFromTopicGroups = (
   topicIds: string[],
   topicGroups: Array<{ name: string; topic_ids: string[] }> | null | undefined
 ) => {
   if (!Array.isArray(topicGroups) || topicGroups.length === 0) return {};
   const keepSet = new Set(topicIds.map(String).filter(Boolean));
-  const links = new Map<string, Set<string>>();
+  const indexById = new Map(topicIds.map((topicId, index) => [String(topicId), index]));
+  const edges = new Map<string, Set<string>>();
 
   topicGroups.forEach((group) => {
     const members = Array.from(
@@ -260,18 +283,23 @@ const buildCoreqMapFromTopicGroups = (
       )
     );
     if (members.length < 2) return;
-    members.forEach((topicId) => {
-      if (!links.has(topicId)) links.set(topicId, new Set());
-      const peers = links.get(topicId);
-      members.forEach((peerId) => {
-        if (peerId !== topicId) peers?.add(peerId);
-      });
-    });
+    members.sort(
+      (left, right) =>
+        (indexById.get(left) ?? Number.MAX_SAFE_INTEGER) -
+        (indexById.get(right) ?? Number.MAX_SAFE_INTEGER)
+    );
+    for (let index = 1; index < members.length; index += 1) {
+      const topicId = members[index];
+      const prerequisiteId = members[index - 1];
+      if (!topicId || !prerequisiteId || topicId === prerequisiteId) continue;
+      if (!edges.has(topicId)) edges.set(topicId, new Set());
+      edges.get(topicId)?.add(prerequisiteId);
+    }
   });
 
-  return Array.from(links.entries()).reduce<Record<string, string[]>>((acc, [topicId, peers]) => {
-    const peerIds = Array.from(peers);
-    if (peerIds.length > 0) acc[topicId] = peerIds;
+  return Array.from(edges.entries()).reduce<Record<string, string[]>>((acc, [topicId, prereqs]) => {
+    const values = Array.from(prereqs);
+    if (values.length > 0) acc[topicId] = values;
     return acc;
   }, {});
 };
@@ -504,9 +532,14 @@ const buildCourseSchedule = (
   const topicIds = Array.from(new Set(rawTopicIds));
   const keepSet = new Set(topicIds);
   const prereqMap = normalizeRelationMap(course.topic_prerequisites ?? null, keepSet);
-  const coreqMap = buildCoreqMapFromTopicGroups(topicIds, course.topic_groups ?? null);
+  const groupPrereqMap = buildPrereqMapFromTopicGroups(topicIds, course.topic_groups ?? null);
+  const mergedPrereqMap = normalizeRelationMap(
+    mergeRelationMaps(prereqMap, groupPrereqMap),
+    keepSet
+  );
+  const coreqMap: Record<string, string[]> = {};
   const effectiveCoreqs = buildEffectiveCoreqs(topicIds, coreqMap);
-  const effectivePrereqs = buildEffectivePrereqs(topicIds, prereqMap, effectiveCoreqs);
+  const effectivePrereqs = buildEffectivePrereqs(topicIds, mergedPrereqMap, effectiveCoreqs);
 
   const { schedule, startCursor: normalizedStart, endCursor } = buildSchedule({
     startCursor,
@@ -550,7 +583,8 @@ const buildLearningPathSchedule = (
   courseLookup: Map<string, Course>,
   topicsById: Map<string, Topic>
 ) => {
-  const startDateValue = enrollment?.start_date ?? path.start_at ?? null;
+  const startDateValue =
+    enrollment?.target_start_date ?? enrollment?.start_date ?? path.start_at ?? null;
   const startDate = parseDate(startDateValue);
   const courseDates = new Map<string, { start: Date; end: Date | null }>();
   const topicDates = new Map<string, { start: Date; end: Date }>();
@@ -834,7 +868,7 @@ const Dashboard = () => {
     () =>
       new Set(
         learningPathEnrollmentEntries
-          .filter((entry) => Boolean(entry.start_date))
+          .filter((entry) => Boolean(entry.actual_start_date ?? entry.start_date))
           .map((entry) => entry.learning_path_id)
       ),
     [learningPathEnrollmentEntries]
@@ -1177,7 +1211,7 @@ const Dashboard = () => {
     setStartingLearningPathId(enrollment.id);
     setProgressError(null);
     try {
-      const { start_date, end_date } = await dashboardApi.startLearningPathEnrollment({
+      const { actual_start_date, actual_end_date } = await dashboardApi.startLearningPathEnrollment({
         enrollmentId: enrollment.id,
         userId: user.id,
         totalDays,
@@ -1185,7 +1219,7 @@ const Dashboard = () => {
       setLearningPathEnrollmentEntries((prev) =>
         prev.map((entry) =>
           entry.id === enrollment.id
-            ? { ...entry, start_date, end_date, status: "active" }
+            ? { ...entry, actual_start_date, actual_end_date, status: "active" }
             : entry
         )
       );
@@ -1602,10 +1636,10 @@ const Dashboard = () => {
         ) : (
           filteredLearningPaths.map((path) => {
             const enrollment = learningPathEnrollmentLookup.get(path.id);
-            const hasStarted = Boolean(enrollment?.start_date);
+            const hasStarted = Boolean(enrollment?.actual_start_date ?? enrollment?.start_date);
             const canStart =
               Boolean(enrollment?.id) &&
-              !enrollment?.start_date &&
+              !enrollment?.actual_start_date &&
               ["approved", "active"].includes(enrollment?.status ?? "");
             const pathCourses = (path.course_ids ?? [])
               .map((courseId) => courseLookup.get(courseId))
@@ -1702,10 +1736,18 @@ const Dashboard = () => {
                       <p className="mt-2 text-sm text-slate-300">{path.description}</p>
                       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
                         <span className="rounded-full border border-white/10 px-3 py-1">
-                          Start: {formatDate(enrollment?.start_date)}
+                          Target start:{" "}
+                          {formatDate(enrollment?.target_start_date ?? enrollment?.start_date)}
                         </span>
                         <span className="rounded-full border border-white/10 px-3 py-1">
-                          Target end: {formatDate(enrollment?.end_date)}
+                          Target end: {formatDate(enrollment?.target_end_date ?? enrollment?.end_date)}
+                        </span>
+                        <span className="rounded-full border border-white/10 px-3 py-1">
+                          Actual start:{" "}
+                          {formatDate(enrollment?.actual_start_date ?? enrollment?.start_date)}
+                        </span>
+                        <span className="rounded-full border border-white/10 px-3 py-1">
+                          Actual end: {formatDate(enrollment?.actual_end_date)}
                         </span>
                       </div>
                     </div>
@@ -1769,14 +1811,19 @@ const Dashboard = () => {
                           course.topic_prerequisites ?? null,
                           keepSet
                         );
-                        const coreqMap = buildCoreqMapFromTopicGroups(
+                        const groupPrereqMap = buildPrereqMapFromTopicGroups(
                           orderedTopicIds,
                           course.topic_groups ?? null
                         );
+                        const mergedPrereqMap = normalizeRelationMap(
+                          mergeRelationMaps(prereqMap, groupPrereqMap),
+                          keepSet
+                        );
+                        const coreqMap: Record<string, string[]> = {};
                         const effectiveCoreqs = buildEffectiveCoreqs(orderedTopicIds, coreqMap);
                         const effectivePrereqs = buildEffectivePrereqs(
                           orderedTopicIds,
-                          prereqMap,
+                          mergedPrereqMap,
                           effectiveCoreqs
                         );
                         const topicsToRenderById = new Map(
@@ -2586,7 +2633,7 @@ const Dashboard = () => {
 
     const nextUp = (() => {
       if (!primaryPath || primaryCourses.length === 0) return null;
-      const hasStarted = Boolean(primaryEnrollment?.start_date);
+      const hasStarted = Boolean(primaryEnrollment?.actual_start_date ?? primaryEnrollment?.start_date);
       let previousCourseComplete = true;
       for (let courseIndex = 0; courseIndex < primaryCourses.length; courseIndex += 1) {
         const course = primaryCourses[courseIndex];
@@ -2604,14 +2651,19 @@ const Dashboard = () => {
         const orderedTopicIds = orderedTopics.map((topic) => topic.id);
         const keepSet = new Set(orderedTopicIds);
         const prereqMap = normalizeRelationMap(course.topic_prerequisites ?? null, keepSet);
-        const coreqMap = buildCoreqMapFromTopicGroups(
+        const groupPrereqMap = buildPrereqMapFromTopicGroups(
           orderedTopicIds,
           course.topic_groups ?? null
         );
+        const mergedPrereqMap = normalizeRelationMap(
+          mergeRelationMaps(prereqMap, groupPrereqMap),
+          keepSet
+        );
+        const coreqMap: Record<string, string[]> = {};
         const effectiveCoreqs = buildEffectiveCoreqs(orderedTopicIds, coreqMap);
         const effectivePrereqs = buildEffectivePrereqs(
           orderedTopicIds,
-          prereqMap,
+          mergedPrereqMap,
           effectiveCoreqs
         );
 
@@ -2837,10 +2889,19 @@ const Dashboard = () => {
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
                   <span className="rounded-full border border-white/10 px-3 py-1">
-                    Start {formatDate(primaryEnrollment?.start_date)}
+                    Target start{" "}
+                    {formatDate(primaryEnrollment?.target_start_date ?? primaryEnrollment?.start_date)}
                   </span>
                   <span className="rounded-full border border-white/10 px-3 py-1">
-                    Target end {formatDate(primaryEnrollment?.end_date)}
+                    Target end{" "}
+                    {formatDate(primaryEnrollment?.target_end_date ?? primaryEnrollment?.end_date)}
+                  </span>
+                  <span className="rounded-full border border-white/10 px-3 py-1">
+                    Actual start{" "}
+                    {formatDate(primaryEnrollment?.actual_start_date ?? primaryEnrollment?.start_date)}
+                  </span>
+                  <span className="rounded-full border border-white/10 px-3 py-1">
+                    Actual end {formatDate(primaryEnrollment?.actual_end_date)}
                   </span>
                   <span className="rounded-full border border-white/10 px-3 py-1">
                     {completionPercent}% complete

@@ -65,7 +65,7 @@ const updateLearningPathEnrollmentSchedules = async (pathTotals, userId) => {
   const pathIds = Array.from(pathTotals.keys());
   const { data: enrollments, error: enrollError } = await supabaseAdmin
     .from("learning_path_enrollments")
-    .select("id, learning_path_id, start_date, end_date")
+    .select("id, learning_path_id, start_date, end_date, target_start_date, target_end_date")
     .in("learning_path_id", pathIds);
   if (enrollError) {
     throw new ExternalServiceError("Unable to load learning path enrollments", {
@@ -78,7 +78,8 @@ const updateLearningPathEnrollmentSchedules = async (pathTotals, userId) => {
   }
 
   for (const enrollment of enrollments) {
-    const startDateValue = enrollment.start_date ? new Date(enrollment.start_date) : null;
+    const baseStartValue = enrollment.target_start_date ?? enrollment.start_date ?? null;
+    const startDateValue = baseStartValue ? new Date(baseStartValue) : null;
     if (!startDateValue || Number.isNaN(startDateValue.getTime())) {
       continue;
     }
@@ -86,6 +87,7 @@ const updateLearningPathEnrollmentSchedules = async (pathTotals, userId) => {
     const endDate =
       totalDays > 0 ? calculateCourseEndDate(startDateValue, totalDays) : startDateValue;
     const enrollmentUpdate = {
+      target_end_date: endDate ? endDate.toISOString() : null,
       end_date: endDate ? endDate.toISOString() : null,
     };
     if (userId) {

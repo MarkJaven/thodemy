@@ -1,6 +1,5 @@
 import { apiClient, getApiErrorMessage } from "../lib/apiClient";
 import { supabase } from "../lib/supabaseClient";
-import { calculateTopicEndDate } from "../lib/topicDates";
 import { calculateLearningPathEndDate } from "../lib/learningPathSchedule";
 import type {
   Activity,
@@ -434,7 +433,6 @@ export const dashboardApi = {
       throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
     }
     const startDate = payload.startDate ?? new Date();
-    const endDate = calculateTopicEndDate(startDate, payload.timeAllocated, payload.timeUnit);
 
     const { data, error } = await supabase
       .from("topic_progress")
@@ -442,7 +440,7 @@ export const dashboardApi = {
         topic_id: payload.topicId,
         user_id: payload.userId,
         start_date: startDate.toISOString(),
-        end_date: endDate.toISOString(),
+        end_date: null,
         status: "in_progress",
       })
       .select("id, topic_id, user_id, start_date, end_date, status, created_at, updated_at")
@@ -848,7 +846,7 @@ export const dashboardApi = {
     userId: string;
     totalDays: number;
     startDate?: Date;
-  }): Promise<{ start_date: string; end_date: string | null }> {
+  }): Promise<{ actual_start_date: string; actual_end_date: string | null }> {
     if (!supabase) {
       throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
     }
@@ -860,8 +858,8 @@ export const dashboardApi = {
     const { error } = await supabase
       .from("learning_path_enrollments")
       .update({
-        start_date: startDate.toISOString(),
-        end_date: endDate ? endDate.toISOString() : null,
+        actual_start_date: startDate.toISOString(),
+        actual_end_date: endDate ? endDate.toISOString() : null,
         status: "active",
       })
       .eq("id", payload.enrollmentId)
@@ -870,8 +868,8 @@ export const dashboardApi = {
       throw new Error(error.message);
     }
     return {
-      start_date: startDate.toISOString(),
-      end_date: endDate ? endDate.toISOString() : null,
+      actual_start_date: startDate.toISOString(),
+      actual_end_date: endDate ? endDate.toISOString() : null,
     };
   },
   async deleteLearningPathEnrollment(enrollmentId: string): Promise<void> {
