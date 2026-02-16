@@ -20,6 +20,191 @@ const dedupeIds = (ids?: Array<string | null | undefined>) =>
     )
   );
 
+export type TopicGroup = {
+  name: string;
+  topic_ids: string[];
+};
+
+const normalizeGroupName = (value: unknown, fallbackLabel: string) => {
+  const normalized =
+    typeof value === "string"
+      ? value
+          .normalize("NFKC")
+          .replace(/\s+/g, " ")
+          .trim()
+      : "";
+  return normalized || fallbackLabel;
+};
+
+const normalizeTopicGroups = (
+  value: unknown,
+  orderedTopicIds: string[]
+): TopicGroup[] => {
+  if (!Array.isArray(value) || orderedTopicIds.length === 0) return [];
+
+  const indexById = new Map(orderedTopicIds.map((id, index) => [id, index]));
+  const claimed = new Set<string>();
+  let fallbackIndex = 1;
+  const groups: Array<{ name: string; topic_ids: string[]; firstIndex: number }> = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== "object") return;
+    const rawTopicIds = Array.isArray((entry as { topic_ids?: unknown[] }).topic_ids)
+      ? (entry as { topic_ids: unknown[] }).topic_ids
+      : [];
+    const topicIds = dedupeIds(rawTopicIds as Array<string | null | undefined>)
+      .filter((topicId) => indexById.has(topicId))
+      .filter((topicId) => !claimed.has(topicId));
+    if (topicIds.length < 2) return;
+
+    topicIds.sort((left, right) => (indexById.get(left) ?? 0) - (indexById.get(right) ?? 0));
+    topicIds.forEach((topicId) => claimed.add(topicId));
+
+    groups.push({
+      name: normalizeGroupName((entry as { name?: unknown }).name, `Grouped Topics ${fallbackIndex}`),
+      topic_ids: topicIds,
+      firstIndex: indexById.get(topicIds[0]) ?? Number.MAX_SAFE_INTEGER,
+    });
+    fallbackIndex += 1;
+  });
+
+  groups.sort((left, right) => left.firstIndex - right.firstIndex);
+  return groups.map((group, index) => ({
+    name: normalizeGroupName(group.name, `Grouped Topics ${index + 1}`),
+    topic_ids: group.topic_ids,
+  }));
+};
+
+const buildTopicGroupsFromCorequisites = (
+  coreqMap: unknown,
+  orderedTopicIds: string[]
+): TopicGroup[] => {
+  if (orderedTopicIds.length === 0 || !coreqMap || typeof coreqMap !== "object") {
+    return [];
+  }
+  const parent = new Map(orderedTopicIds.map((topicId) => [topicId, topicId]));
+
+  const find = (topicId: string): string => {
+    const parentId = parent.get(topicId);
+    if (!parentId || parentId === topicId) return topicId;
+    const root = find(parentId);
+    parent.set(topicId, root);
+    return root;
+  };
+
+  const union = (left: string, right: string) => {
+    const rootLeft = find(left);
+    const rootRight = find(right);
+    if (rootLeft === rootRight) return;
+    parent.set(rootRight, rootLeft);
+  };
+
+  orderedTopicIds.forEach((topicId) => {
+    const linkedRaw = (coreqMap as Record<string, unknown>)[topicId];
+    const linked = Array.isArray(linkedRaw) ? linkedRaw : [];
+    linked.forEach((linkedId) => {
+      const normalizedLinkedId = String(linkedId);
+      if (!parent.has(normalizedLinkedId)) return;
+      union(topicId, normalizedLinkedId);
+    });
+  });
+
+  const groupsByRoot = new Map<string, { firstIndex: number; topic_ids: string[] }>();
+  orderedTopicIds.forEach((topicId, index) => {
+    const root = find(topicId);
+    const existing = groupsByRoot.get(root);
+    if (!existing) {
+      groupsByRoot.set(root, { firstIndex: index, topic_ids: [topicId] });
+      return;
+    }
+    existing.topic_ids.push(topicId);
+    existing.firstIndex = Math.min(existing.firstIndex, index);
+  });
+
+  return Array.from(groupsByRoot.values())
+    .filter((group) => group.topic_ids.length > 1)
+    .sort((left, right) => left.firstIndex - right.firstIndex)
+    .map((group, index) => ({
+      name: `Grouped Topics ${index + 1}`,
+      topic_ids: group.topic_ids,
+    }));
+};
+
+const normalizeRelationMap = (
+  value: unknown,
+  keepIds?: Set<string>
+): Record<string, string[]> => {
+  if (!value || typeof value !== "object") return {};
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string[]>>(
+    (acc, [key, list]) => {
+      const normalizedKey = String(key);
+      if (keepIds && !keepIds.has(normalizedKey)) return acc;
+      const filtered = Array.isArray(list)
+        ? list
+            .map(String)
+            .filter((id) => Boolean(id) && (!keepIds || keepIds.has(id)))
+        : [];
+      const unique = Array.from(new Set(filtered));
+      if (unique.length > 0) {
+        acc[normalizedKey] = unique;
+      }
+      return acc;
+    },
+    {}
+  );
+};
+
+const buildTopicPrerequisitesFromTopicGroups = (
+  groups: TopicGroup[]
+): Record<string, string[]> => {
+  const edgeMap = new Map<string, Set<string>>();
+  groups.forEach((group) => {
+    const topicIds = dedupeIds(group.topic_ids);
+    for (let index = 1; index < topicIds.length; index += 1) {
+      const topicId = topicIds[index];
+      const prerequisiteId = topicIds[index - 1];
+      if (!edgeMap.has(topicId)) edgeMap.set(topicId, new Set<string>());
+      edgeMap.get(topicId)?.add(prerequisiteId);
+    }
+  });
+
+  const result: Record<string, string[]> = {};
+  edgeMap.forEach((set, key) => {
+    const values = Array.from(set);
+    if (values.length > 0) {
+      result[key] = values;
+    }
+  });
+  return result;
+};
+
+const mergeRelationMaps = (
+  primary: Record<string, string[]>,
+  secondary: Record<string, string[]>,
+  orderedTopicIds: string[]
+): Record<string, string[]> => {
+  const keepIds = new Set(orderedTopicIds);
+  const left = normalizeRelationMap(primary, keepIds);
+  const right = normalizeRelationMap(secondary, keepIds);
+  const merged = new Map<string, Set<string>>();
+
+  [left, right].forEach((map) => {
+    Object.entries(map).forEach(([topicId, prereqs]) => {
+      if (!merged.has(topicId)) merged.set(topicId, new Set<string>());
+      prereqs.forEach((prereqId) => merged.get(topicId)?.add(prereqId));
+    });
+  });
+
+  const result: Record<string, string[]> = {};
+  merged.forEach((values, topicId) => {
+    const list = Array.from(values);
+    if (list.length > 0) {
+      result[topicId] = list;
+    }
+  });
+  return result;
+};
+
 const shouldFallbackToSupabase = (error: unknown) => {
   const status = (error as { response?: { status?: number } })?.response?.status;
   return !status || status === 404;
@@ -50,7 +235,7 @@ const listCoursesViaSupabase = async (): Promise<CourseSummary[]> => {
   const { data: courses, error: courseError } = await client
     .from("courses")
     .select(
-      "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at, created_at"
+      "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, topic_groups, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at, created_at"
     )
     .order("created_at", { ascending: false });
 
@@ -81,10 +266,22 @@ const listCoursesViaSupabase = async (): Promise<CourseSummary[]> => {
 
   return (courses ?? []).map((course) => {
     const topicIds = dedupeIds(course.topic_ids ?? []);
+    const topicGroups = normalizeTopicGroups(
+      course.topic_groups ?? buildTopicGroupsFromCorequisites(course.topic_corequisites, topicIds),
+      topicIds
+    );
+    const topicPrerequisites = mergeRelationMaps(
+      (course.topic_prerequisites ?? {}) as Record<string, string[]>,
+      buildTopicPrerequisitesFromTopicGroups(topicGroups),
+      topicIds
+    );
     const { totalHours, totalDays } = calculateTotalsFromTopics(topicIds, topicsMap);
     return {
       ...course,
       topic_ids: topicIds,
+      topic_prerequisites: topicPrerequisites,
+      topic_groups: topicGroups,
+      topic_corequisites: {},
       total_hours: totalHours,
       total_days: totalDays,
       enrollment_count: enrollmentCounts.get(course.id) ?? 0,
@@ -98,7 +295,7 @@ const getCourseDetailViaSupabase = async (courseId: string): Promise<CourseDetai
   const { data: course, error: courseError } = await client
     .from("courses")
     .select(
-      "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at"
+      "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, topic_groups, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at"
     )
     .eq("id", courseId)
     .single();
@@ -145,6 +342,16 @@ const getCourseDetailViaSupabase = async (courseId: string): Promise<CourseDetai
   }
 
   const uniqueTopicIds = dedupeIds(course.topic_ids ?? []);
+  const topicGroups = normalizeTopicGroups(
+    course.topic_groups ??
+      buildTopicGroupsFromCorequisites(course.topic_corequisites, uniqueTopicIds),
+    uniqueTopicIds
+  );
+  const topicPrerequisites = mergeRelationMaps(
+    (course.topic_prerequisites ?? {}) as Record<string, string[]>,
+    buildTopicPrerequisitesFromTopicGroups(topicGroups),
+    uniqueTopicIds
+  );
 
   // Recalculate totals based on current topic data
   const topicsMap = new Map(
@@ -156,6 +363,9 @@ const getCourseDetailViaSupabase = async (courseId: string): Promise<CourseDetai
     course: {
       ...(course as CourseSummary),
       topic_ids: uniqueTopicIds,
+      topic_prerequisites: topicPrerequisites,
+      topic_groups: topicGroups,
+      topic_corequisites: {},
       total_hours: totalHours,
       total_days: totalDays,
     },
@@ -181,10 +391,21 @@ const createCourseViaSupabase = async (payload: {
   topic_ids?: string[];
   topic_prerequisites?: Record<string, string[]>;
   topic_corequisites?: Record<string, string[]>;
+  topic_groups?: TopicGroup[];
 }): Promise<CourseSummary> => {
   const client = requireSupabase();
 
   const uniqueTopicIds = dedupeIds(payload.topic_ids);
+  const topicGroups = normalizeTopicGroups(
+    payload.topic_groups ??
+      buildTopicGroupsFromCorequisites(payload.topic_corequisites, uniqueTopicIds),
+    uniqueTopicIds
+  );
+  const topicPrerequisites = mergeRelationMaps(
+    payload.topic_prerequisites ?? {},
+    buildTopicPrerequisitesFromTopicGroups(topicGroups),
+    uniqueTopicIds
+  );
   let totalHours = 0;
   if (uniqueTopicIds.length > 0) {
     const { data: topics, error: topicsError } = await client
@@ -231,13 +452,14 @@ const createCourseViaSupabase = async (payload: {
       start_at: payload.start_at ?? null,
       end_at: endAt,
       topic_ids: uniqueTopicIds,
-      topic_prerequisites: payload.topic_prerequisites ?? {},
-      topic_corequisites: payload.topic_corequisites ?? {},
+      topic_prerequisites: topicPrerequisites,
+      topic_corequisites: {},
+      topic_groups: topicGroups,
       total_hours: totalHours,
       total_days: totalDays,
     })
     .select(
-      "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at"
+      "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, topic_groups, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at"
     )
     .single();
 
@@ -263,6 +485,7 @@ const updateCourseViaSupabase = async (
     topic_ids?: string[];
     topic_prerequisites?: Record<string, string[]>;
     topic_corequisites?: Record<string, string[]>;
+    topic_groups?: TopicGroup[];
   }
 ): Promise<void> => {
   const client = requireSupabase();
@@ -279,9 +502,30 @@ const updateCourseViaSupabase = async (
     payload.topic_ids !== undefined ? dedupeIds(payload.topic_ids) : undefined;
   if (uniqueTopicIds !== undefined) updates.topic_ids = uniqueTopicIds;
   if (payload.topic_prerequisites !== undefined) updates.topic_prerequisites = payload.topic_prerequisites;
-  if (payload.topic_corequisites !== undefined) updates.topic_corequisites = payload.topic_corequisites;
+  if (payload.topic_corequisites !== undefined) updates.topic_corequisites = {};
+  if (payload.topic_groups !== undefined) updates.topic_groups = payload.topic_groups;
 
   if (uniqueTopicIds !== undefined) {
+    const keepIds = new Set(uniqueTopicIds);
+    if (payload.topic_prerequisites !== undefined) {
+      updates.topic_prerequisites = normalizeRelationMap(payload.topic_prerequisites, keepIds);
+    }
+    const topicGroups = normalizeTopicGroups(
+      payload.topic_groups ??
+        buildTopicGroupsFromCorequisites(payload.topic_corequisites, uniqueTopicIds),
+      uniqueTopicIds
+    );
+    if (payload.topic_groups !== undefined || payload.topic_corequisites !== undefined) {
+      const mergedPrerequisites = mergeRelationMaps(
+        (updates.topic_prerequisites as Record<string, string[]> | undefined) ?? {},
+        buildTopicPrerequisitesFromTopicGroups(topicGroups),
+        uniqueTopicIds
+      );
+      updates.topic_groups = topicGroups;
+      updates.topic_prerequisites = mergedPrerequisites;
+      updates.topic_corequisites = {};
+    }
+
     let totalHours = 0;
     if (uniqueTopicIds.length > 0) {
       const { data: topics, error: topicsError } = await client
@@ -320,6 +564,17 @@ const updateCourseViaSupabase = async (
     } else if (!startAt) {
       updates.end_at = null;
     }
+  } else if (payload.topic_groups !== undefined) {
+    const topicIdsFromGroups = dedupeIds(payload.topic_groups.flatMap((group) => group.topic_ids));
+    const topicGroups = normalizeTopicGroups(payload.topic_groups, topicIdsFromGroups);
+    const mergedPrerequisites = mergeRelationMaps(
+      (payload.topic_prerequisites ?? {}) as Record<string, string[]>,
+      buildTopicPrerequisitesFromTopicGroups(topicGroups),
+      topicIdsFromGroups
+    );
+    updates.topic_groups = topicGroups;
+    updates.topic_prerequisites = mergedPrerequisites;
+    updates.topic_corequisites = {};
   }
 
   const { error } = await client.from("courses").update(updates).eq("id", courseId);
@@ -351,6 +606,7 @@ export type CourseSummary = {
   topic_ids?: string[] | null;
   topic_prerequisites?: Record<string, string[]> | null;
   topic_corequisites?: Record<string, string[]> | null;
+  topic_groups?: TopicGroup[] | null;
   total_hours?: number | null;
   total_days?: number | null;
   course_code?: string | null;
@@ -405,10 +661,23 @@ export const adminCourseService = {
 
       return (courses ?? []).map((course) => {
         const topicIds = dedupeIds(course.topic_ids ?? []);
+        const topicGroups = normalizeTopicGroups(
+          course.topic_groups ??
+            buildTopicGroupsFromCorequisites(course.topic_corequisites, topicIds),
+          topicIds
+        );
+        const topicPrerequisites = mergeRelationMaps(
+          (course.topic_prerequisites ?? {}) as Record<string, string[]>,
+          buildTopicPrerequisitesFromTopicGroups(topicGroups),
+          topicIds
+        );
         const { totalHours, totalDays } = calculateTotalsFromTopics(topicIds, topicsMap);
         return {
           ...course,
           topic_ids: topicIds,
+          topic_prerequisites: topicPrerequisites,
+          topic_groups: topicGroups,
+          topic_corequisites: {},
           total_hours: totalHours,
           total_days: totalDays,
         };
@@ -429,6 +698,16 @@ export const adminCourseService = {
         throw new Error("Course not found.");
       }
       const topicIds = dedupeIds(course.topic_ids ?? []);
+      const topicGroups = normalizeTopicGroups(
+        course.topic_groups ??
+          buildTopicGroupsFromCorequisites(course.topic_corequisites, topicIds),
+        topicIds
+      );
+      const topicPrerequisites = mergeRelationMaps(
+        (course.topic_prerequisites ?? {}) as Record<string, string[]>,
+        buildTopicPrerequisitesFromTopicGroups(topicGroups),
+        topicIds
+      );
       const topics = (data?.topics ?? []) as Topic[];
 
       // Recalculate totals based on current topic data
@@ -440,6 +719,9 @@ export const adminCourseService = {
         course: {
           ...course,
           topic_ids: topicIds,
+          topic_prerequisites: topicPrerequisites,
+          topic_groups: topicGroups,
+          topic_corequisites: {},
           total_hours: totalHours,
           total_days: totalDays,
         },
@@ -462,12 +744,27 @@ export const adminCourseService = {
     topic_ids?: string[];
     topic_prerequisites?: Record<string, string[]>;
     topic_corequisites?: Record<string, string[]>;
+    topic_groups?: TopicGroup[];
   }): Promise<CourseSummary> {
     try {
+      const topicIds = dedupeIds(payload.topic_ids);
+      const topicGroups = normalizeTopicGroups(
+        payload.topic_groups ??
+          buildTopicGroupsFromCorequisites(payload.topic_corequisites, topicIds),
+        topicIds
+      );
+      const topicPrerequisites = mergeRelationMaps(
+        payload.topic_prerequisites ?? {},
+        buildTopicPrerequisitesFromTopicGroups(topicGroups),
+        topicIds
+      );
       const { data } = await withTimeout(
         apiClient.post("/api/admin/courses", {
           ...payload,
-          topic_ids: dedupeIds(payload.topic_ids),
+          topic_ids: topicIds,
+          topic_prerequisites: topicPrerequisites,
+          topic_groups: topicGroups,
+          topic_corequisites: {},
         }),
         REQUEST_HARD_TIMEOUT_MS,
         "Saving course timed out. Please check the server connection."
@@ -493,13 +790,35 @@ export const adminCourseService = {
       topic_ids?: string[];
       topic_prerequisites?: Record<string, string[]>;
       topic_corequisites?: Record<string, string[]>;
+      topic_groups?: TopicGroup[];
     }
   ): Promise<void> {
     try {
+      const topicIds = payload.topic_ids ? dedupeIds(payload.topic_ids) : payload.topic_ids;
+      const normalizedTopicIds = topicIds ?? [];
+      const topicGroups =
+        payload.topic_groups !== undefined || payload.topic_corequisites !== undefined
+          ? normalizeTopicGroups(
+              payload.topic_groups ??
+                buildTopicGroupsFromCorequisites(payload.topic_corequisites, normalizedTopicIds),
+              normalizedTopicIds
+            )
+          : undefined;
+      const topicPrerequisites =
+        topicGroups !== undefined
+          ? mergeRelationMaps(
+              payload.topic_prerequisites ?? {},
+              buildTopicPrerequisitesFromTopicGroups(topicGroups),
+              normalizedTopicIds
+            )
+          : payload.topic_prerequisites;
       await withTimeout(
         apiClient.patch(`/api/admin/courses/${courseId}`, {
           ...payload,
-          topic_ids: payload.topic_ids ? dedupeIds(payload.topic_ids) : payload.topic_ids,
+          topic_ids: topicIds,
+          topic_prerequisites: topicPrerequisites,
+          topic_groups: topicGroups,
+          topic_corequisites: topicGroups !== undefined ? {} : payload.topic_corequisites ?? {},
         }),
         REQUEST_HARD_TIMEOUT_MS,
         "Updating course timed out. Please check the server connection."

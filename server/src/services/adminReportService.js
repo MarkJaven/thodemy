@@ -61,6 +61,68 @@ const fetchInChunks = async (items, size, handler) => {
   return results;
 };
 
+const dedupeIds = (ids) =>
+  Array.from(
+    new Set((Array.isArray(ids) ? ids : []).map((id) => String(id)).filter(Boolean))
+  );
+
+const normalizeGroupName = (value, fallbackLabel) => {
+  const normalized = String(value || "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized || fallbackLabel;
+};
+
+const normalizeTopicGroups = (course) => {
+  const orderedTopicIds = dedupeIds(course?.topic_ids);
+  if (orderedTopicIds.length === 0) {
+    return [];
+  }
+
+  if (!Array.isArray(course?.topic_groups) || course.topic_groups.length === 0) {
+    return [];
+  }
+
+  const indexById = new Map(orderedTopicIds.map((id, index) => [id, index]));
+  const claimed = new Set();
+  let fallbackIndex = 1;
+  const groups = [];
+  course.topic_groups.forEach((entry) => {
+    if (!entry || typeof entry !== "object") return;
+    const topicIds = dedupeIds(entry.topic_ids)
+      .filter((topicId) => indexById.has(topicId))
+      .filter((topicId) => !claimed.has(topicId));
+    if (topicIds.length < 2) return;
+
+    topicIds.sort((left, right) => indexById.get(left) - indexById.get(right));
+    topicIds.forEach((topicId) => claimed.add(topicId));
+
+    groups.push({
+      name: normalizeGroupName(entry.name, `Grouped Topics ${fallbackIndex}`),
+      topic_ids: topicIds,
+      firstIndex: indexById.get(topicIds[0]) ?? Number.MAX_SAFE_INTEGER,
+    });
+    fallbackIndex += 1;
+  });
+
+  groups.sort((left, right) => left.firstIndex - right.firstIndex);
+  return groups.map((group, index) => ({
+    name: normalizeGroupName(group.name, `Grouped Topics ${index + 1}`),
+    topic_ids: group.topic_ids,
+  }));
+};
+
+const buildGroupedTopicNameMap = (course) => {
+  const groupedByTopic = new Map();
+  normalizeTopicGroups(course).forEach((group) => {
+    group.topic_ids.forEach((topicId) => {
+      groupedByTopic.set(topicId, group.name);
+    });
+  });
+  return groupedByTopic;
+};
+
 const loadChecklistUsers = async ({ userId } = {}) => {
   let profileQuery = supabaseAdmin
     .from("profiles")
@@ -164,7 +226,7 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
   const courses = await fetchInChunks(courseIds, 200, async (ids) => {
     const { data, error } = await supabaseAdmin
       .from("courses")
-      .select("id, title, topic_ids")
+      .select("id, title, topic_ids, topic_groups")
       .in("id", ids);
     if (error) {
       throw new ExternalServiceError("Unable to load courses", {
@@ -281,10 +343,12 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
       const course = courseMap.get(courseId);
       const courseTitle = course?.title || "";
       const courseTopicIds = course?.topic_ids ?? [];
+      const groupedTopicNameMap = buildGroupedTopicNameMap(course);
 
       for (const topicId of courseTopicIds) {
         const topic = topicMap.get(topicId);
         const topicTitle = topic?.title || "";
+        const groupedTopicName = groupedTopicNameMap.get(String(topicId)) || topicTitle;
         const progress = progressMap.get(`${enrollment.user_id}:${topicId}`);
         const status = progress?.status || "";
         const topicStartDate = formatDate(progress?.start_date);
@@ -298,6 +362,7 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
           learningPathTitle,
           enrollmentStatus,
           courseTitle,
+          groupedTopicName,
           topicTitle,
           status,
           topicStartDate,
@@ -332,24 +397,26 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
   const rows = await loadUserChecklistRows({ userId });
   const includeUserColumns = !userId;
   const header = includeUserColumns
-    ? [
-        "Name",
-        "Email",
-        "Learning Path",
-        "Status",
-        "Course Name",
-        "Topic Name",
-        "Topic Status",
-        "Topic Start Date",
-        "Topic End Date",
-        "Remarks",
-      ]
-    : [
-        "Course Name",
-        "Topic Name",
-        "Topic Status",
-        "Topic Start Date",
-        "Topic End Date",
+      ? [
+          "Name",
+          "Email",
+          "Learning Path",
+          "Status",
+          "Course Name",
+          "Grouped Topics",
+          "Topic Name",
+          "Topic Status",
+          "Topic Start Date",
+          "Topic End Date",
+          "Remarks",
+        ]
+      : [
+          "Course Name",
+          "Grouped Topics",
+          "Topic Name",
+          "Topic Status",
+          "Topic Start Date",
+          "Topic End Date",
         "Remarks",
       ];
   const fileName = buildChecklistFileName({ rows, ext: "csv" });
@@ -361,6 +428,7 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
   rows.forEach((row) => {
     const baseColumns = [
       row.courseTitle,
+      row.groupedTopicName,
       row.topicTitle,
       row.status,
       row.topicStartDate,
@@ -384,6 +452,7 @@ const buildUserChecklistCsv = async ({ userId } = {}) => {
 
 const CHECKLIST_HEADER_LABELS = [
   "Course Name",
+  "Grouped Topics",
   "Topic Name",
   "Topic Status",
   "Topic Start Date",
@@ -393,6 +462,7 @@ const CHECKLIST_HEADER_LABELS = [
 
 const CHECKLIST_COLUMNS = [
   { key: "courseTitle", width: 28 },
+  { key: "groupedTopicName", width: 24 },
   { key: "topicTitle", width: 36 },
   { key: "status", width: 14 },
   { key: "topicStartDate", width: 16 },
@@ -595,6 +665,7 @@ const populateUserChecklistSheet = (sheet, rows, userSummary = {}) => {
 
   if (rows.length > 0) {
     const courseColumnIndex = sheet.columns.findIndex((col) => col.key === "courseTitle") + 1;
+    const groupedColumnIndex = sheet.columns.findIndex((col) => col.key === "groupedTopicName") + 1;
     let mergeStart = dataStartRow;
     let currentValue = sheet.getCell(dataStartRow, courseColumnIndex).value;
     for (let rowIndex = dataStartRow + 1; rowIndex < dataStartRow + rows.length; rowIndex += 1) {
@@ -618,6 +689,32 @@ const populateUserChecklistSheet = (sheet, rows, userSummary = {}) => {
       );
       const mergedCell = sheet.getCell(mergeStart, courseColumnIndex);
       mergedCell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    }
+
+    if (groupedColumnIndex > 0) {
+      let runStart = 0;
+      while (runStart < rows.length) {
+        const runValue = rows[runStart]?.groupedTopicName || "";
+        const runCourse = rows[runStart]?.courseTitle || "";
+        let runEnd = runStart;
+        while (
+          runEnd + 1 < rows.length &&
+          (rows[runEnd + 1]?.groupedTopicName || "") === runValue &&
+          (rows[runEnd + 1]?.courseTitle || "") === runCourse
+        ) {
+          runEnd += 1;
+        }
+
+        if (runValue && runEnd > runStart) {
+          const startRow = dataStartRow + runStart;
+          const endRow = dataStartRow + runEnd;
+          sheet.mergeCells(startRow, groupedColumnIndex, endRow, groupedColumnIndex);
+          const groupedCell = sheet.getCell(startRow, groupedColumnIndex);
+          groupedCell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+        }
+
+        runStart = runEnd + 1;
+      }
     }
   }
 

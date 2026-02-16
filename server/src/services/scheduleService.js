@@ -482,7 +482,7 @@ const scheduleLearningPathCourses = async ({ learningPathId, updatedBy }) => {
 
   const { data: courses, error: courseError } = await supabaseAdmin
     .from("courses")
-    .select("id, topic_ids, topic_prerequisites, topic_corequisites, start_at")
+    .select("id, topic_ids, topic_prerequisites, start_at")
     .in("id", courseIds);
 
   if (courseError) {
@@ -497,7 +497,7 @@ const scheduleLearningPathCourses = async ({ learningPathId, updatedBy }) => {
       courseId: course.id,
       topicIds: course.topic_ids ?? [],
       topicPrerequisites: course.topic_prerequisites ?? {},
-      topicCorequisites: course.topic_corequisites ?? {},
+      topicCorequisites: {},
       startAtOverride: learningPath.start_at,
       fallbackStartAt: course.start_at ?? null,
       updatedBy,
@@ -509,7 +509,7 @@ const scheduleCoursesForTopic = async ({ topicId, updatedBy }) => {
   if (!topicId) return;
   const { data: courses, error: courseError } = await supabaseAdmin
     .from("courses")
-    .select("id, topic_ids, topic_prerequisites, topic_corequisites, start_at")
+    .select("id, topic_ids, topic_prerequisites, start_at")
     .contains("topic_ids", [String(topicId)]);
 
   if (courseError) {
@@ -524,7 +524,7 @@ const scheduleCoursesForTopic = async ({ topicId, updatedBy }) => {
       courseId: course.id,
       topicIds: course.topic_ids ?? [],
       topicPrerequisites: course.topic_prerequisites ?? {},
-      topicCorequisites: course.topic_corequisites ?? {},
+      topicCorequisites: {},
       fallbackStartAt: course.start_at ?? null,
       updatedBy,
     });

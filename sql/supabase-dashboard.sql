@@ -11,6 +11,7 @@ create table if not exists public.courses (
   topic_ids uuid[] not null default '{}'::uuid[],
   topic_prerequisites jsonb not null default '{}'::jsonb,
   topic_corequisites jsonb not null default '{}'::jsonb,
+  topic_groups jsonb not null default '[]'::jsonb,
   total_hours numeric,
   total_days integer,
   course_code text,
@@ -28,6 +29,7 @@ create table if not exists public.courses (
 alter table public.courses add column if not exists topic_ids uuid[] not null default '{}'::uuid[];
 alter table public.courses add column if not exists topic_prerequisites jsonb not null default '{}'::jsonb;
 alter table public.courses add column if not exists topic_corequisites jsonb not null default '{}'::jsonb;
+alter table public.courses add column if not exists topic_groups jsonb not null default '[]'::jsonb;
 alter table public.courses add column if not exists total_hours numeric;
 alter table public.courses add column if not exists total_days integer;
 alter table public.courses add column if not exists course_code text;

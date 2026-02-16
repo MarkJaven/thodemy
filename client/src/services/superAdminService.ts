@@ -134,7 +134,7 @@ export const superAdminService = {
     const { data, error } = await client
       .from("courses")
       .select(
-        "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at, created_by, created_at, updated_at"
+        "id, title, description, status, topic_ids, topic_prerequisites, topic_corequisites, topic_groups, total_hours, total_days, course_code, enrollment_enabled, enrollment_limit, start_at, end_at, created_by, created_at, updated_at"
       )
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);

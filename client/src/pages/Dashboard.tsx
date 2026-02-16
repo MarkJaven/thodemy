@@ -243,6 +243,39 @@ const normalizeRelationMap = (
   }, {});
 };
 
+const buildCoreqMapFromTopicGroups = (
+  topicIds: string[],
+  topicGroups: Array<{ name: string; topic_ids: string[] }> | null | undefined
+) => {
+  if (!Array.isArray(topicGroups) || topicGroups.length === 0) return {};
+  const keepSet = new Set(topicIds.map(String).filter(Boolean));
+  const links = new Map<string, Set<string>>();
+
+  topicGroups.forEach((group) => {
+    const members = Array.from(
+      new Set(
+        (Array.isArray(group?.topic_ids) ? group.topic_ids : [])
+          .map(String)
+          .filter((topicId) => keepSet.has(topicId))
+      )
+    );
+    if (members.length < 2) return;
+    members.forEach((topicId) => {
+      if (!links.has(topicId)) links.set(topicId, new Set());
+      const peers = links.get(topicId);
+      members.forEach((peerId) => {
+        if (peerId !== topicId) peers?.add(peerId);
+      });
+    });
+  });
+
+  return Array.from(links.entries()).reduce<Record<string, string[]>>((acc, [topicId, peers]) => {
+    const peerIds = Array.from(peers);
+    if (peerIds.length > 0) acc[topicId] = peerIds;
+    return acc;
+  }, {});
+};
+
 const buildEffectivePrereqs = (
   topicIds: string[],
   prereqMap: Record<string, string[]>,
@@ -471,7 +504,7 @@ const buildCourseSchedule = (
   const topicIds = Array.from(new Set(rawTopicIds));
   const keepSet = new Set(topicIds);
   const prereqMap = normalizeRelationMap(course.topic_prerequisites ?? null, keepSet);
-  const coreqMap = normalizeRelationMap(course.topic_corequisites ?? null, keepSet);
+  const coreqMap = buildCoreqMapFromTopicGroups(topicIds, course.topic_groups ?? null);
   const effectiveCoreqs = buildEffectiveCoreqs(topicIds, coreqMap);
   const effectivePrereqs = buildEffectivePrereqs(topicIds, prereqMap, effectiveCoreqs);
 
@@ -1736,9 +1769,9 @@ const Dashboard = () => {
                           course.topic_prerequisites ?? null,
                           keepSet
                         );
-                        const coreqMap = normalizeRelationMap(
-                          course.topic_corequisites ?? null,
-                          keepSet
+                        const coreqMap = buildCoreqMapFromTopicGroups(
+                          orderedTopicIds,
+                          course.topic_groups ?? null
                         );
                         const effectiveCoreqs = buildEffectiveCoreqs(orderedTopicIds, coreqMap);
                         const effectivePrereqs = buildEffectivePrereqs(
@@ -1746,6 +1779,111 @@ const Dashboard = () => {
                           prereqMap,
                           effectiveCoreqs
                         );
+                        const topicsToRenderById = new Map(
+                          topicsToRender.map((topic) => [topic.id, topic])
+                        );
+                        const topicOrderIndex = new Map(
+                          orderedTopicIds.map((topicId, index) => [topicId, index])
+                        );
+                        const visibleTopicIdSet = new Set(
+                          topicsToRender.map((topic) => topic.id)
+                        );
+                        const topicGroupSections: Array<{
+                          id: string;
+                          name: string;
+                          topicIds: string[];
+                          firstIndex: number;
+                          kind: "group" | "ungrouped";
+                        }> = [];
+                        const rawGroupedSections: Array<{
+                          id: string;
+                          name: string;
+                          topicIds: string[];
+                          firstIndex: number;
+                          kind: "group";
+                        }> = [];
+                        const topicIdToGroupSectionId = new Map<string, string>();
+
+                        (course.topic_groups ?? []).forEach((group, groupIndex) => {
+                          const groupName = String(group?.name ?? "").trim();
+                          const groupTopicIds = Array.from(
+                            new Set(
+                              (Array.isArray(group?.topic_ids) ? group.topic_ids : [])
+                                .map(String)
+                                .filter((topicId) => visibleTopicIdSet.has(topicId))
+                            )
+                          );
+                          if (groupTopicIds.length === 0) return;
+
+                          groupTopicIds.sort(
+                            (left, right) =>
+                              (topicOrderIndex.get(left) ?? Number.MAX_SAFE_INTEGER) -
+                              (topicOrderIndex.get(right) ?? Number.MAX_SAFE_INTEGER)
+                          );
+
+                          rawGroupedSections.push({
+                            id: `group-${groupIndex}`,
+                            name: groupName || `Grouped Topics ${groupIndex + 1}`,
+                            topicIds: groupTopicIds,
+                            firstIndex:
+                              topicOrderIndex.get(groupTopicIds[0]) ?? Number.MAX_SAFE_INTEGER,
+                            kind: "group",
+                          });
+                        });
+
+                        rawGroupedSections.forEach((section) => {
+                          section.topicIds.forEach((topicId) => {
+                            if (!topicIdToGroupSectionId.has(topicId)) {
+                              topicIdToGroupSectionId.set(topicId, section.id);
+                            }
+                          });
+                        });
+
+                        const groupedSectionsById = new Map<
+                          string,
+                          {
+                            id: string;
+                            name: string;
+                            topicIds: string[];
+                            firstIndex: number;
+                            kind: "group" | "ungrouped";
+                          }
+                        >();
+                        rawGroupedSections.forEach((section) => {
+                          const ownedTopicIds = section.topicIds.filter(
+                            (topicId) => topicIdToGroupSectionId.get(topicId) === section.id
+                          );
+                          if (ownedTopicIds.length === 0) return;
+                          groupedSectionsById.set(section.id, {
+                            ...section,
+                            topicIds: ownedTopicIds,
+                            firstIndex:
+                              topicOrderIndex.get(ownedTopicIds[0]) ?? Number.MAX_SAFE_INTEGER,
+                          });
+                        });
+
+                        const emittedSectionIds = new Set<string>();
+                        orderedTopicIds.forEach((topicId, index) => {
+                          if (!visibleTopicIdSet.has(topicId)) return;
+                          const sectionId = topicIdToGroupSectionId.get(topicId);
+                          if (sectionId) {
+                            if (emittedSectionIds.has(sectionId)) return;
+                            const section = groupedSectionsById.get(sectionId);
+                            if (!section) return;
+                            emittedSectionIds.add(sectionId);
+                            topicGroupSections.push(section);
+                            return;
+                          }
+
+                          const topic = topicsToRenderById.get(topicId);
+                          topicGroupSections.push({
+                            id: `ungrouped-${topicId}`,
+                            name: topic?.title ?? "Topic",
+                            topicIds: [topicId],
+                            firstIndex: index,
+                            kind: "ungrouped",
+                          });
+                        });
 
                         return (
                       <details
@@ -1801,144 +1939,187 @@ const Dashboard = () => {
                                     : "No topics assigned to this course yet."}
                                 </p>
                               ) : (
-                                topicsToRender.map((topic) => {
-                                  const progress = progressLookup.get(topic.id);
-                                  const submission = topicSubmissionLookup.get(topic.id);
-                                  const status = getTopicStatusLabel(progress, submission);
-                                  const statusStyle =
-                                    topicStatusStyles[status] ?? topicStatusStyles["Not Started"];
-                                  const topicSchedule = topicDates.get(topic.id);
-                                  const topicStartValue =
-                                    topicSchedule?.start?.toISOString() ?? topic.start_date ?? null;
-                                  const topicEndValue = topicSchedule?.end
-                                    ? topicSchedule.end.toISOString()
-                                    : topic.end_date ?? null;
-                                  const prereqs = effectivePrereqs[topic.id] ?? [];
-                                  const missingPrereqs = prereqs.filter((id) => {
-                                    const prereqProgress = progressLookup.get(id);
-                                    const prereqSubmission = topicSubmissionLookup.get(id);
-                                    return (
-                                      getTopicStatusLabel(prereqProgress, prereqSubmission) !==
-                                      "Completed"
-                                    );
-                                  });
-                                  const missingPrereqLabels = missingPrereqs
-                                    .map((id) => topicLookup.get(id)?.title)
-                                    .filter((title): title is string => Boolean(title));
-                                  const isApproved = status === "Completed";
-                                  const isPending = submission?.status === "pending";
-                                  const isNeedsInfo = submission?.status === "in_progress";
-                                  const isRejected = submission?.status === "rejected";
-                                  const isTopicUnlocked =
-                                    isCourseUnlocked && missingPrereqs.length === 0;
-                                  const canSubmit =
-                                    Boolean(user?.id) &&
-                                    isTopicUnlocked &&
-                                    !isApproved &&
-                                    !isPending;
-                                  const submitLabel = isPending
-                                    ? "Pending review"
-                                    : isRejected
-                                    ? "Resubmit certificate"
-                                    : isNeedsInfo
-                                    ? "Update certificate"
-                                    : "Upload certificate";
+                                topicGroupSections.map((section) => {
+                                  const completedInSection = section.topicIds.filter((topicId) => {
+                                    const progress = progressLookup.get(topicId);
+                                    const submission = topicSubmissionLookup.get(topicId);
+                                    return getTopicStatusLabel(progress, submission) === "Completed";
+                                  }).length;
 
                                   return (
-                                    <div
-                                      key={`topic-${path.id}-${course?.id}-${topic.id}`}
-                                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm sm:px-4"
+                                    <details
+                                      key={`topic-group-${path.id}-${course?.id}-${section.id}`}
+                                      className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 sm:px-4"
                                     >
-                                      <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <div>
-                                          <p className="text-white">{topic.title}</p>
-                                          <p className="text-xs text-slate-400">
-                                            {topic.description}
-                                          </p>
+                                      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                          <div>
+                                            <p className="text-sm font-medium text-white">
+                                              {section.name}
+                                            </p>
+                                            <p className="text-xs text-slate-400">
+                                              {section.topicIds.length}{" "}
+                                              {section.topicIds.length === 1 ? "topic" : "topics"}
+                                            </p>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
+                                              {completedInSection}/{section.topicIds.length} complete
+                                            </span>
+                                            <ChevronDownIcon className="h-4 w-4 text-slate-400" />
+                                          </div>
                                         </div>
-                                        <span
-                                          className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${statusStyle}`}
-                                        >
-                                          {status}
-                                        </span>
+                                      </summary>
+                                      <div className="mt-3 space-y-3">
+                                        {section.topicIds.map((topicId) => {
+                                          const topic = topicsToRenderById.get(topicId);
+                                          if (!topic) return null;
+
+                                          const progress = progressLookup.get(topic.id);
+                                          const submission = topicSubmissionLookup.get(topic.id);
+                                          const status = getTopicStatusLabel(progress, submission);
+                                          const statusStyle =
+                                            topicStatusStyles[status] ?? topicStatusStyles["Not Started"];
+                                          const topicSchedule = topicDates.get(topic.id);
+                                          const topicStartValue =
+                                            topicSchedule?.start?.toISOString() ?? topic.start_date ?? null;
+                                          const topicEndValue = topicSchedule?.end
+                                            ? topicSchedule.end.toISOString()
+                                            : topic.end_date ?? null;
+                                          const prereqs = effectivePrereqs[topic.id] ?? [];
+                                          const missingPrereqs = prereqs.filter((id) => {
+                                            const prereqProgress = progressLookup.get(id);
+                                            const prereqSubmission = topicSubmissionLookup.get(id);
+                                            return (
+                                              getTopicStatusLabel(prereqProgress, prereqSubmission) !==
+                                              "Completed"
+                                            );
+                                          });
+                                          const missingPrereqLabels = missingPrereqs
+                                            .map((id) => topicLookup.get(id)?.title)
+                                            .filter((title): title is string => Boolean(title));
+                                          const isApproved = status === "Completed";
+                                          const isPending = submission?.status === "pending";
+                                          const isNeedsInfo = submission?.status === "in_progress";
+                                          const isRejected = submission?.status === "rejected";
+                                          const isTopicUnlocked =
+                                            isCourseUnlocked && missingPrereqs.length === 0;
+                                          const canSubmit =
+                                            Boolean(user?.id) &&
+                                            isTopicUnlocked &&
+                                            !isApproved &&
+                                            !isPending;
+                                          const submitLabel = isPending
+                                            ? "Pending review"
+                                            : isRejected
+                                            ? "Resubmit certificate"
+                                            : isNeedsInfo
+                                            ? "Update certificate"
+                                            : "Upload certificate";
+
+                                          return (
+                                            <div
+                                              key={`topic-${path.id}-${course?.id}-${section.id}-${topic.id}`}
+                                              className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm sm:px-4"
+                                            >
+                                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                                <div>
+                                                  <p className="text-white">{topic.title}</p>
+                                                  <p className="text-xs text-slate-400">
+                                                    {topic.description}
+                                                  </p>
+                                                </div>
+                                                <span
+                                                  className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${statusStyle}`}
+                                                >
+                                                  {status}
+                                                </span>
+                                              </div>
+                                              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                                                <span className="rounded-full border border-white/10 px-3 py-1">
+                                                  {topic.time_allocated}{" "}
+                                                  {topic.time_unit === "hours" ? "hours" : "days"}
+                                                </span>
+                                                <span className="rounded-full border border-white/10 px-3 py-1">
+                                                  Start: {formatDate(topicStartValue)}
+                                                </span>
+                                                <span className="rounded-full border border-white/10 px-3 py-1">
+                                                  End: {formatDate(topicEndValue)}
+                                                </span>
+                                                {topic.link_url ? (
+                                                  <span className="rounded-full border border-white/10 px-3 py-1">
+                                                    Link available
+                                                  </span>
+                                                ) : (
+                                                  <span className="rounded-full border border-white/10 px-3 py-1">
+                                                    No link yet
+                                                  </span>
+                                                )}
+                                              </div>
+                                              {missingPrereqs.length > 0 && (
+                                                <p className="mt-3 text-xs text-slate-400">
+                                                  Complete prerequisites
+                                                  {missingPrereqLabels.length
+                                                    ? `: ${missingPrereqLabels.join(", ")}`
+                                                    : " before continuing."}
+                                                </p>
+                                              )}
+                                              {isPending && (
+                                                <p className="mt-3 text-xs text-accent-purple/80">
+                                                  Certificate submitted. Awaiting review.
+                                                </p>
+                                              )}
+                                              {isNeedsInfo && (
+                                                <p className="mt-3 text-xs text-sky-200">
+                                                  Admin requested more info. Please resubmit your
+                                                  certificate.
+                                                </p>
+                                              )}
+                                              {isRejected && (
+                                                <p className="mt-3 text-xs text-rose-200">
+                                                  Submission rejected. Upload a new certificate to
+                                                  continue.
+                                                </p>
+                                              )}
+                                              {submission?.review_notes && (
+                                                <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
+                                                  <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                                                    Admin note
+                                                  </p>
+                                                  <p className="mt-1">{submission.review_notes}</p>
+                                                </div>
+                                              )}
+                                              <div className="mt-3 flex flex-wrap gap-2">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleOpenTopic(topic)}
+                                                  disabled={!isTopicUnlocked || !topic.link_url}
+                                                  className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                                                >
+                                                  {startingTopicId === topic.id
+                                                    ? "Starting..."
+                                                    : "Start"}
+                                                </button>
+                                                {isApproved ? (
+                                                  <span className="rounded-full border border-emerald-400/40 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-emerald-200">
+                                                    Approved
+                                                  </span>
+                                                ) : (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => openTopicProofModal(topic)}
+                                                    disabled={!canSubmit}
+                                                    className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                                                  >
+                                                    {submitLabel}
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
                                       </div>
-                                      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                                        <span className="rounded-full border border-white/10 px-3 py-1">
-                                          {topic.time_allocated}{" "}
-                                          {topic.time_unit === "hours" ? "hours" : "days"}
-                                        </span>
-                                        <span className="rounded-full border border-white/10 px-3 py-1">
-                                          Start: {formatDate(topicStartValue)}
-                                        </span>
-                                        <span className="rounded-full border border-white/10 px-3 py-1">
-                                          End: {formatDate(topicEndValue)}
-                                        </span>
-                                        {topic.link_url ? (
-                                          <span className="rounded-full border border-white/10 px-3 py-1">
-                                            Link available
-                                          </span>
-                                        ) : (
-                                          <span className="rounded-full border border-white/10 px-3 py-1">
-                                            No link yet
-                                          </span>
-                                        )}
-                                      </div>
-                                      {missingPrereqs.length > 0 && (
-                                        <p className="mt-3 text-xs text-slate-400">
-                                          Complete prerequisites
-                                          {missingPrereqLabels.length
-                                            ? `: ${missingPrereqLabels.join(", ")}`
-                                            : " before continuing."}
-                                        </p>
-                                      )}
-                                      {isPending && (
-                                        <p className="mt-3 text-xs text-accent-purple/80">
-                                          Certificate submitted. Awaiting review.
-                                        </p>
-                                      )}
-                                      {isNeedsInfo && (
-                                        <p className="mt-3 text-xs text-sky-200">
-                                          Admin requested more info. Please resubmit your certificate.
-                                        </p>
-                                      )}
-                                      {isRejected && (
-                                        <p className="mt-3 text-xs text-rose-200">
-                                          Submission rejected. Upload a new certificate to continue.
-                                        </p>
-                                      )}
-                                      {submission?.review_notes && (
-                                        <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
-                                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                                            Admin note
-                                          </p>
-                                          <p className="mt-1">{submission.review_notes}</p>
-                                        </div>
-                                      )}
-                                      <div className="mt-3 flex flex-wrap gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenTopic(topic)}
-                                          disabled={!isTopicUnlocked || !topic.link_url}
-                                          className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
-                                        >
-                                          {startingTopicId === topic.id ? "Starting..." : "Start"}
-                                        </button>
-                                        {isApproved ? (
-                                          <span className="rounded-full border border-emerald-400/40 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-emerald-200">
-                                            Approved
-                                          </span>
-                                        ) : (
-                                          <button
-                                            type="button"
-                                            onClick={() => openTopicProofModal(topic)}
-                                            disabled={!canSubmit}
-                                            className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
-                                          >
-                                            {submitLabel}
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
+                                    </details>
                                   );
                                 })
                               )}
@@ -2423,7 +2604,10 @@ const Dashboard = () => {
         const orderedTopicIds = orderedTopics.map((topic) => topic.id);
         const keepSet = new Set(orderedTopicIds);
         const prereqMap = normalizeRelationMap(course.topic_prerequisites ?? null, keepSet);
-        const coreqMap = normalizeRelationMap(course.topic_corequisites ?? null, keepSet);
+        const coreqMap = buildCoreqMapFromTopicGroups(
+          orderedTopicIds,
+          course.topic_groups ?? null
+        );
         const effectiveCoreqs = buildEffectiveCoreqs(orderedTopicIds, coreqMap);
         const effectivePrereqs = buildEffectivePrereqs(
           orderedTopicIds,

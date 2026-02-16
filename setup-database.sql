@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS public.courses (
   topic_ids uuid[] NOT NULL DEFAULT '{}'::uuid[],
   topic_prerequisites jsonb NOT NULL DEFAULT '{}'::jsonb,
   topic_corequisites jsonb NOT NULL DEFAULT '{}'::jsonb,
+  topic_groups jsonb NOT NULL DEFAULT '[]'::jsonb,
   total_hours numeric,
   total_days integer,
   course_code text,

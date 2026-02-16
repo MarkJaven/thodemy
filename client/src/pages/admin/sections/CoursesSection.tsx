@@ -1,6 +1,11 @@
 ﻿import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Modal from "../../../components/admin/Modal";
-import { adminCourseService, CourseDetail, CourseSummary } from "../../../services/adminCourseService";
+import {
+  adminCourseService,
+  CourseDetail,
+  CourseSummary,
+  type TopicGroup,
+} from "../../../services/adminCourseService";
 import { superAdminService } from "../../../services/superAdminService";
 import type { Topic } from "../../../types/superAdmin";
 
@@ -70,28 +75,111 @@ const normalizeRelationMap = (
   }, {});
 };
 
-const normalizeCoreqAdjacency = (coreqMap: Record<string, string[]>, orderedIds: string[]) => {
+const normalizeGroupName = (value: unknown, fallbackLabel: string) => {
+  const normalized =
+    typeof value === "string"
+      ? value
+          .normalize("NFKC")
+          .replace(/\s+/g, " ")
+          .trim()
+      : "";
+  return normalized || fallbackLabel;
+};
+
+const normalizeTopicGroups = (value: unknown, orderedIds: string[]): TopicGroup[] => {
+  if (!Array.isArray(value) || orderedIds.length === 0) {
+    return [];
+  }
   const indexById = new Map(orderedIds.map((id, index) => [id, index]));
-  const pairs = new Set<string>();
-  Object.entries(coreqMap).forEach(([topicId, list]) => {
-    list.forEach((coreqId) => {
-      if (!indexById.has(topicId) || !indexById.has(coreqId)) return;
-      const left = topicId < coreqId ? topicId : coreqId;
-      const right = topicId < coreqId ? coreqId : topicId;
-      pairs.add(`${left}|${right}`);
+  const claimed = new Set<string>();
+  let fallbackIndex = 1;
+
+  const groups: Array<TopicGroup & { firstIndex: number }> = [];
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== "object") return;
+    const rawTopicIds = Array.isArray((entry as { topic_ids?: unknown[] }).topic_ids)
+      ? (entry as { topic_ids: unknown[] }).topic_ids
+      : [];
+    const topicIds = Array.from(
+      new Set(
+        rawTopicIds
+          .map((topicId) => String(topicId))
+          .filter((topicId) => indexById.has(topicId))
+          .filter((topicId) => !claimed.has(topicId))
+      )
+    );
+    if (topicIds.length < 2) return;
+
+    topicIds.sort((left, right) => (indexById.get(left) ?? 0) - (indexById.get(right) ?? 0));
+    topicIds.forEach((topicId) => claimed.add(topicId));
+
+    groups.push({
+      name: normalizeGroupName((entry as { name?: unknown }).name, `Grouped Topics ${fallbackIndex}`),
+      topic_ids: topicIds,
+      firstIndex: indexById.get(topicIds[0]) ?? Number.MAX_SAFE_INTEGER,
+    });
+    fallbackIndex += 1;
+  });
+
+  groups.sort((left, right) => left.firstIndex - right.firstIndex);
+  return groups.map((group, index) => ({
+    name: normalizeGroupName(group.name, `Grouped Topics ${index + 1}`),
+    topic_ids: group.topic_ids,
+  }));
+};
+
+const buildTopicGroupsFromCorequisites = (
+  coreqMap: Record<string, string[]>,
+  orderedIds: string[]
+): TopicGroup[] => {
+  if (orderedIds.length === 0) {
+    return [];
+  }
+  const keepIds = new Set(orderedIds);
+  const normalizedCoreqs = normalizeRelationMap(coreqMap, keepIds);
+  const parent = new Map(orderedIds.map((topicId) => [topicId, topicId]));
+
+  const find = (topicId: string): string => {
+    const parentId = parent.get(topicId);
+    if (!parentId || parentId === topicId) return topicId;
+    const root = find(parentId);
+    parent.set(topicId, root);
+    return root;
+  };
+
+  const union = (left: string, right: string) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot === rightRoot) return;
+    parent.set(rightRoot, leftRoot);
+  };
+
+  Object.entries(normalizedCoreqs).forEach(([topicId, linked]) => {
+    linked.forEach((linkedId) => {
+      if (!parent.has(linkedId)) return;
+      union(topicId, linkedId);
     });
   });
 
-  const nextMap: Record<string, string[]> = {};
-  for (let i = 0; i < orderedIds.length - 1; i += 1) {
-    const left = orderedIds[i];
-    const right = orderedIds[i + 1];
-    const key = left < right ? `${left}|${right}` : `${right}|${left}`;
-    if (!pairs.has(key)) continue;
-    nextMap[left] = nextMap[left] ? [...nextMap[left], right] : [right];
-    nextMap[right] = nextMap[right] ? [...nextMap[right], left] : [left];
-  }
-  return nextMap;
+  const groupsByRoot = new Map<string, { topic_ids: string[]; firstIndex: number }>();
+  orderedIds.forEach((topicId, index) => {
+    const root = find(topicId);
+    const existing = groupsByRoot.get(root);
+    if (!existing) {
+      groupsByRoot.set(root, { topic_ids: [topicId], firstIndex: index });
+      return;
+    }
+    existing.topic_ids.push(topicId);
+    existing.firstIndex = Math.min(existing.firstIndex, index);
+  });
+
+  return Array.from(groupsByRoot.values())
+    .filter((group) => group.topic_ids.length > 1)
+    .sort((left, right) => left.firstIndex - right.firstIndex)
+    .map((group, index) => ({
+      name: `Grouped Topics ${index + 1}`,
+      topic_ids: group.topic_ids,
+    }));
 };
 
 const MAX_COURSE_DESCRIPTION_LENGTH = 5000;
@@ -109,6 +197,8 @@ const CoursesSection = () => {
   const [pageSize, setPageSize] = useState(6);
   const [currentPage, setCurrentPage] = useState(1);
   const [lastClickedTopicId, setLastClickedTopicId] = useState<string | null>(null);
+  const [pendingGroupTopicIds, setPendingGroupTopicIds] = useState<Set<string>>(new Set());
+  const [groupNameInput, setGroupNameInput] = useState("");
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<CourseSummary | null>(null);
@@ -117,8 +207,7 @@ const CoursesSection = () => {
     description: "",
     status: "draft",
     topic_ids: [] as string[],
-    topic_prerequisites: {} as Record<string, string[]>,
-    topic_corequisites: {} as Record<string, string[]>,
+    topic_groups: [] as TopicGroup[],
   });
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -157,6 +246,19 @@ const CoursesSection = () => {
       return true;
     });
   }, [topics, selectedIdSet, selectedTitleKeys]);
+  const topicGroupNameByTopicId = useMemo(() => {
+    const map = new Map<string, string>();
+    formState.topic_groups.forEach((group) => {
+      group.topic_ids.forEach((topicId) => {
+        map.set(topicId, group.name);
+      });
+    });
+    return map;
+  }, [formState.topic_groups]);
+  const pendingTopicIdsInOrder = useMemo(
+    () => formState.topic_ids.filter((topicId) => pendingGroupTopicIds.has(topicId)),
+    [formState.topic_ids, pendingGroupTopicIds]
+  );
 
   const totals = useMemo(() => buildTotals(selectedTopics), [selectedTopics]);
   const orderedDetailTopics = useMemo(() => {
@@ -165,6 +267,25 @@ const CoursesSection = () => {
       detail.course.topic_ids?.map((id) => detail.topics.find((topic) => topic.id === id)) ??
       detail.topics;
     return ordered.filter(Boolean) as Topic[];
+  }, [detail]);
+  const detailTopicGroupNameByTopicId = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!detail) return map;
+    const orderedIds = detail.course.topic_ids ?? [];
+    const groups = normalizeTopicGroups(
+      detail.course.topic_groups ??
+        buildTopicGroupsFromCorequisites(
+          normalizeRelationMap(detail.course.topic_corequisites, new Set(orderedIds)),
+          orderedIds
+        ),
+      orderedIds
+    );
+    groups.forEach((group) => {
+      group.topic_ids.forEach((topicId) => {
+        map.set(topicId, group.name);
+      });
+    });
+    return map;
   }, [detail]);
 
   const filteredCourses = useMemo(() => {
@@ -225,9 +346,11 @@ const CoursesSection = () => {
       description: "",
       status: "draft",
       topic_ids: [],
-      topic_prerequisites: {},
-      topic_corequisites: {},
+      topic_groups: [],
     });
+    setPendingGroupTopicIds(new Set());
+    setGroupNameInput("");
+    setLastClickedTopicId(null);
     setActionError(null);
     setIsFormOpen(true);
   };
@@ -235,18 +358,25 @@ const CoursesSection = () => {
   const openEdit = async (course: CourseSummary) => {
     const uniqueTopicIds = normalizeTopicIds(course.topic_ids ?? [], topicLookup);
     const keepIds = new Set(uniqueTopicIds);
+    const initialGroups = normalizeTopicGroups(
+      course.topic_groups ??
+        buildTopicGroupsFromCorequisites(
+          normalizeRelationMap(course.topic_corequisites, keepIds),
+          uniqueTopicIds
+        ),
+      uniqueTopicIds
+    );
     setSelectedCourse(course);
     setFormState({
       title: course.title,
       description: course.description ?? "",
       status: course.status ?? "draft",
       topic_ids: uniqueTopicIds,
-      topic_prerequisites: {},
-      topic_corequisites: normalizeCoreqAdjacency(
-        normalizeRelationMap(course.topic_corequisites, keepIds),
-        uniqueTopicIds
-      ),
+      topic_groups: initialGroups,
     });
+    setPendingGroupTopicIds(new Set());
+    setGroupNameInput("");
+    setLastClickedTopicId(null);
     setActionError(null);
     setIsFormOpen(true);
 
@@ -256,6 +386,14 @@ const CoursesSection = () => {
       const detailCourse = detail.course;
       const detailTopicIds = normalizeTopicIds(detailCourse.topic_ids ?? [], topicLookup);
       const detailKeepIds = new Set(detailTopicIds);
+      const detailGroups = normalizeTopicGroups(
+        detailCourse.topic_groups ??
+          buildTopicGroupsFromCorequisites(
+            normalizeRelationMap(detailCourse.topic_corequisites, detailKeepIds),
+            detailTopicIds
+          ),
+        detailTopicIds
+      );
       setSelectedCourse((prev) => ({
         ...prev,
         ...detailCourse,
@@ -265,12 +403,11 @@ const CoursesSection = () => {
         description: detailCourse.description ?? "",
         status: detailCourse.status ?? "draft",
         topic_ids: detailTopicIds,
-        topic_prerequisites: {},
-        topic_corequisites: normalizeCoreqAdjacency(
-          normalizeRelationMap(detailCourse.topic_corequisites, detailKeepIds),
-          detailTopicIds
-        ),
+        topic_groups: detailGroups,
       });
+      setPendingGroupTopicIds(new Set());
+      setGroupNameInput("");
+      setLastClickedTopicId(null);
     } catch (detailError) {
       setActionError(
         detailError instanceof Error ? detailError.message : "Unable to load course details."
@@ -284,86 +421,92 @@ const CoursesSection = () => {
     const uniqueIds = normalizeTopicIds(nextIds, topicLookup);
     const keepIds = new Set(uniqueIds);
     setFormState((prev) => {
-      const normalizedCoreqs = normalizeRelationMap(prev.topic_corequisites, keepIds);
-      const adjacentCoreqs = normalizeCoreqAdjacency(normalizedCoreqs, uniqueIds);
       return {
         ...prev,
         topic_ids: uniqueIds,
-        topic_prerequisites: {},
-        topic_corequisites: adjacentCoreqs,
+        topic_groups: normalizeTopicGroups(prev.topic_groups, uniqueIds),
       };
     });
+    setPendingGroupTopicIds((prev) => {
+      const nextSelection = new Set<string>();
+      prev.forEach((topicId) => {
+        if (keepIds.has(topicId)) {
+          nextSelection.add(topicId);
+        }
+      });
+      return nextSelection;
+    });
+    if (lastClickedTopicId && !keepIds.has(lastClickedTopicId)) {
+      setLastClickedTopicId(null);
+    }
   };
 
-  const addCoreqEdge = (leftId: string, rightId: string) => {
+  const handleCreateTopicGroup = () => {
+    if (pendingTopicIdsInOrder.length < 2) {
+      setActionError("Shift+click to select at least two topics for a group.");
+      return;
+    }
+
     setFormState((prev) => {
-      const nextCoreqs = { ...prev.topic_corequisites };
-      const leftList = new Set(nextCoreqs[leftId] ?? []);
-      leftList.add(rightId);
-      const rightList = new Set(nextCoreqs[rightId] ?? []);
-      rightList.add(leftId);
-      const updated = {
-        ...nextCoreqs,
-        [leftId]: Array.from(leftList),
-        [rightId]: Array.from(rightList),
-      };
+      const selectedSet = new Set(pendingTopicIdsInOrder);
+      const baseGroups = prev.topic_groups
+        .map((group) => ({
+          ...group,
+          topic_ids: group.topic_ids.filter((topicId) => !selectedSet.has(topicId)),
+        }))
+        .filter((group) => group.topic_ids.length > 1);
+
+      const fallbackName = `Grouped Topics ${baseGroups.length + 1}`;
+      const nextGroups = normalizeTopicGroups(
+        [
+          ...baseGroups,
+          {
+            name: normalizeGroupName(groupNameInput, fallbackName),
+            topic_ids: pendingTopicIdsInOrder,
+          },
+        ],
+        prev.topic_ids
+      );
+
       return {
         ...prev,
-        topic_prerequisites: {},
-        topic_corequisites: normalizeCoreqAdjacency(updated, prev.topic_ids),
+        topic_groups: nextGroups,
       };
     });
+
+    setPendingGroupTopicIds(new Set());
+    setGroupNameInput("");
+    setActionError(null);
   };
 
-  const removeCoreqEdge = (leftId: string, rightId: string) => {
-    setFormState((prev) => {
-      const nextCoreqs = { ...prev.topic_corequisites };
-      const leftList = (nextCoreqs[leftId] ?? []).filter((id) => id !== rightId);
-      const rightList = (nextCoreqs[rightId] ?? []).filter((id) => id !== leftId);
-      if (leftList.length > 0) {
-        nextCoreqs[leftId] = leftList;
-      } else {
-        delete nextCoreqs[leftId];
-      }
-      if (rightList.length > 0) {
-        nextCoreqs[rightId] = rightList;
-      } else {
-        delete nextCoreqs[rightId];
-      }
-      return {
-        ...prev,
-        topic_prerequisites: {},
-        topic_corequisites: normalizeCoreqAdjacency(nextCoreqs, prev.topic_ids),
-      };
-    });
-  };
-
-  const getAdjacentTopicIds = (topicId: string) => {
-    const index = formState.topic_ids.indexOf(topicId);
-    if (index === -1) return { prevId: null, nextId: null };
-    const prevId = index > 0 ? formState.topic_ids[index - 1] : null;
-    const nextId =
-      index < formState.topic_ids.length - 1 ? formState.topic_ids[index + 1] : null;
-    return { prevId, nextId };
-  };
-
-  const hasCoreqEdge = (topicId: string, otherId: string | null) => {
-    if (!otherId) return false;
-    return (formState.topic_corequisites[topicId] ?? []).includes(otherId);
+  const handleRemoveTopicGroup = (groupIndex: number) => {
+    setFormState((prev) => ({
+      ...prev,
+      topic_groups: prev.topic_groups.filter((_, index) => index !== groupIndex),
+    }));
   };
 
   const handleTopicClick = (topicId: string, event: MouseEvent<HTMLDivElement>) => {
     if (event.shiftKey && lastClickedTopicId && lastClickedTopicId !== topicId) {
       const index = formState.topic_ids.indexOf(topicId);
       const lastIndex = formState.topic_ids.indexOf(lastClickedTopicId);
-      if (index !== -1 && lastIndex !== -1 && Math.abs(index - lastIndex) === 1) {
-        if (hasCoreqEdge(topicId, lastClickedTopicId)) {
-          removeCoreqEdge(topicId, lastClickedTopicId);
-        } else {
-          addCoreqEdge(topicId, lastClickedTopicId);
-        }
+      if (index !== -1 && lastIndex !== -1) {
+        const start = Math.min(index, lastIndex);
+        const end = Math.max(index, lastIndex);
+        setPendingGroupTopicIds(new Set(formState.topic_ids.slice(start, end + 1)));
+        setLastClickedTopicId(topicId);
+        return;
       }
     }
+    setPendingGroupTopicIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(topicId)) {
+        next.delete(topicId);
+      } else {
+        next.add(topicId);
+      }
+      return next;
+    });
     setLastClickedTopicId(topicId);
   };
 
@@ -418,17 +561,15 @@ const CoursesSection = () => {
 
     setSaving(true);
     setActionError(null);
-    const keepIds = new Set(uniqueTopicIds);
+    const normalizedGroups = normalizeTopicGroups(formState.topic_groups, uniqueTopicIds);
     const payload = {
       title: formState.title.trim(),
       description: formState.description.trim(),
       status: formState.status,
       topic_ids: uniqueTopicIds,
       topic_prerequisites: {},
-      topic_corequisites: normalizeCoreqAdjacency(
-        normalizeRelationMap(formState.topic_corequisites, keepIds),
-        uniqueTopicIds
-      ),
+      topic_groups: normalizedGroups,
+      topic_corequisites: {},
       enrollment_enabled: selectedCourse?.enrollment_enabled ?? true,
       enrollment_limit: selectedCourse?.enrollment_limit ?? null,
       start_at: selectedCourse?.start_at ?? null,
@@ -459,16 +600,22 @@ const CoursesSection = () => {
     try {
       const normalizedTopicIds = normalizeTopicIds(course.topic_ids ?? [], topicLookup);
       const keepIds = new Set(normalizedTopicIds);
+      const normalizedGroups = normalizeTopicGroups(
+        course.topic_groups ??
+          buildTopicGroupsFromCorequisites(
+            normalizeRelationMap(course.topic_corequisites, keepIds),
+            normalizedTopicIds
+          ),
+        normalizedTopicIds
+      );
       await adminCourseService.updateCourse(course.id, {
         title: course.title,
         description: course.description ?? "",
         status: nextStatus,
         topic_ids: normalizedTopicIds,
         topic_prerequisites: {},
-        topic_corequisites: normalizeCoreqAdjacency(
-          normalizeRelationMap(course.topic_corequisites, keepIds),
-          normalizedTopicIds
-        ),
+        topic_groups: normalizedGroups,
+        topic_corequisites: {},
         enrollment_enabled: course.enrollment_enabled ?? true,
         enrollment_limit: course.enrollment_limit ?? null,
         start_at: course.start_at ?? null,
@@ -621,6 +768,10 @@ const CoursesSection = () => {
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-slate-400">Topics</span>
                         <span>{course.topic_ids?.length ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-400">Grouped Topics</span>
+                        <span>{course.topic_groups?.length ?? 0}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-slate-400">Hours / Days</span>
@@ -815,55 +966,112 @@ const CoursesSection = () => {
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {selectedTopics.map((topic, index) => (
-                      <div
-                        key={topic.id}
-                        draggable
-                        onDragStart={() => handleDragStart(topic.id)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => handleDrop(topic.id)}
-                        onClick={(event) => handleTopicClick(topic.id, event)}
-                        className="group flex cursor-grab items-center gap-3 rounded-xl border border-white/10 bg-gradient-to-r from-white/[0.03] to-transparent px-3 py-2.5 transition hover:border-indigo-500/30 hover:from-indigo-500/5 active:cursor-grabbing"
-                      >
-                        <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-indigo-500/20 text-xs font-semibold text-indigo-300">
-                          {index + 1}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-white">{topic.title}</p>
-                          <p className="text-[10px] text-slate-400">
-                            {topic.time_allocated} {topic.time_unit === "hours" ? "hrs" : "days"}
-                          </p>
-                        </div>
-                        {(() => {
-                          const { prevId, nextId } = getAdjacentTopicIds(topic.id);
-                          const isGrouped =
-                            hasCoreqEdge(topic.id, prevId) || hasCoreqEdge(topic.id, nextId);
-                          return isGrouped ? (
-                            <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-amber-200">
-                              Coreq
+                      (() => {
+                        const groupName = topicGroupNameByTopicId.get(topic.id);
+                        const isPendingSelection = pendingGroupTopicIds.has(topic.id);
+                        return (
+                          <div
+                            key={topic.id}
+                            draggable
+                            onDragStart={() => handleDragStart(topic.id)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => handleDrop(topic.id)}
+                            onClick={(event) => handleTopicClick(topic.id, event)}
+                            className={`group flex cursor-grab items-center gap-3 rounded-xl border px-3 py-2.5 transition active:cursor-grabbing ${
+                              isPendingSelection
+                                ? "border-indigo-400/60 bg-indigo-500/10"
+                                : "border-white/10 bg-gradient-to-r from-white/[0.03] to-transparent hover:border-indigo-500/30 hover:from-indigo-500/5"
+                            }`}
+                          >
+                            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-indigo-500/20 text-xs font-semibold text-indigo-300">
+                              {index + 1}
                             </span>
-                          ) : null;
-                        })()}
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleRemoveTopic(topic.id);
-                          }}
-                          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-slate-500 opacity-0 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:opacity-100"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M18 6L6 18M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm text-white">{topic.title}</p>
+                              <p className="text-[10px] text-slate-400">
+                                {topic.time_allocated} {topic.time_unit === "hours" ? "hrs" : "days"}
+                              </p>
+                            </div>
+                            {groupName ? (
+                              <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-amber-200">
+                                {groupName}
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleRemoveTopic(topic.id);
+                              }}
+                              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-slate-500 opacity-0 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:opacity-100"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 6L6 18M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        );
+                      })()
                     ))}
                   </div>
                 )}
               </div>
 
               <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                Tip: Shift+click two adjacent topics to group them as corequisites.
+                Tip: Shift+click to select a topic range, then name and create a grouped topic set.
               </p>
+              <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    value={groupNameInput}
+                    onChange={(event) => setGroupNameInput(event.target.value)}
+                    placeholder="Grouped Topics name"
+                    className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateTopicGroup}
+                    disabled={pendingTopicIdsInOrder.length < 2}
+                    className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs uppercase tracking-[0.2em] text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Create Group
+                  </button>
+                </div>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                  Selected for group: {pendingTopicIdsInOrder.length}
+                </p>
+                {formState.topic_groups.length > 0 ? (
+                  <div className="space-y-2">
+                    {formState.topic_groups.map((group, groupIndex) => (
+                      <div
+                        key={`${group.name}-${groupIndex}`}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-amber-200">
+                            {group.name}
+                          </p>
+                          <p className="truncate text-[11px] text-slate-400">
+                            {group.topic_ids
+                              .map((topicId) => topicLookup.get(topicId)?.title || topicId)
+                              .join(" • ")}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTopicGroup(groupIndex)}
+                          className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-rose-200"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">No grouped topics created yet.</p>
+                )}
+              </div>
 
               {/* Available Topics */}
               {availableTopics.length > 0 && (
@@ -920,6 +1128,10 @@ const CoursesSection = () => {
                     <span className="text-slate-400">Topics</span>
                     <span className="font-medium text-white">{selectedTopics.length}</span>
                   </div>
+                  <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+                    <span className="text-slate-400">Grouped Topics</span>
+                    <span className="font-medium text-white">{formState.topic_groups.length}</span>
+                  </div>
                 </div>
                 <p className="text-[10px] leading-relaxed text-slate-500">
                   Total days are calculated at 8 hours per day.
@@ -965,7 +1177,7 @@ const CoursesSection = () => {
                   {detail.course.status ?? "draft"}
                 </span>
               </div>
-              <div className="mt-4 grid gap-3 text-xs text-slate-300 sm:grid-cols-3">
+              <div className="mt-4 grid gap-3 text-xs text-slate-300 sm:grid-cols-4">
                 <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
                   <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Hours</p>
                   <p className="mt-1 text-sm text-white">{detail.course.total_hours ?? 0}</p>
@@ -978,6 +1190,10 @@ const CoursesSection = () => {
                   <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Topics</p>
                   <p className="mt-1 text-sm text-white">{orderedDetailTopics.length}</p>
                 </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Grouped Topics</p>
+                  <p className="mt-1 text-sm text-white">{detail.course.topic_groups?.length ?? 0}</p>
+                </div>
               </div>
             </div>
 
@@ -988,25 +1204,37 @@ const CoursesSection = () => {
                 <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Topics</p>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   {orderedDetailTopics.map((topic, index) => (
-                    <div
-                      key={`course-topic-${topic.id}`}
-                      className="rounded-xl border border-white/10 bg-ink-800/50 px-4 py-3 text-sm text-slate-300"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-white">{topic.title}</p>
-                          {topic.description && (
-                            <p className="text-xs text-slate-400">{topic.description}</p>
-                          )}
+                    (() => {
+                      const groupName = detailTopicGroupNameByTopicId.get(topic.id);
+                      return (
+                        <div
+                          key={`course-topic-${topic.id}`}
+                          className="rounded-xl border border-white/10 bg-ink-800/50 px-4 py-3 text-sm text-slate-300"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-white">{topic.title}</p>
+                              {topic.description && (
+                                <p className="text-xs text-slate-400">{topic.description}</p>
+                              )}
+                            </div>
+                            <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                              {topic.time_allocated} {topic.time_unit === "hours" ? "hrs" : "days"}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                              Topic {index + 1}
+                            </p>
+                            {groupName ? (
+                              <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-amber-200">
+                                {groupName}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
-                        <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                          {topic.time_allocated} {topic.time_unit === "hours" ? "hrs" : "days"}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                        Topic {index + 1}
-                      </p>
-                    </div>
+                      );
+                    })()
                   ))}
                 </div>
               </div>
