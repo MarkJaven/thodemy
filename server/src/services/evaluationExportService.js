@@ -1,9 +1,20 @@
+/**
+ * Evaluation Export Service
+ * Generates Excel exports from evaluations using the SSCGI Training Roadmap template.
+ * @module services/evaluationExportService
+ */
+
 const path = require("path");
 const { evaluationService } = require("./evaluationService");
 const { AppError } = require("../utils/errors");
 
 let cachedExcelJs = null;
 
+/**
+ * Lazy-loads the ExcelJS library.
+ * @returns {Object} ExcelJS library instance
+ * @throws {AppError} If ExcelJS is not installed
+ */
 const getExcelJs = () => {
   if (cachedExcelJs) return cachedExcelJs;
   try {
@@ -19,11 +30,13 @@ const getExcelJs = () => {
   }
 };
 
+/** Path to the SSCGI Training Roadmap Excel template */
 const TEMPLATE_PATH = path.resolve(
   __dirname,
   "../../../docs/[Template] - SSCGI Training Roadmap v3.xlsx"
 );
 
+/** Bootcamp scorecard category weights and criterion-to-cell mappings (A-G). */
 const BOOTCAMP_CATEGORY_CONFIG = [
   {
     category: "A",
@@ -90,16 +103,18 @@ const BOOTCAMP_CATEGORY_CONFIG = [
   },
 ];
 
+/** Performance evaluation category weights and row mappings. */
 const PERFORMANCE_CATEGORY_CONFIG = [
   { key: "pe_a", category: "A", weight: 0.25, row: 12 },
   { key: "pe_b", category: "B", weight: 0.2, row: 13 },
   { key: "pe_c", category: "C", weight: 0.15, row: 14 },
-  { key: "pe_d", category: "D", weight: 0.1, row: 15 },
-  { key: "pe_e", category: "E", weight: 0.1, row: 16 },
-  { key: "pe_f", category: "F", weight: 0.1, row: 17 },
-  { key: "pe_g", category: "G", weight: 0.1, row: 18 },
+  { key: "pe_d", category: "D", weight: 0.15, row: 15 },
+  { key: "pe_e", category: "E", weight: 0.05, row: 16 },
+  { key: "pe_f", category: "F", weight: 0.05, row: 17 },
+  { key: "pe_g", category: "G", weight: 0.15, row: 18 },
 ];
 
+/** Maps technical evaluation criteria to their Excel cell references. */
 const TECHNICAL_CELL_MAP = [
   { key: "te_technical_knowledge", cell: "H15" },
   { key: "te_code_quality", cell: "H16" },
@@ -111,6 +126,7 @@ const TECHNICAL_CELL_MAP = [
   { key: "te_best_practices", cell: "H30" },
 ];
 
+/** Maps behavioral evaluation criteria to their Excel cell references. */
 const BEHAVIORAL_CELL_MAP = [
   { key: "bh_adaptability", cell: "B13" },
   { key: "bh_initiative", cell: "B14" },
@@ -122,6 +138,7 @@ const BEHAVIORAL_CELL_MAP = [
   { key: "bh_attendance", cell: "B20" },
 ];
 
+/** Maps scoreboard criterion keys to row-3 header cells. Null means not displayed. */
 const SCOREBOARD_CRITERION_CELL_MAP = {
   a1_teamwork: "E3",
   a2_problem_solving: "G3",
@@ -148,6 +165,7 @@ const SCOREBOARD_CRITERION_KEYS = new Set(
   Object.keys(SCOREBOARD_CRITERION_CELL_MAP)
 );
 
+/** Maps scoreboard criterion keys to raw/normalized column pairs. */
 const SCOREBOARD_CRITERION_COLUMN_MAP = {
   a1_teamwork: { rawCol: "E", normalizedCol: "F" },
   a2_problem_solving: { rawCol: "G", normalizedCol: "H" },
@@ -205,12 +223,17 @@ const BOOTCAMP_ENDORSEMENT_FEEDBACK_ROW_MAP = {
   G: 18,
 };
 
+const CHECKBOX_CHECKED = "☑";
+const CHECKBOX_UNCHECKED = "☐";
+
+/** Safely converts a value to a finite number, or returns null. */
 const toNumber = (value) => {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+/** Rounds a numeric value to the specified decimal places (default 4). */
 const round = (value, places = 4) => {
   const numeric = toNumber(value);
   if (numeric === null) return 0;
@@ -218,14 +241,17 @@ const round = (value, places = 4) => {
   return Math.round(numeric * factor) / factor;
 };
 
+/** Clamps a numeric value between min (0) and max (5). */
 const clampScore = (value, min = 0, max = 5) => {
   const numeric = toNumber(value);
   if (numeric === null) return null;
   return Math.min(Math.max(numeric, min), max);
 };
 
+/** Trims and uppercases a string value, defaulting to empty string. */
 const safeUpper = (value) => String(value || "").trim().toUpperCase();
 
+/** Formats a date value as an ISO date string (YYYY-MM-DD). */
 const formatDateText = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -233,11 +259,17 @@ const formatDateText = (value) => {
   return date.toISOString().slice(0, 10);
 };
 
+/** Formats a start/end date range as "YYYY-MM-DD - YYYY-MM-DD". */
 const formatCoveredPeriod = (start, end) => {
   if (start && end) return `${formatDateText(start)} - ${formatDateText(end)}`;
   return formatDateText(start || end);
 };
 
+/**
+ * Indexes scores into a Map keyed by "sheet:criterion_key".
+ * @param {Array<object>} scores
+ * @returns {Map<string, object>}
+ */
 const buildScoreMap = (scores) => {
   const map = new Map();
   for (const score of scores ?? []) {
@@ -246,18 +278,36 @@ const buildScoreMap = (scores) => {
   return map;
 };
 
+/** Retrieves a score entry from the map by sheet and key. */
 const getScoreEntry = (scoreMap, sheet, key) => scoreMap.get(`${sheet}:${key}`) || null;
 
+/** Retrieves and clamps a score value (0–5) from the map. */
 const getScoreValue = (scoreMap, sheet, key) => {
   const entry = getScoreEntry(scoreMap, sheet, key);
   return clampScore(entry?.score);
 };
 
+/** Retrieves the remarks string from a score entry. */
 const getScoreRemarks = (scoreMap, sheet, key) => {
   const entry = getScoreEntry(scoreMap, sheet, key);
   return entry?.remarks || "";
 };
 
+/** Retrieves bootcamp feedback strings (strength/improvement) for a category. */
+const getBootcampFeedbackForCategory = (scoreMap, category) => {
+  const strengthKey = `cat_${category}_strength`;
+  const improvementKey = `cat_${category}_improvement`;
+  const strength = String(
+    getScoreRemarks(scoreMap, BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET, strengthKey) || ""
+  ).trim();
+  const improvement = String(
+    getScoreRemarks(scoreMap, BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET, improvementKey) || ""
+  ).trim();
+
+  return { strength, improvement };
+};
+
+/** Normalizes a score to a 0–5 scale based on its max possible score. */
 const normalizeScoreToFive = (score, maxScore) => {
   const numericScore = toNumber(score);
   if (numericScore === null) return null;
@@ -266,6 +316,7 @@ const normalizeScoreToFive = (score, maxScore) => {
   return clampScore((numericScore / safeMax) * 5, 0, 5);
 };
 
+/** Parses a scoreboard entry into its activity key and criterion key. */
 const parseScoreboardEntry = (entry) => {
   const rawKey = String(entry?.criterion_key || "").trim();
   const rawCategory = String(entry?.category || "").trim();
@@ -285,14 +336,21 @@ const parseScoreboardEntry = (entry) => {
   return { activityKey: rawKey, criterionKey: null };
 };
 
+/** Extracts the criterion key from a scoreboard entry. */
 const getScoreboardCriterionKey = (entry) => {
   const { criterionKey } = parseScoreboardEntry(entry);
   return criterionKey;
 };
 
+/** Filters the score map to only scoreboard sheet entries. */
 const getScoreboardEntries = (scoreMap) =>
   Array.from(scoreMap.values()).filter((score) => score.sheet === "scoreboard");
 
+/**
+ * Groups scoreboard entries by activity and computes per-activity scores.
+ * @param {Map} scoreMap
+ * @returns {Array<object>} Sorted list of activity objects with criterion scores
+ */
 const getScoreboardActivities = (scoreMap) => {
   const activities = new Map();
 
@@ -327,12 +385,14 @@ const getScoreboardActivities = (scoreMap) => {
       continue;
     }
 
-    if (String(entry?.category || "").trim() === SCOREBOARD_META_CATEGORY) {
+    const rawScore = toNumber(entry.score);
+    const rawMax = toNumber(entry.max_score);
+    const isMetaOnlyEntry =
+      String(entry?.category || "").trim() === SCOREBOARD_META_CATEGORY;
+    if (isMetaOnlyEntry && rawScore === null) {
       continue;
     }
 
-    const rawScore = toNumber(entry.score);
-    const rawMax = toNumber(entry.max_score);
     if (rawScore !== null) {
       activity.assessmentScore = rawScore;
       activity.assessmentMax = rawMax && rawMax > 0 ? rawMax : 5;
@@ -357,6 +417,11 @@ const getScoreboardActivities = (scoreMap) => {
   return result;
 };
 
+/**
+ * Computes the average normalized score for each scoreboard criterion.
+ * @param {Map} scoreMap
+ * @returns {object} Criterion key to average score mapping
+ */
 const computeScoreboardCriterionAverages = (scoreMap) => {
   const valuesByCriterion = new Map();
 
@@ -380,18 +445,21 @@ const computeScoreboardCriterionAverages = (scoreMap) => {
   return averages;
 };
 
+/** Resolves a bootcamp criterion score, preferring scoreboard averages. */
 const getBootcampCriterionScore = (scoreMap, scoreboardAverages, criterionKey) => {
   const fromScoreboard = toNumber(scoreboardAverages?.[criterionKey]);
   if (fromScoreboard !== null) return fromScoreboard;
   return null;
 };
 
+/** Computes the arithmetic mean of an array of numeric values. */
 const average = (values) => {
   const numeric = values.map(toNumber).filter((v) => v !== null);
   if (numeric.length === 0) return 0;
   return numeric.reduce((sum, current) => sum + current, 0) / numeric.length;
 };
 
+/** Computes the weighted average for a single bootcamp category. */
 const computeBootcampCategoryAverage = (scoreMap, scoreboardAverages, categoryConfig) => {
   let weightedTotal = 0;
   let weightTotal = 0;
@@ -407,6 +475,12 @@ const computeBootcampCategoryAverage = (scoreMap, scoreboardAverages, categoryCo
   return weightedTotal / weightTotal;
 };
 
+/**
+ * Computes bootcamp results: per-category averages, contributions, and total.
+ * @param {Map} scoreMap
+ * @param {object} scoreboardAverages
+ * @returns {{ categoryAverages: object, categoryContributions: object, totalContribution: number }}
+ */
 const computeBootcampResults = (scoreMap, scoreboardAverages) => {
   const categoryAverages = {};
   const categoryContributions = {};
@@ -432,6 +506,11 @@ const computeBootcampResults = (scoreMap, scoreboardAverages) => {
   };
 };
 
+/**
+ * Computes performance evaluation results: per-category scores, contributions, and total.
+ * @param {Map} scoreMap
+ * @returns {{ categoryScores: object, categoryContributions: object, totalContribution: number }}
+ */
 const computePerformanceResults = (scoreMap) => {
   const categoryScores = {};
   const categoryContributions = {};
@@ -454,6 +533,12 @@ const computePerformanceResults = (scoreMap) => {
   };
 };
 
+/**
+ * Computes weighted summary contributions (A-E) for the performance summary sheet.
+ * @param {Map} scoreMap
+ * @param {object} scoreboardAverages
+ * @returns {{ A: number, B: number, C: number, D: number, E: number }}
+ */
 const computeSummaryContributions = (scoreMap, scoreboardAverages) => {
   const technicalAvg = average(
     TECHNICAL_CELL_MAP.map((entry) => getScoreValue(scoreMap, "technical", entry.key))
@@ -498,6 +583,11 @@ const computeSummaryContributions = (scoreMap, scoreboardAverages) => {
   };
 };
 
+/**
+ * Converts a contribution score to an adjectival rating with recommendation.
+ * @param {number} contribution - Overall contribution (0–1 scale)
+ * @returns {{ adjectival: string, interpretation: string, recommendation: string }}
+ */
 const toAdjectival = (contribution) => {
   const score = toNumber(contribution) || 0;
   if (score >= 0.91) {
@@ -535,11 +625,13 @@ const toAdjectival = (contribution) => {
   };
 };
 
+/** Writes a value to a worksheet cell. */
 const overwriteCell = (worksheet, cellRef, value) => {
   if (!worksheet) return;
   worksheet.getCell(cellRef).value = value;
 };
 
+/** Updates a cell's cached formula result, preserving the formula if present. */
 const overwriteCellWithFormulaResult = (worksheet, cellRef, result) => {
   if (!worksheet) return;
   const nextResult = toNumber(result) ?? 0;
@@ -554,6 +646,7 @@ const overwriteCellWithFormulaResult = (worksheet, cellRef, result) => {
   overwriteCell(worksheet, cellRef, nextResult);
 };
 
+/** Clears all cell values in a column within the given row range. */
 const clearColumnRange = (worksheet, column, startRow, endRow) => {
   if (!worksheet) return;
   for (let row = startRow; row <= endRow; row += 1) {
@@ -561,6 +654,13 @@ const clearColumnRange = (worksheet, column, startRow, endRow) => {
   }
 };
 
+/**
+ * Populates trainee header info across all evaluation sheets.
+ * @param {object} workbook - ExcelJS workbook
+ * @param {object} evaluation - Evaluation record
+ * @param {object} traineeInfo - Trainee metadata
+ * @param {string} traineeName - Display name
+ */
 const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   const department = safeUpper(traineeInfo.department);
   const position = safeUpper(traineeInfo.position || "TRAINEE");
@@ -579,12 +679,17 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   overwriteCell(dashboard, "D8", trainer);
 
   const scorecard = workbook.getWorksheet("BootCampScoreCard");
-  overwriteCell(scorecard, "C3", safeUpper(traineeName));
-  overwriteCell(scorecard, "C4", department);
-  overwriteCell(scorecard, "C5", dateHired);
-  overwriteCell(scorecard, "C6", coveredPeriod);
-  overwriteCell(scorecard, "C7", formatDateText(traineeInfo.date_endorsed || traineeInfo.target_join_date));
-  overwriteCell(scorecard, "C8", trainer);
+  // In template: labels are on merged B:C (green), values are on merged D:F (yellow).
+  overwriteCell(scorecard, "D3", safeUpper(traineeName));
+  overwriteCell(scorecard, "D4", department);
+  overwriteCell(scorecard, "D5", dateHired);
+  overwriteCell(scorecard, "D6", coveredPeriod);
+  overwriteCell(
+    scorecard,
+    "D7",
+    formatDateText(traineeInfo.date_endorsed || traineeInfo.target_join_date)
+  );
+  overwriteCell(scorecard, "D8", trainer);
 
   const endorsement = workbook.getWorksheet("BootcampEndorsementScoreCard");
   overwriteCell(endorsement, "E4", department);
@@ -633,17 +738,48 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   );
 };
 
+/** Populates derived actual scores on the BootCampScoreCard (compliance, quiz, ethics). */
+const populateBootcampActualCriteria = (workbook, scoreMap, scoreboardAverages) => {
+  const scorecard = workbook.getWorksheet("BootCampScoreCard");
+  if (!scorecard) return;
+
+  const valuesByCell = new Map();
+
+  for (const categoryConfig of BOOTCAMP_CATEGORY_CONFIG) {
+    for (const item of categoryConfig.items) {
+      if (!item.actualCell) continue;
+      const score = getBootcampCriterionScore(scoreMap, scoreboardAverages, item.key);
+      if (!valuesByCell.has(item.actualCell)) {
+        valuesByCell.set(item.actualCell, []);
+      }
+      if (score !== null) {
+        valuesByCell.get(item.actualCell).push(score);
+      }
+    }
+  }
+
+  for (const [cellRef, values] of valuesByCell.entries()) {
+    if (cellRef === "N36" || cellRef === "N40" || cellRef === "N41" || cellRef === "N44") {
+      continue;
+    }
+    const cachedResult = values.length > 0 ? round(average(values), 2) : 0;
+    overwriteCell(scorecard, cellRef, cachedResult);
+  }
+};
+
+/** Populates derived actual scores on the BootCampScoreCard (compliance, quiz, ethics). */
 const populateBootcampDerivedActuals = (workbook, scoreMap, scoreboardAverages) => {
   const scorecard = workbook.getWorksheet("BootCampScoreCard");
   if (!scorecard) return;
 
   const complianceOne = getBootcampCriterionScore(scoreMap, scoreboardAverages, "f1_policies");
   const complianceTwo = getBootcampCriterionScore(scoreMap, scoreboardAverages, "f2_reporting");
-  overwriteCell(scorecard, "N40", complianceOne !== null ? round(complianceOne, 2) : null);
-  overwriteCell(scorecard, "N41", complianceTwo !== null ? round(complianceTwo, 2) : null);
+  overwriteCell(scorecard, "N40", complianceOne !== null ? round(complianceOne, 2) : 0);
+  overwriteCell(scorecard, "N41", complianceTwo !== null ? round(complianceTwo, 2) : 0);
 
-  // Populate Summative Assessment (N36) from quiz grades equivalent if available
-  // Template formula: AI = AR * 0.8, where AR = (Score/TotalItems)*50+50
+  // Populate Summative Assessment (N36) from quiz grades equivalent if available.
+  // Equivalent uses a zero floor for non-taken quizzes:
+  // AR = IF(Score<=0, 0, (Score/TotalItems)*50+50)
   const quizGrades = getQuizGradesEntries(scoreMap);
   if (quizGrades.length > 0) {
     const equivalents = quizGrades
@@ -654,7 +790,7 @@ const populateBootcampDerivedActuals = (workbook, scoreMap, scoreboardAverages) 
       // Convert equivalent to 5-scale: template uses AR * 0.8 then normalizes
       // Equivalent is 50-100 scale, so convert to 5-scale: (equivalent / 100) * 5
       const summativeScore = round((avgEquivalent / 100) * 5, 2);
-      overwriteCell(scorecard, "N36", summativeScore);
+      overwriteCellWithFormulaResult(scorecard, "N36", summativeScore);
     }
   }
 
@@ -675,9 +811,10 @@ const populateBootcampDerivedActuals = (workbook, scoreMap, scoreboardAverages) 
   ]);
 
   const ethicsScore = behavioralAvg > 0 ? behavioralAvg : ethicsFallback;
-  overwriteCell(scorecard, "N44", ethicsScore > 0 ? round(ethicsScore, 2) : null);
+  overwriteCell(scorecard, "N44", ethicsScore > 0 ? round(ethicsScore, 2) : 0);
 };
 
+/** Writes category contributions to the Dashboard sheet for both bootcamp and performance. */
 const populateDashboardScores = (workbook, bootcampResults, performanceResults) => {
   const dashboard = workbook.getWorksheet("Dashboard");
   if (!dashboard) return;
@@ -691,11 +828,16 @@ const populateDashboardScores = (workbook, bootcampResults, performanceResults) 
     const bootcampContribution = bootcampResults.categoryContributions[category] || 0;
     const performanceContribution = performanceResults.categoryContributions[category] || 0;
 
-    overwriteCell(dashboard, `F${bootcampRows[index]}`, round(bootcampContribution, 4));
-    overwriteCell(dashboard, `F${performanceRows[index]}`, round(performanceContribution, 4));
+    overwriteCellWithFormulaResult(dashboard, `F${bootcampRows[index]}`, round(bootcampContribution, 4));
+    overwriteCellWithFormulaResult(
+      dashboard,
+      `F${performanceRows[index]}`,
+      round(performanceContribution, 4)
+    );
   }
 };
 
+/** Writes computed contribution totals to the ScoreCard and Endorsement sheets. */
 const populateBootcampComputedSummaries = (workbook, bootcampResults) => {
   const scorecard = workbook.getWorksheet("BootCampScoreCard");
   const endorsement = workbook.getWorksheet("BootcampEndorsementScoreCard");
@@ -722,7 +864,23 @@ const populateBootcampComputedSummaries = (workbook, bootcampResults) => {
 
   // Overall computed totals on both sheets.
   overwriteCellWithFormulaResult(scorecard, "O13", roundedTotal);
+  // Visible RATING cell on BootCampScoreCard points to O13; update cached result too.
+  overwriteCellWithFormulaResult(scorecard, "G4", roundedTotal);
   overwriteCellWithFormulaResult(endorsement, "E19", roundedTotal);
+
+  // Recommendation checkbox row on BootCampScoreCard:
+  // D47 = Yes, F47 = No.
+  // Always clear template defaults first so initial exports have no pre-checked box.
+  overwriteCell(scorecard, "D47", CHECKBOX_UNCHECKED);
+  overwriteCell(scorecard, "F47", CHECKBOX_UNCHECKED);
+
+  // If there is a computed score, pick one:
+  // >= 86% => Yes (endorsement), otherwise No.
+  if (roundedTotal > 0) {
+    const recommendYes = roundedTotal >= 0.86;
+    overwriteCell(scorecard, "D47", recommendYes ? CHECKBOX_CHECKED : CHECKBOX_UNCHECKED);
+    overwriteCell(scorecard, "F47", recommendYes ? CHECKBOX_UNCHECKED : CHECKBOX_CHECKED);
+  }
 
   // Endorsement header cells showing total computed score.
   ["G5", "G6", "G7", "G8"].forEach((cellRef) => {
@@ -730,6 +888,7 @@ const populateBootcampComputedSummaries = (workbook, bootcampResults) => {
   });
 };
 
+/** Writes strength/improvement feedback per category to the Endorsement sheet. */
 const populateBootcampEndorsementFeedback = (workbook, scoreMap) => {
   const endorsement = workbook.getWorksheet("BootcampEndorsementScoreCard");
   if (!endorsement) return;
@@ -742,15 +901,7 @@ const populateBootcampEndorsementFeedback = (workbook, scoreMap) => {
     overwriteCell(endorsement, `F${row}`, null);
     overwriteCell(endorsement, `H${row}`, null);
 
-    const strengthKey = `cat_${category}_strength`;
-    const improvementKey = `cat_${category}_improvement`;
-
-    const strength = String(
-      getScoreRemarks(scoreMap, BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET, strengthKey) || ""
-    ).trim();
-    const improvement = String(
-      getScoreRemarks(scoreMap, BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET, improvementKey) || ""
-    ).trim();
+    const { strength, improvement } = getBootcampFeedbackForCategory(scoreMap, category);
 
     if (strength) {
       overwriteCell(endorsement, `F${row}`, strength);
@@ -761,23 +912,39 @@ const populateBootcampEndorsementFeedback = (workbook, scoreMap) => {
   }
 };
 
+/** Writes performance category contributions and remarks to the evaluation sheets. */
 const populatePerformanceSheets = (workbook, scoreMap, performanceResults) => {
   const performanceSheet = workbook.getWorksheet("Performance Evaluation");
   const part1Sheet = workbook.getWorksheet("Part 1 Evaluation");
 
   for (const config of PERFORMANCE_CATEGORY_CONFIG) {
     const contribution = performanceResults.categoryContributions[config.category] || 0;
-    const remarks = getScoreRemarks(scoreMap, "performance", config.key);
 
-    overwriteCell(performanceSheet, `E${config.row}`, round(contribution, 4));
-    overwriteCell(part1Sheet, `E${config.row}`, round(contribution, 4));
+    overwriteCellWithFormulaResult(performanceSheet, `E${config.row}`, round(contribution, 4));
+    overwriteCellWithFormulaResult(part1Sheet, `E${config.row}`, round(contribution, 4));
 
-    if (remarks) {
-      overwriteCell(performanceSheet, `H${config.row}`, remarks);
+    // Clear template defaults/placeholders first.
+    overwriteCell(performanceSheet, `F${config.row}`, null);
+    overwriteCell(performanceSheet, `H${config.row}`, null);
+    overwriteCell(part1Sheet, `F${config.row}`, null);
+    overwriteCell(part1Sheet, `H${config.row}`, null);
+
+    const { strength, improvement } = getBootcampFeedbackForCategory(
+      scoreMap,
+      config.category
+    );
+    if (strength) {
+      overwriteCell(performanceSheet, `F${config.row}`, strength);
+      overwriteCell(part1Sheet, `F${config.row}`, strength);
+    }
+    if (improvement) {
+      overwriteCell(performanceSheet, `H${config.row}`, improvement);
+      overwriteCell(part1Sheet, `H${config.row}`, improvement);
     }
   }
 };
 
+/** Writes technical evaluation scores to their mapped cells. */
 const populateTechnicalScores = (workbook, scoreMap) => {
   const technical = workbook.getWorksheet("Technical Evaluation");
   if (!technical) return;
@@ -789,6 +956,7 @@ const populateTechnicalScores = (workbook, scoreMap) => {
   }
 };
 
+/** Writes behavioral evaluation scores to their mapped cells. */
 const populateBehavioralScores = (workbook, scoreMap) => {
   const behavioral = workbook.getWorksheet("Behavioral Evaluation");
   if (!behavioral) return;
@@ -805,6 +973,7 @@ const populateBehavioralScores = (workbook, scoreMap) => {
   }
 };
 
+/** Retrieves all quiz_grades entries from the score map, sorted by label. */
 const getQuizGradesEntries = (scoreMap) => {
   const entries = [];
   for (const score of scoreMap.values()) {
@@ -817,16 +986,20 @@ const getQuizGradesEntries = (scoreMap) => {
   return entries;
 };
 
+/** Converts a quiz raw score to its equivalent (0 if score is 0, otherwise 50–100). */
 const computeQuizEquivalent = (rawScore, totalItems) => {
   const score = toNumber(rawScore);
   const total = toNumber(totalItems);
   if (score === null || total === null || total <= 0) return null;
+  if (score <= 0) return 0;
   return round((score / total) * 50 + 50, 4);
 };
 
+/** Converts a quiz equivalent score to a 1–5 rating. */
 const computeQuizRating = (equivalent) => {
   const eq = toNumber(equivalent);
   if (eq === null) return 0;
+  if (eq <= 0) return 0;
   if (eq <= 60) return 1;
   if (eq <= 70) return 2;
   if (eq <= 85) return 3;
@@ -834,6 +1007,12 @@ const computeQuizRating = (equivalent) => {
   return 5;
 };
 
+/**
+ * Populates the ScoreBoard sheet with activity scores, quiz data, and criterion averages.
+ * @param {object} workbook - ExcelJS workbook
+ * @param {Map} scoreMap
+ * @returns {object} Computed criterion averages
+ */
 const populateScoreBoard = (workbook, scoreMap) => {
   const scoreBoard = workbook.getWorksheet("ScoreBoard");
   const criterionAverages = computeScoreboardCriterionAverages(scoreMap);
@@ -895,8 +1074,16 @@ const populateScoreBoard = (workbook, scoreMap) => {
 
   const activities = getScoreboardActivities(scoreMap);
 
+  // Laboratory Activities (left matrix) should list projects/activities only, not quizzes.
+  const laboratoryActivities = activities.filter((activity) => {
+    const activityKey = String(activity?.activityKey || "").trim().toLowerCase();
+    const hasQuizKeyPrefix = activityKey.startsWith("quiz_");
+    const hasQuizGradeEntry = Boolean(getScoreEntry(scoreMap, "quiz_grades", activity.activityKey));
+    return !hasQuizKeyPrefix && !hasQuizGradeEntry;
+  });
+
   const maxEntries = SCOREBOARD_ROWS.end - SCOREBOARD_ROWS.start + 1;
-  activities.slice(0, maxEntries).forEach((activity, index) => {
+  laboratoryActivities.slice(0, maxEntries).forEach((activity, index) => {
     const row = SCOREBOARD_ROWS.start + index;
     const label = activity.label || `Entry ${index + 1}`;
     const criterionValues = Object.values(activity.criterionScores)
@@ -918,6 +1105,12 @@ const populateScoreBoard = (workbook, scoreMap) => {
           ? assessmentMaxFromSource
           : 5
         : 5;
+    const legacyNormalizedFallback =
+      !hasCriterionScores &&
+      assessmentScore !== null &&
+      activity.source === "auto_activity"
+        ? round(normalizeScoreToFive(assessmentScore, assessmentMax) ?? 0, 4)
+        : null;
 
     // Main scoreboard matrix (left side of template).
     overwriteCell(scoreBoard, `C${row}`, label);
@@ -927,18 +1120,24 @@ const populateScoreBoard = (workbook, scoreMap) => {
     overwriteCell(scoreBoard, `AC${row}`, { formula: `AD${row}+AF${row}` });
     overwriteCell(scoreBoard, `AH${row}`, { formula: `AI${row}+AK${row}` });
 
-    for (const [criterionKey, normalized] of Object.entries(activity.criterionScores)) {
-      if (normalized === null || normalized === undefined) continue;
-      const columnConfig = SCOREBOARD_CRITERION_COLUMN_MAP[criterionKey];
-      if (columnConfig) {
-        const rawMax = toNumber(scoreBoard.getCell(`${columnConfig.rawCol}1`).value) || 5;
-        const rawValue = (normalized / 5) * rawMax;
-        overwriteCell(scoreBoard, `${columnConfig.rawCol}${row}`, round(rawValue, 4));
-        overwriteCell(scoreBoard, `${columnConfig.normalizedCol}${row}`, {
-          formula: `${columnConfig.rawCol}${row}*$${columnConfig.normalizedCol}$1/$${columnConfig.rawCol}$1`,
-          result: round(normalized, 4),
-        });
-      }
+    // Ensure all rubric criteria are explicit in Excel:
+    // missing/ungraded criteria are exported as 0 (e.g., no submission / needs grading).
+    for (const [criterionKey, columnConfig] of Object.entries(SCOREBOARD_CRITERION_COLUMN_MAP)) {
+      const normalized = toNumber(activity.criterionScores?.[criterionKey]);
+      const normalizedValue =
+        normalized !== null
+          ? round(normalized, 4)
+          : legacyNormalizedFallback !== null
+            ? legacyNormalizedFallback
+            : 0;
+      const rawMax = toNumber(scoreBoard.getCell(`${columnConfig.rawCol}1`).value) || 5;
+      const rawValue = round((normalizedValue / 5) * rawMax, 4);
+
+      overwriteCell(scoreBoard, `${columnConfig.rawCol}${row}`, rawValue);
+      overwriteCell(scoreBoard, `${columnConfig.normalizedCol}${row}`, {
+        formula: `${columnConfig.rawCol}${row}*$${columnConfig.normalizedCol}$1/$${columnConfig.rawCol}$1`,
+        result: normalizedValue,
+      });
     }
 
   });
@@ -965,12 +1164,12 @@ const populateScoreBoard = (workbook, scoreMap) => {
     overwriteCell(scoreBoard, `AO${row}`, label);
     overwriteCell(scoreBoard, `AQ${row}`, quizRawScore);
     overwriteCell(scoreBoard, `AR${row}`, {
-      formula: `IFERROR((AQ${row}/AS${row})*50+50, " ")`,
+      formula: `IFERROR(IF(AQ${row}<=0,0,(AQ${row}/AS${row})*50+50), 0)`,
       result: equivalent !== null ? round(equivalent, 2) : 0,
     });
     overwriteCell(scoreBoard, `AS${row}`, quizTotalItems);
     overwriteCell(scoreBoard, `AP${row}`, {
-      formula: `IF(ISNUMBER(AR${row}), IF(AR${row}<=60, 1, IF(AR${row}<=70, 2, IF(AR${row}<=85, 3, IF(AR${row}<=96, 4, 5)))), 0)`,
+      formula: `IF(ISNUMBER(AR${row}), IF(AR${row}<=0, 0, IF(AR${row}<=60, 1, IF(AR${row}<=70, 2, IF(AR${row}<=85, 3, IF(AR${row}<=96, 4, 5))))), 0)`,
       result: rating,
     });
     // AI column: Summative Assessment = Equivalent * 0.8 (template formula)
@@ -983,18 +1182,19 @@ const populateScoreBoard = (workbook, scoreMap) => {
     overwriteCell(scoreBoard, `AW${row}`, true);
   });
 
-  // Update AR3 summary (average of non-zero equivalents) with computed result
+  // Update AR3 summary (average equivalent, including explicit 0 values).
   const avgEquivalent = allEquivalents.length > 0
     ? round(allEquivalents.reduce((s, e) => s + e, 0) / allEquivalents.length, 2)
     : 0;
   overwriteCell(scoreBoard, "AR3", {
-    formula: `IFERROR(SUMIF(OFFSET(AR4, 0, 0, COUNTA(AR4:AR1000), 1), "<>0") / COUNTIF(OFFSET(AR4, 0, 0, COUNTA(AR4:AR1000), 1), "<>0"), 0)`,
+    formula: `IFERROR(AVERAGE(OFFSET(AR4, 0, 0, COUNTA(AR4:AR1000), 1)), 0)`,
     result: avgEquivalent,
   });
 
   return criterionAverages;
 };
 
+/** Populates the Performance Summary sheet with overall rating and contributions. */
 const populatePerformanceSummary = (
   workbook,
   evaluation,
@@ -1018,6 +1218,17 @@ const populatePerformanceSummary = (
   overwriteCell(summary, "D7", coveredPeriod);
   overwriteCell(summary, "D8", safeUpper(traineeInfo.trainer));
 
+  // Replace stale template narrative with computed interpretation.
+  overwriteCell(summary, "J4", rating.interpretation);
+
+  // Clear template feedback placeholders on summary rows.
+  for (let row = 13; row <= 17; row += 1) {
+    overwriteCell(summary, `F${row}`, null);
+    overwriteCell(summary, `I${row}`, null);
+  }
+  // K13 is the top-left cell of merged reflection block K13:L17.
+  overwriteCell(summary, "K13", null);
+
   overwriteCell(summary, "G4", rating.adjectival);
   overwriteCell(summary, "H4", rating.recommendation);
   overwriteCell(summary, "I4", rating.recommendation);
@@ -1029,6 +1240,12 @@ const populatePerformanceSummary = (
   overwriteCell(summary, "E17", summaryContributions.E);
 };
 
+/**
+ * Builds a complete evaluation Excel workbook from an evaluation ID.
+ * @param {string} evaluationId
+ * @returns {Promise<{ buffer: Buffer, fileName: string }>}
+ * @throws {AppError} If the template is missing or evaluation not found
+ */
 const buildEvaluationWorkbook = async (evaluationId) => {
   const ExcelJS = getExcelJs();
   const evaluation = await evaluationService.getEvaluation(evaluationId);
@@ -1059,6 +1276,7 @@ const buildEvaluationWorkbook = async (evaluationId) => {
   );
 
   populateHeaders(workbook, evaluation, traineeInfo, traineeName);
+  populateBootcampActualCriteria(workbook, scoreMap, scoreboardAverages);
   populateBootcampDerivedActuals(workbook, scoreMap, scoreboardAverages);
   populateBootcampComputedSummaries(workbook, bootcampResults);
   populateBootcampEndorsementFeedback(workbook, scoreMap);

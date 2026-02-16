@@ -1,9 +1,19 @@
+/**
+ * Pusher Service
+ * Manages real-time event broadcasting via Pusher.
+ * @module services/pusherService
+ */
+
 const Pusher = require("pusher");
 const { env } = require("../config/env");
 const { ExternalServiceError } = require("../utils/errors");
 
 let client = null;
 
+/**
+ * Lazy-loads and returns the Pusher client instance.
+ * @returns {Pusher|null} Pusher client, or null if not configured
+ */
 const getClient = () => {
   if (client) return client;
   if (!env.pusherAppId || !env.pusherKey || !env.pusherSecret || !env.pusherCluster) {
