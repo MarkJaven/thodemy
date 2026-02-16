@@ -9,6 +9,25 @@ const { auditLogService } = require("../services/auditLogService");
 const { scheduleService } = require("../services/scheduleService");
 const { calculateCourseEndDate, generateCourseCode } = require("../utils/courseUtils");
 
+const parseDateOnly = (value) => {
+  if (!value) return null;
+  const normalized =
+    typeof value === "string" && value.includes("T") ? value : `${value}T00:00:00.000Z`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const resolveTrainingStartDate = (profile) => {
+  const trainingStart = parseDateOnly(profile?.training_starting_date);
+  if (trainingStart) return trainingStart;
+
+  const onboardingDate = parseDateOnly(profile?.onboarding_date);
+  if (!onboardingDate) return null;
+
+  // Onboarding +2 working days (inclusive working-day utility => +2 means totalDays=3).
+  return calculateCourseEndDate(onboardingDate, 3);
+};
+
 const ensureUniqueLPCode = async (attempts = 6) => {
   for (let i = 0; i < attempts; i += 1) {
     const code = generateCourseCode("LP");
@@ -156,7 +175,9 @@ const getLearningPathDetail = async (req, res, next) => {
 
     const { data: enrollments, error: enrollmentError } = await supabaseAdmin
       .from("learning_path_enrollments")
-      .select("id, user_id, status, enrolled_at")
+      .select(
+        "id, user_id, status, enrolled_at, start_date, end_date, target_start_date, target_end_date, actual_start_date, actual_end_date"
+      )
       .eq("learning_path_id", learningPathId);
     if (enrollmentError) {
       throw new ExternalServiceError("Unable to load enrollments", {
@@ -453,7 +474,7 @@ const enrollByCode = async (req, res, next) => {
 
     const { data: lp, error } = await supabaseAdmin
       .from("learning_paths")
-      .select("id, status, enrollment_enabled, enrollment_limit")
+      .select("id, status, enrollment_enabled, enrollment_limit, total_days, start_at")
       .eq("enrollment_code", enrollmentCode.trim())
       .maybeSingle();
     if (error) {
@@ -504,16 +525,46 @@ const enrollByCode = async (req, res, next) => {
       }
     }
 
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("id, onboarding_date, training_starting_date")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profileError) {
+      throw new ExternalServiceError("Unable to resolve training start date", {
+        code: profileError.code,
+        details: profileError.message,
+      });
+    }
+
+    const trainingStartDate =
+      resolveTrainingStartDate(profile) ||
+      (lp.start_at ? new Date(lp.start_at) : null) ||
+      new Date();
+    const totalDays = Number(lp.total_days) || 0;
+    const targetEndDate =
+      totalDays > 0 ? calculateCourseEndDate(trainingStartDate, totalDays) : trainingStartDate;
+    const targetStartIso = trainingStartDate.toISOString();
+    const targetEndIso = targetEndDate ? targetEndDate.toISOString() : null;
+
     const { data: enrollment, error: enrollError } = await supabaseAdmin
       .from("learning_path_enrollments")
       .insert({
         learning_path_id: lp.id,
         user_id: userId,
         status: "pending",
+        start_date: targetStartIso,
+        end_date: targetEndIso,
+        target_start_date: targetStartIso,
+        target_end_date: targetEndIso,
+        actual_start_date: null,
+        actual_end_date: null,
         created_by: userId,
         updated_by: userId,
       })
-      .select("id, learning_path_id, user_id, status, enrolled_at, created_at")
+      .select(
+        "id, learning_path_id, user_id, status, enrolled_at, start_date, end_date, target_start_date, target_end_date, actual_start_date, actual_end_date, created_at"
+      )
       .single();
     if (enrollError) {
       throw new ExternalServiceError("Unable to enroll in learning path", {
