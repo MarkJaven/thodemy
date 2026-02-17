@@ -138,6 +138,51 @@ const PERFORMANCE_CATEGORY_WEIGHTS: Record<string, number> = {
   pe_g: 15,
 };
 
+const PERFORMANCE_CATEGORY_ROWS = [
+  {
+    key: "pe_a",
+    category: "A",
+    label: "Category A - Employee Engagement",
+    weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_a,
+  },
+  {
+    key: "pe_b",
+    category: "B",
+    label: "Category B - Productivity",
+    weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_b,
+  },
+  {
+    key: "pe_c",
+    category: "C",
+    label: "Category C - Work Quality",
+    weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_c,
+  },
+  {
+    key: "pe_d",
+    category: "D",
+    label: "Category D - Customer Satisfaction",
+    weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_d,
+  },
+  {
+    key: "pe_e",
+    category: "E",
+    label: "Category E - Self Improvement",
+    weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_e,
+  },
+  {
+    key: "pe_f",
+    category: "F",
+    label: "Category F - Compliance",
+    weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_f,
+  },
+  {
+    key: "pe_g",
+    category: "G",
+    label: "Category G - Ethics and Values",
+    weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_g,
+  },
+] as const;
+
 const SCOREBOARD_CRITERIA = BOOTCAMP_CRITERIA.flatMap((group) =>
   group.items.map((item) => ({
     key: item.key,
@@ -179,6 +224,7 @@ const getCriterionMaxScore = (criterionKey: string) =>
 const SCOREBOARD_ACTIVITY_KEY_SEPARATOR = "::";
 const SCOREBOARD_META_CATEGORY = "__activity_meta";
 const BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET = "bootcamp_endorsement_feedback";
+const PERFORMANCE_FEEDBACK_SHEET = "performance_feedback";
 
 const getBootcampStrengthKey = (category: string) => `cat_${category}_strength`;
 
@@ -1069,9 +1115,9 @@ const toWholeScoreOption = (
 
   const computePerformancePercent = (): number => {
     let total = 0;
-    for (const [key, weight] of Object.entries(PERFORMANCE_CATEGORY_WEIGHTS)) {
-      const score = getScore("performance", key) ?? 0;
-      total += (score / 5) * weight;
+    for (const categoryRow of PERFORMANCE_CATEGORY_ROWS) {
+      const score = computeCategoryScore(categoryRow.category);
+      total += (score / 5) * categoryRow.weight;
     }
     return total;
   };
@@ -2104,51 +2150,15 @@ const toWholeScoreOption = (
 
   // Performance Evaluation Tab
   function renderPerformance() {
-    const perfCriteria = [
-      {
-        key: "pe_a",
-        label: "Category A - Employee Engagement",
-        weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_a,
-      },
-      {
-        key: "pe_b",
-        label: "Category B - Productivity",
-        weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_b,
-      },
-      {
-        key: "pe_c",
-        label: "Category C - Work Quality",
-        weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_c,
-      },
-      {
-        key: "pe_d",
-        label: "Category D - Customer Satisfaction",
-        weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_d,
-      },
-      {
-        key: "pe_e",
-        label: "Category E - Self Improvement",
-        weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_e,
-      },
-      {
-        key: "pe_f",
-        label: "Category F - Compliance",
-        weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_f,
-      },
-      {
-        key: "pe_g",
-        label: "Category G - Ethics and Values",
-        weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_g,
-      },
-    ];
-
     return (
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-white">
           Performance Evaluation
         </h3>
         <p className="text-sm text-slate-400">
-          Enter overall category scores for the performance evaluation period.
+          Actual is auto-computed from ScoreBoard and quiz/activity data. Fill
+          in Strength and For Improvements only (separate from Endorsement
+          Feedback).
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -2156,48 +2166,60 @@ const toWholeScoreOption = (
               <tr className="border-b border-white/10 text-left text-xs text-slate-400">
                 <th className="px-2 py-2 font-medium">Category</th>
                 <th className="px-2 py-2 font-medium w-16">Weight</th>
-                <th className="px-2 py-2 font-medium w-24">Score (0-5)</th>
-                <th className="px-2 py-2 font-medium">Remarks</th>
+                <th className="px-2 py-2 font-medium w-24">Actual</th>
+                <th className="px-2 py-2 font-medium">Strength</th>
+                <th className="px-2 py-2 font-medium">For Improvements</th>
               </tr>
             </thead>
             <tbody>
-              {perfCriteria.map((item) => (
+              {PERFORMANCE_CATEGORY_ROWS.map((item) => {
+                const categoryScore = computeCategoryScore(item.category);
+                const actualPercent = (categoryScore / 5) * item.weight;
+                const strengthKey = getBootcampStrengthKey(item.category);
+                const improvementKey = getBootcampImprovementKey(item.category);
+                return (
                 <tr key={item.key} className="border-b border-white/5">
                   <td className="px-2 py-2 text-white">{item.label}</td>
                   <td className="px-2 py-2 text-slate-400">{item.weight}%</td>
+                  <td className="px-2 py-2 text-white">
+                    {actualPercent.toFixed(1)}%
+                  </td>
                   <td className="px-2 py-2">
                     <input
-                      type="number"
-                      min={0}
-                      max={5}
-                      step={0.5}
-                      value={getScore("performance", item.key) ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value
-                          ? parseFloat(e.target.value)
-                          : null;
-                        setScoreValue("performance", item.key, val, {
-                          criterion_label: item.label,
-                          weight: item.weight,
-                          max_score: 5,
-                        });
-                      }}
-                      className="w-20 rounded border border-white/10 bg-ink-900 px-2 py-1 text-center text-white focus:border-purple-500 focus:outline-none"
+                      type="text"
+                      value={getRemarks(PERFORMANCE_FEEDBACK_SHEET, strengthKey)}
+                      onChange={(e) =>
+                        setRemarksValue(
+                          PERFORMANCE_FEEDBACK_SHEET,
+                          strengthKey,
+                          e.target.value,
+                        )
+                      }
+                      placeholder="Strength"
+                      className="w-full rounded border border-white/10 bg-ink-900 px-2 py-1 text-white placeholder-slate-600 focus:border-purple-500 focus:outline-none"
                     />
                   </td>
                   <td className="px-2 py-2">
                     <input
                       type="text"
-                      value={getRemarks("performance", item.key)}
+                      value={getRemarks(
+                        PERFORMANCE_FEEDBACK_SHEET,
+                        improvementKey,
+                      )}
                       onChange={(e) =>
-                        setRemarksValue("performance", item.key, e.target.value)
+                        setRemarksValue(
+                          PERFORMANCE_FEEDBACK_SHEET,
+                          improvementKey,
+                          e.target.value,
+                        )
                       }
-                      placeholder="Optional remarks"
+                      placeholder="For improvements"
                       className="w-full rounded border border-white/10 bg-ink-900 px-2 py-1 text-white placeholder-slate-600 focus:border-purple-500 focus:outline-none"
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -2319,8 +2341,7 @@ const toWholeScoreOption = (
             <thead>
               <tr className="border-b border-white/10 text-left text-xs text-slate-400">
                 <th className="px-2 py-2 font-medium">Criterion</th>
-                <th className="px-2 py-2 font-medium w-24">Score (0-5)</th>
-                <th className="px-2 py-2 font-medium">Remarks</th>
+                <th className="px-2 py-2 font-medium w-24">Score (1-5)</th>
               </tr>
             </thead>
             <tbody>
@@ -2329,7 +2350,7 @@ const toWholeScoreOption = (
                   return (
                     <tr key={item.key} className="border-b border-white/10 bg-white/5">
                       <td
-                        colSpan={3}
+                        colSpan={2}
                         className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-yellow-200"
                       >
                         {item.label}
@@ -2349,13 +2370,16 @@ const toWholeScoreOption = (
                     <td className="px-2 py-2">
                       <input
                         type="number"
-                        min={0}
+                        min={1}
                         max={5}
                         step={0.5}
                         value={getScore("behavioral", item.key) ?? ""}
                         onChange={(e) => {
-                          const val = e.target.value
+                          const parsed = e.target.value
                             ? parseFloat(e.target.value)
+                            : NaN;
+                          const val = Number.isFinite(parsed)
+                            ? Math.min(Math.max(parsed, 1), 5)
                             : null;
                           setScoreValue("behavioral", item.key, val, {
                             criterion_label: item.label,
@@ -2363,17 +2387,6 @@ const toWholeScoreOption = (
                           });
                         }}
                         className="w-20 rounded border border-white/10 bg-ink-900 px-2 py-1 text-center text-white focus:border-purple-500 focus:outline-none"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        type="text"
-                        value={getRemarks("behavioral", item.key)}
-                        onChange={(e) =>
-                          setRemarksValue("behavioral", item.key, e.target.value)
-                        }
-                        placeholder="Optional remarks"
-                        className="w-full rounded border border-white/10 bg-ink-900 px-2 py-1 text-white placeholder-slate-600 focus:border-purple-500 focus:outline-none"
                       />
                     </td>
                   </tr>
@@ -2413,7 +2426,7 @@ const toWholeScoreOption = (
             <thead>
               <tr className="border-b border-white/10 text-left text-xs text-slate-400">
                 <th className="px-2 py-2 font-medium">Criterion</th>
-                <th className="px-2 py-2 font-medium w-24">Score (0-5)</th>
+                <th className="px-2 py-2 font-medium w-24">Score (1-5)</th>
                 <th className="px-2 py-2 font-medium">Remarks</th>
               </tr>
             </thead>
@@ -2424,13 +2437,16 @@ const toWholeScoreOption = (
                   <td className="px-2 py-2">
                     <input
                       type="number"
-                      min={0}
+                      min={1}
                       max={5}
                       step={0.5}
                       value={getScore("technical", item.key) ?? ""}
                       onChange={(e) => {
-                        const val = e.target.value
+                        const parsed = e.target.value
                           ? parseFloat(e.target.value)
+                          : NaN;
+                        const val = Number.isFinite(parsed)
+                          ? Math.min(Math.max(parsed, 1), 5)
                           : null;
                         setScoreValue("technical", item.key, val, {
                           criterion_label: item.label,

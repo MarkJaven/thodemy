@@ -33,11 +33,12 @@ describe("evaluationExportService", () => {
       updated_at: "2026-02-16T00:00:00.000Z",
       scores: [
         {
+          // Manual performance scores should be ignored (auto-derived ngayon).
           sheet: "performance",
           category: "D",
           criterion_key: "pe_d",
           criterion_label: "Category D - Customer Satisfaction",
-          score: 5,
+          score: 0,
           max_score: 5,
           remarks: null,
         },
@@ -68,6 +69,20 @@ describe("evaluationExportService", () => {
           score: null,
           max_score: 5,
           remarks: "Improve SLA turnaround",
+        },
+        {
+          sheet: "performance_feedback",
+          criterion_key: "cat_A_strength",
+          score: null,
+          max_score: 5,
+          remarks: "Performance strength A",
+        },
+        {
+          sheet: "performance_feedback",
+          criterion_key: "cat_A_improvement",
+          score: null,
+          max_score: 5,
+          remarks: "Performance improvement A",
         },
         {
           sheet: "quiz_grades",
@@ -128,6 +143,16 @@ describe("evaluationExportService", () => {
           source: "manual",
         },
         {
+          sheet: "scoreboard",
+          category: "d1_responsiveness",
+          criterion_key: "activity_portfolio::d1_responsiveness",
+          criterion_label: "Portfolio Project",
+          score: 50,
+          max_score: 50,
+          remarks: null,
+          source: "manual",
+        },
+        {
           sheet: "behavioral",
           criterion_key: "bh_interpersonal_relations",
           criterion_label: "Interpersonal Relations",
@@ -171,6 +196,10 @@ describe("evaluationExportService", () => {
     expect(dashboard.getCell("F14").value).toEqual(
       expect.objectContaining({ formula: expect.any(String) })
     );
+    expect(dashboard.getCell("G14").value).toBe("Strong ownership");
+    expect(dashboard.getCell("L14").value).toBe("Sharpen communication");
+    expect(dashboard.getCell("G15").value).toBeNull();
+    expect(dashboard.getCell("L15").value).toBeNull();
     expect(performance.getCell("E12").value).toEqual(
       expect.objectContaining({ formula: expect.any(String) })
     );
@@ -219,10 +248,10 @@ describe("evaluationExportService", () => {
     // Feedback propagation checks.
     expect(endorsement.getCell("F12").value).toBe("Strong ownership");
     expect(endorsement.getCell("H12").value).toBe("Sharpen communication");
-    expect(performance.getCell("F12").value).toBe("Strong ownership");
-    expect(performance.getCell("H12").value).toBe("Sharpen communication");
-    expect(part1.getCell("F12").value).toBe("Strong ownership");
-    expect(part1.getCell("H12").value).toBe("Sharpen communication");
+    expect(performance.getCell("F12").value).toBe("Performance strength A");
+    expect(performance.getCell("H12").value).toBe("Performance improvement A");
+    expect(part1.getCell("F12").value).toBe("Performance strength A");
+    expect(part1.getCell("H12").value).toBe("Performance improvement A");
 
     // Weight correctness check (Category D contribution now 0.15).
     expect(performance.getCell("E15").value).toEqual(
