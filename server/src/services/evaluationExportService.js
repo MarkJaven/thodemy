@@ -219,6 +219,7 @@ const BOOTCAMP_ENDORSEMENT_CONTRIBUTION_CELL_MAP = {
 };
 
 const BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET = "bootcamp_endorsement_feedback";
+const PERFORMANCE_FEEDBACK_SHEET = "performance_feedback";
 
 const BOOTCAMP_ENDORSEMENT_FEEDBACK_ROW_MAP = {
   A: 12,
@@ -300,19 +301,28 @@ const getScoreRemarks = (scoreMap, sheet, key) => {
   return entry?.remarks || "";
 };
 
-/** Retrieves bootcamp feedback strings (strength/improvement) for a category. */
-const getBootcampFeedbackForCategory = (scoreMap, category) => {
+/** Retrieves feedback strings (strength/improvement) for a category from a specific sheet. */
+const getCategoryFeedbackForSheet = (scoreMap, sheet, category) => {
   const strengthKey = `cat_${category}_strength`;
   const improvementKey = `cat_${category}_improvement`;
   const strength = String(
-    getScoreRemarks(scoreMap, BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET, strengthKey) || ""
+    getScoreRemarks(scoreMap, sheet, strengthKey) || ""
   ).trim();
   const improvement = String(
-    getScoreRemarks(scoreMap, BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET, improvementKey) || ""
+    getScoreRemarks(scoreMap, sheet, improvementKey) || ""
   ).trim();
 
   return { strength, improvement };
 };
+
+/** Retrieves bootcamp endorsement feedback strings (strength/improvement) for a category. */
+const getBootcampFeedbackForCategory = (scoreMap, category) =>
+  getCategoryFeedbackForSheet(scoreMap, BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET, category);
+
+/** Retrieves performance feedback strings (strength/improvement) for a category. */
+const getPerformanceFeedbackForCategory = (scoreMap, category) =>
+  getCategoryFeedbackForSheet(scoreMap, PERFORMANCE_FEEDBACK_SHEET, category);
+
 
 /** Normalizes a score to a 0–5 scale based on its max possible score. */
 const normalizeScoreToFive = (score, maxScore) => {
@@ -514,18 +524,25 @@ const computeBootcampResults = (scoreMap, scoreboardAverages) => {
 };
 
 /**
- * Computes performance evaluation results: per-category scores, contributions, and total.
+ * Computes performance evaluation results from auto-derived scoreboard data:
+ * per-category scores, contributions, and total.
  * @param {Map} scoreMap
+ * @param {object} scoreboardAverages
  * @returns {{ categoryScores: object, categoryContributions: object, totalContribution: number }}
  */
-const computePerformanceResults = (scoreMap) => {
+const computePerformanceResults = (scoreMap, scoreboardAverages) => {
   const categoryScores = {};
   const categoryContributions = {};
   let totalContribution = 0;
+  const bootcampByCategory = new Map(
+    BOOTCAMP_CATEGORY_CONFIG.map((categoryConfig) => [categoryConfig.category, categoryConfig])
+  );
 
   for (const config of PERFORMANCE_CATEGORY_CONFIG) {
-    const score = getScoreValue(scoreMap, "performance", config.key);
-    const normalizedScore = score ?? 0;
+    const sourceCategoryConfig = bootcampByCategory.get(config.category);
+    const normalizedScore = sourceCategoryConfig
+      ? computeBootcampCategoryAverage(scoreMap, scoreboardAverages, sourceCategoryConfig)
+      : 0;
     const contribution = (normalizedScore / 5) * config.weight;
 
     categoryScores[config.category] = round(normalizedScore, 4);
@@ -853,7 +870,7 @@ const populateBootcampDerivedActuals = (workbook, scoreMap, scoreboardAverages) 
 };
 
 /** Writes category contributions to the Dashboard sheet for both bootcamp and performance. */
-const populateDashboardScores = (workbook, bootcampResults, performanceResults) => {
+const populateDashboardScores = (workbook, scoreMap, bootcampResults, performanceResults) => {
   const dashboard = workbook.getWorksheet("Dashboard");
   if (!dashboard) return;
 
@@ -872,6 +889,18 @@ const populateDashboardScores = (workbook, bootcampResults, performanceResults) 
       `F${performanceRows[index]}`,
       round(performanceContribution, 4)
     );
+
+    // Dashboard FEEDBACK FORM (top table) should mirror Bootcamp Endorsement feedback.
+    const feedbackRow = bootcampRows[index];
+    const { strength, improvement } = getBootcampFeedbackForCategory(scoreMap, category);
+    overwriteCell(dashboard, `G${feedbackRow}`, null);
+    overwriteCell(dashboard, `L${feedbackRow}`, null);
+    if (strength) {
+      overwriteCell(dashboard, `G${feedbackRow}`, strength);
+    }
+    if (improvement) {
+      overwriteCell(dashboard, `L${feedbackRow}`, improvement);
+    }
   }
 };
 
@@ -967,7 +996,7 @@ const populatePerformanceSheets = (workbook, scoreMap, performanceResults) => {
     overwriteCell(part1Sheet, `F${config.row}`, null);
     overwriteCell(part1Sheet, `H${config.row}`, null);
 
-    const { strength, improvement } = getBootcampFeedbackForCategory(
+    const { strength, improvement } = getPerformanceFeedbackForCategory(
       scoreMap,
       config.category
     );
@@ -1326,7 +1355,7 @@ const buildEvaluationWorkbook = async (evaluationId) => {
 
   const scoreboardAverages = populateScoreBoard(workbook, scoreMap);
   const bootcampResults = computeBootcampResults(scoreMap, scoreboardAverages);
-  const performanceResults = computePerformanceResults(scoreMap);
+  const performanceResults = computePerformanceResults(scoreMap, scoreboardAverages);
   const summaryContributions = computeSummaryContributions(scoreMap, scoreboardAverages);
   const overallContribution = round(
     (bootcampResults.totalContribution + performanceResults.totalContribution) / 2,
@@ -1338,7 +1367,7 @@ const buildEvaluationWorkbook = async (evaluationId) => {
   populateBootcampDerivedActuals(workbook, scoreMap, scoreboardAverages);
   populateBootcampComputedSummaries(workbook, bootcampResults);
   populateBootcampEndorsementFeedback(workbook, scoreMap);
-  populateDashboardScores(workbook, bootcampResults, performanceResults);
+  populateDashboardScores(workbook, scoreMap, bootcampResults, performanceResults);
   populatePerformanceSheets(workbook, scoreMap, performanceResults);
   populateTechnicalScores(workbook, scoreMap);
   populateBehavioralScores(workbook, scoreMap);
