@@ -149,6 +149,10 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
 
   const handleProfileSave = async () => {
     if (!selectedUser) return;
+    if (!selectedUser.profile_setup_completed) {
+      setProfileError("User must complete account setup before profile editing is allowed.");
+      return;
+    }
 
     const trimmedUsername = profileForm.username.trim();
     const existingUsername = (selectedUser.username ?? "").trim();
@@ -382,6 +386,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   const profileDisplayName = getDisplayName(selectedUser);
   const profileInitial = getUserInitial(selectedUser);
   const profileRoleConfig = selectedUser ? roleConfig[selectedUser.role] || roleConfig.user : roleConfig.user;
+  const canEditSelectedProfile = Boolean(selectedUser?.profile_setup_completed);
   const profileHasChanges = !!selectedUser && (
     profileForm.firstName !== (selectedUser.first_name ?? "") ||
     profileForm.lastName !== (selectedUser.last_name ?? "") ||
@@ -512,6 +517,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               <button
                 type="button"
                 onClick={() => setIsProfileEditing(true)}
+                disabled={!canEditSelectedProfile}
                 className="btn-primary"
               >
                 Edit Profile
@@ -535,6 +541,15 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               <div className="flex flex-wrap gap-2">
                 <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest ${profileRoleConfig.color} ${profileRoleConfig.bgColor} ${profileRoleConfig.borderColor}`}>
                   {selectedUser?.role ?? "user"}
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest ${
+                    canEditSelectedProfile
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                      : "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                  }`}
+                >
+                  {canEditSelectedProfile ? "Setup complete" : "Setup pending"}
                 </span>
                 <span className="inline-flex items-center rounded-full border border-white/10 bg-ink-900 px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest text-slate-300">
                   ID {selectedUser?.id?.slice(0, 8) || "N/A"}
@@ -675,6 +690,15 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <path d="M12 8v4M12 16h.01" />
               </svg>
               {profileError}
+            </div>
+          )}
+          {!canEditSelectedProfile && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" />
+              </svg>
+              User must complete account setup before profile editing is allowed.
             </div>
           )}
         </div>
