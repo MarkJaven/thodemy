@@ -114,6 +114,17 @@ const PERFORMANCE_CATEGORY_CONFIG = [
   { key: "pe_g", category: "G", weight: 0.15, row: 18 },
 ];
 
+/** Part 1 ACTUAL cells map to section totals from Technical Evaluation. */
+const PART1_TECHNICAL_TOTAL_CELL_BY_CATEGORY = {
+  A: "I18",
+  B: "I21",
+  C: "I24",
+  D: "I28",
+  E: "I31",
+  F: "I35",
+  G: "I40",
+};
+
 /** Maps technical evaluation criteria to their Excel cell references. */
 const TECHNICAL_CELL_MAP = [
   { key: "te_technical_knowledge", cell: "H15" },
@@ -706,6 +717,17 @@ const overwriteCellWithFormulaResult = (worksheet, cellRef, result) => {
   overwriteCell(worksheet, cellRef, nextResult);
 };
 
+/** Reads a numeric value from a cell, preferring cached formula result when present. */
+const getCellNumericValue = (worksheet, cellRef) => {
+  if (!worksheet || !cellRef) return null;
+  const cellValue = worksheet.getCell(cellRef).value;
+  if (cellValue && typeof cellValue === "object") {
+    const formulaResult = toNumber(cellValue.result);
+    if (formulaResult !== null) return formulaResult;
+  }
+  return toNumber(cellValue);
+};
+
 /** Clears all cell values in a column within the given row range. */
 const clearColumnRange = (worksheet, column, startRow, endRow) => {
   if (!worksheet) return;
@@ -886,9 +908,10 @@ const populateBootcampDerivedActuals = (workbook, scoreMap, scoreboardAverages) 
   overwriteCell(scorecard, "N44", ethicsScore > 0 ? round(ethicsScore, 2) : 0);
 };
 
-/** Writes category contributions to the Dashboard sheet for both bootcamp and performance. */
-const populateDashboardScores = (workbook, scoreMap, bootcampResults, performanceResults) => {
+/** Writes category contributions to the Dashboard sheet. */
+const populateDashboardScores = (workbook, scoreMap, bootcampResults) => {
   const dashboard = workbook.getWorksheet("Dashboard");
+  const part1Sheet = workbook.getWorksheet("Part 1 Evaluation");
   if (!dashboard) return;
 
   const categories = ["A", "B", "C", "D", "E", "F", "G"];
@@ -898,13 +921,19 @@ const populateDashboardScores = (workbook, scoreMap, bootcampResults, performanc
   for (let index = 0; index < categories.length; index += 1) {
     const category = categories[index];
     const bootcampContribution = bootcampResults.categoryContributions[category] || 0;
-    const performanceContribution = performanceResults.categoryContributions[category] || 0;
+    const part1Row =
+      PERFORMANCE_CATEGORY_CONFIG.find((config) => config.category === category)?.row ||
+      null;
+    const part1Actual = getCellNumericValue(
+      part1Sheet,
+      part1Row ? `E${part1Row}` : null
+    );
 
     overwriteCellWithFormulaResult(dashboard, `F${bootcampRows[index]}`, round(bootcampContribution, 4));
     overwriteCellWithFormulaResult(
       dashboard,
       `F${performanceRows[index]}`,
-      round(performanceContribution, 4)
+      round(part1Actual ?? 0, 4)
     );
 
     // Dashboard bootcamp rows: performance feedback (GHIJK 14-20, LMNOP 14-20).
@@ -1012,12 +1041,16 @@ const populateBootcampEndorsementFeedback = (workbook, scoreMap) => {
 const populatePerformanceSheets = (workbook, scoreMap, performanceResults) => {
   const performanceSheet = workbook.getWorksheet("Performance Evaluation");
   const part1Sheet = workbook.getWorksheet("Part 1 Evaluation");
+  const technicalSheet = workbook.getWorksheet("Technical Evaluation");
 
   for (const config of PERFORMANCE_CATEGORY_CONFIG) {
     const contribution = performanceResults.categoryContributions[config.category] || 0;
+    const technicalTotalCell =
+      PART1_TECHNICAL_TOTAL_CELL_BY_CATEGORY[config.category] || null;
+    const part1Actual = getCellNumericValue(technicalSheet, technicalTotalCell) ?? 0;
 
     overwriteCellWithFormulaResult(performanceSheet, `E${config.row}`, round(contribution, 4));
-    overwriteCellWithFormulaResult(part1Sheet, `E${config.row}`, round(contribution, 4));
+    overwriteCellWithFormulaResult(part1Sheet, `E${config.row}`, round(part1Actual, 4));
 
     // Clear template defaults/placeholders first.
     overwriteCell(performanceSheet, `F${config.row}`, null);
@@ -1045,18 +1078,107 @@ const populatePerformanceSheets = (workbook, scoreMap, performanceResults) => {
       overwriteCell(part1Sheet, `H${config.row}`, part1Feedback.improvement);
     }
   }
+
+  // Keep total rows consistent in exported files even without external formula recalculation.
+  const part1PrimaryTotal = round(
+    [12, 13, 14, 15, 16]
+      .map((row) => getCellNumericValue(part1Sheet, `E${row}`) || 0)
+      .reduce((sum, value) => sum + value, 0),
+    4
+  );
+  const part1SecondaryTotal = round(
+    [17, 18]
+      .map((row) => getCellNumericValue(part1Sheet, `E${row}`) || 0)
+      .reduce((sum, value) => sum + value, 0),
+    4
+  );
+  overwriteCellWithFormulaResult(part1Sheet, "E19", part1PrimaryTotal);
+  overwriteCellWithFormulaResult(part1Sheet, "F19", part1SecondaryTotal);
+
+  const perfPrimaryTotal = round(
+    [12, 13, 14, 15, 16]
+      .map((row) => getCellNumericValue(performanceSheet, `E${row}`) || 0)
+      .reduce((sum, value) => sum + value, 0),
+    4
+  );
+  const perfSecondaryTotal = round(
+    [17, 18]
+      .map((row) => getCellNumericValue(performanceSheet, `E${row}`) || 0)
+      .reduce((sum, value) => sum + value, 0),
+    4
+  );
+  overwriteCellWithFormulaResult(performanceSheet, "F19", perfPrimaryTotal);
+  overwriteCellWithFormulaResult(performanceSheet, "F20", perfSecondaryTotal);
+  overwriteCellWithFormulaResult(
+    performanceSheet,
+    "E19",
+    round(perfPrimaryTotal + perfSecondaryTotal, 4)
+  );
 };
 
-/** Writes technical evaluation scores to their mapped cells. */
+/** Weight and total-row config for the Technical Evaluation sheet. */
+const TECHNICAL_WEIGHT_MAP = {
+  H15: 0.10, H16: 0.08, H17: 0.07,
+  H20: 0.20,
+  H23: 0.15,
+  H26: 0.08, H27: 0.07,
+  H30: 0.05,
+  H33: 0.03, H34: 0.02,
+  H39: 0.15,
+};
+
+const TECHNICAL_MAX_SCORE = 5;
+
+/** Section total rows: each maps to { hCell, iCell, members[] } */
+const TECHNICAL_TOTAL_ROWS = [
+  { h: "H18", i: "I18", members: ["H15", "H16", "H17"] },
+  { h: "H21", i: "I21", members: ["H20"] },
+  { h: "H24", i: "I24", members: ["H23"] },
+  { h: "H28", i: "I28", members: ["H26", "H27"] },
+  { h: "H31", i: "I31", members: ["H30"] },
+  { h: "H35", i: "I35", members: ["H33", "H34"] },
+  { h: "H40", i: "I40", members: ["H39"] },
+];
+
+/** Writes technical evaluation scores to their mapped cells and updates COMPUTED % results. */
 const populateTechnicalScores = (workbook, scoreMap) => {
   const technical = workbook.getWorksheet("Technical Evaluation");
   if (!technical) return;
 
+  const scoreByCell = new Map();
+
   for (const config of TECHNICAL_CELL_MAP) {
     overwriteCell(technical, config.cell, null);
     const score = getScoreValue(scoreMap, "technical", config.key);
-    overwriteCell(technical, config.cell, score !== null ? round(score, 2) : null);
+    const value = score !== null ? round(score, 2) : null;
+    overwriteCell(technical, config.cell, value);
+    scoreByCell.set(config.cell, value);
+
+    // Update COMPUTED % (column I) cached result: formula is (H/5)*weight
+    const row = config.cell.slice(1);
+    const weight = TECHNICAL_WEIGHT_MAP[config.cell] || 0;
+    const computed = value !== null ? round((value / TECHNICAL_MAX_SCORE) * weight, 4) : 0;
+    overwriteCellWithFormulaResult(technical, `I${row}`, computed);
   }
+
+  // Update section total rows.
+  for (const total of TECHNICAL_TOTAL_ROWS) {
+    const hSum = total.members.reduce((sum, cell) => sum + (toNumber(scoreByCell.get(cell)) || 0), 0);
+    const iSum = total.members.reduce((sum, cell) => {
+      const val = toNumber(scoreByCell.get(cell)) || 0;
+      const weight = TECHNICAL_WEIGHT_MAP[cell] || 0;
+      return sum + (val / TECHNICAL_MAX_SCORE) * weight;
+    }, 0);
+    overwriteCellWithFormulaResult(technical, total.h, round(hSum, 2));
+    overwriteCellWithFormulaResult(technical, total.i, round(iSum, 4));
+  }
+
+  // Update grand total in I12 (TOTAL % SCORE header row).
+  const grandTotal = Array.from(scoreByCell.entries()).reduce((sum, [cell, val]) => {
+    const weight = TECHNICAL_WEIGHT_MAP[cell] || 0;
+    return sum + ((toNumber(val) || 0) / TECHNICAL_MAX_SCORE) * weight;
+  }, 0);
+  overwriteCell(technical, "I12", round(grandTotal, 4));
 };
 
 /** Writes behavioral evaluation scores to their mapped cells. */
@@ -1363,6 +1485,14 @@ const populatePerformanceSummary = (
   overwriteCell(summary, "E17", summaryContributions.E);
 };
 
+/** Removes a worksheet by name if it exists. */
+const removeWorksheetByName = (workbook, worksheetName) => {
+  if (!workbook || !worksheetName) return;
+  const worksheet = workbook.getWorksheet(worksheetName);
+  if (!worksheet) return;
+  workbook.removeWorksheet(worksheet.id);
+};
+
 /**
  * Builds a complete evaluation Excel workbook from an evaluation ID.
  * @param {string} evaluationId
@@ -1387,6 +1517,9 @@ const buildEvaluationWorkbook = async (evaluationId) => {
     });
   }
 
+  // Export should not include raw Checklist tab from the source template.
+  removeWorksheetByName(workbook, "Checklist");
+
   workbook.calcProperties.fullCalcOnLoad = true;
 
   const scoreboardAverages = populateScoreBoard(workbook, scoreMap);
@@ -1403,9 +1536,9 @@ const buildEvaluationWorkbook = async (evaluationId) => {
   populateBootcampDerivedActuals(workbook, scoreMap, scoreboardAverages);
   populateBootcampComputedSummaries(workbook, bootcampResults);
   populateBootcampEndorsementFeedback(workbook, scoreMap);
-  populateDashboardScores(workbook, scoreMap, bootcampResults, performanceResults);
-  populatePerformanceSheets(workbook, scoreMap, performanceResults);
   populateTechnicalScores(workbook, scoreMap);
+  populatePerformanceSheets(workbook, scoreMap, performanceResults);
+  populateDashboardScores(workbook, scoreMap, bootcampResults);
   populateBehavioralScores(workbook, scoreMap);
   populatePerformanceSummary(
     workbook,
