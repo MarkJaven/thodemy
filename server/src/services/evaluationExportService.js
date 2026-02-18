@@ -860,8 +860,15 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   overwriteCell(
     regularization,
     "D34",
-    traineeInfo.current_job_title || traineeInfo.position || "Software Developer I"
+    traineeInfo.current_job_title || null
   );
+  overwriteCell(
+    regularization,
+    "E34",
+    traineeInfo.current_job_title || null
+  );
+  overwriteCell(regularization, "G57", safeUpper(traineeName));
+  overwriteCell(regularization, "H57", safeUpper(traineeName));
 };
 
 /** Populates derived actual scores on the BootCampScoreCard (compliance, quiz, ethics). */
@@ -1153,6 +1160,48 @@ const populatePerformanceSheets = (workbook, scoreMap, performanceResults) => {
     "E19",
     round(perfPrimaryTotal + perfSecondaryTotal, 4)
   );
+};
+
+/** Writes Regularization Endorsement computed scoring/results and clears stale notes. */
+const populateRegularizationEndorsement = (workbook) => {
+  const regularization = workbook.getWorksheet("Regularization Endorsement");
+  const performanceSheet = workbook.getWorksheet("Performance Evaluation");
+  if (!regularization || !performanceSheet) return;
+
+  const performanceTotal = getCellNumericValue(performanceSheet, "F19") ?? 0;
+  const behavioralTotal = getCellNumericValue(performanceSheet, "F20") ?? 0;
+  const finalRating = round(performanceTotal + behavioralTotal, 4);
+  const setComputedValue = (cellRef, value) => {
+    const computed = round(value, 4);
+    // ExcelJS may drop cached formula result when it is 0.
+    // Use plain numeric 0 so exported files always show computed zero values.
+    if (computed === 0) {
+      overwriteCell(regularization, cellRef, 0);
+      return;
+    }
+    overwriteCellWithFormulaResult(regularization, cellRef, computed);
+  };
+
+  // Performance Review scoring block.
+  setComputedValue("E16", performanceTotal);
+  setComputedValue("E17", performanceTotal);
+  setComputedValue("E18", performanceTotal);
+  setComputedValue("E19", performanceTotal);
+
+  // Behavioral Evaluation scoring block.
+  setComputedValue("E22", behavioralTotal);
+  setComputedValue("E23", behavioralTotal);
+  setComputedValue("E24", behavioralTotal);
+  setComputedValue("E25", behavioralTotal);
+
+  // Final rating.
+  setComputedValue("E27", finalRating);
+
+  // Remove stale template description comments.
+  [16, 17, 18, 19].forEach((row) => {
+    overwriteCell(regularization, `G${row}`, null);
+    overwriteCell(regularization, `H${row}`, null);
+  });
 };
 
 /** Weight and total-row config for the Technical Evaluation sheet. */
@@ -1625,6 +1674,7 @@ const buildEvaluationWorkbook = async (evaluationId) => {
   populateBootcampEndorsementFeedback(workbook, scoreMap);
   populateTechnicalScores(workbook, scoreMap);
   populatePerformanceSheets(workbook, scoreMap, performanceResults);
+  populateRegularizationEndorsement(workbook);
   populateDashboardScores(workbook, scoreMap, bootcampResults);
   populateBehavioralScores(workbook, scoreMap);
   populateSheet2Ratings(workbook, scoreMap);
