@@ -798,15 +798,26 @@ const clearColumnRange = (worksheet, column, startRow, endRow) => {
  * @param {object} traineeInfo - Trainee metadata
  * @param {string} traineeName - Display name
  */
-const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
+const populateHeaders = (
+  workbook,
+  evaluation,
+  traineeInfo,
+  traineeName,
+  { exportedByName } = {}
+) => {
   const employeeName = safeUpper(traineeName);
+  const exportingAdminName = safeUpper(exportedByName);
   const department = safeUpper(traineeInfo.department);
   const position = safeUpper(traineeInfo.position || "TRAINEE");
   const trainer = safeUpper(traineeInfo.trainer);
+  const facilitatorOrTrainer = exportingAdminName || trainer;
   const endorsedDepartment = safeUpper(traineeInfo.endorsed_department || traineeInfo.department);
+  const supervisorNameOnly = safeUpper(traineeInfo.supervisor);
   const supervisor = safeUpper(
     buildTitledName(traineeInfo.supervisor_title, traineeInfo.supervisor)
   );
+  const supervisorForPerformance = exportingAdminName || supervisor || trainer;
+  const supervisorForPart1AndTechnical = supervisorNameOnly || trainer;
   const supervisorPosition = String(traineeInfo.supervisor_position || "").trim();
   const coveredPeriod = formatCoveredPeriod(evaluation.period_start, evaluation.period_end);
   const dateHired = formatDateText(
@@ -820,7 +831,7 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   overwriteCell(dashboard, "D5", "SSCGI BOOTCAMP");
   overwriteCell(dashboard, "D6", coveredPeriod);
   overwriteCell(dashboard, "D7", endorsedDepartment);
-  overwriteCell(dashboard, "D8", trainer);
+  overwriteCell(dashboard, "D8", facilitatorOrTrainer);
 
   const scorecard = workbook.getWorksheet("BootCampScoreCard");
   // In template: labels are on merged B:C (green), values are on merged D:F (yellow).
@@ -833,8 +844,12 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
     "D7",
     formatDateText(traineeInfo.date_endorsed || traineeInfo.target_join_date)
   );
-  overwriteCell(scorecard, "D8", trainer);
-  overwriteCell(scorecard, "B56", employeeName);
+  overwriteCell(scorecard, "D8", facilitatorOrTrainer);
+  // Replace template "(Signature over Printed Name)" with the trainee name.
+  overwriteCell(scorecard, "B57", employeeName);
+  // Ensure supervisor/recommended acknowledgements use exporter admin full name.
+  overwriteCell(scorecard, "H57", supervisorForPerformance);
+  overwriteCell(scorecard, "M57", "(Signature over Printed Name)");
 
   const endorsement = workbook.getWorksheet("BootcampEndorsementScoreCard");
   overwriteCell(endorsement, "E4", "SSCGI BOOTCAMP");
@@ -842,24 +857,27 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   overwriteCell(endorsement, "E5", employeeName);
   overwriteCell(endorsement, "E6", dateHired);
   overwriteCell(endorsement, "E7", coveredPeriod);
-  overwriteCell(endorsement, "E8", trainer);
+  overwriteCell(endorsement, "E8", supervisorForPerformance);
   overwriteCell(endorsement, "C26", employeeName);
+  overwriteCell(endorsement, "H26", supervisorForPerformance);
 
   const performance = workbook.getWorksheet("Performance Evaluation");
   overwriteCell(performance, "E4", endorsedDepartment);
   overwriteCell(performance, "E5", employeeName);
   overwriteCell(performance, "E6", dateHired);
   overwriteCell(performance, "E7", coveredPeriod);
-  overwriteCell(performance, "E8", trainer);
+  overwriteCell(performance, "E8", supervisorForPerformance);
   overwriteCell(performance, "D26", employeeName);
+  overwriteCell(performance, "H26", supervisorForPerformance);
 
   const part1 = workbook.getWorksheet("Part 1 Evaluation");
   overwriteCell(part1, "E4", endorsedDepartment);
   overwriteCell(part1, "E5", employeeName);
   overwriteCell(part1, "E6", dateHired);
   overwriteCell(part1, "E7", coveredPeriod);
-  overwriteCell(part1, "E8", supervisor || trainer);
+  overwriteCell(part1, "E8", supervisorForPart1AndTechnical);
   overwriteCell(part1, "D26", employeeName);
+  overwriteCell(part1, "H26", supervisorForPart1AndTechnical);
 
   const behavioral = workbook.getWorksheet("Behavioral Evaluation");
   overwriteCell(behavioral, "B6", safeUpper(traineeName));
@@ -873,8 +891,9 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   overwriteCell(technical, "F6", coveredPeriod);
   overwriteCell(technical, "D7", position || "TRAINEE");
   overwriteCell(technical, "F7", reviewedDate);
-  overwriteCell(technical, "D8", supervisor || trainer);
+  overwriteCell(technical, "D8", supervisorForPart1AndTechnical);
   overwriteCell(technical, "D47", employeeName);
+  overwriteCell(technical, "F47", supervisorForPart1AndTechnical);
 
   const regularization = workbook.getWorksheet("Regularization Endorsement");
   overwriteCell(regularization, "D6", safeUpper(traineeName));
@@ -1701,10 +1720,11 @@ const removeWorksheetByName = (workbook, worksheetName) => {
 /**
  * Builds a complete evaluation Excel workbook from an evaluation ID.
  * @param {string} evaluationId
+ * @param {{ exportedByName?: string }} [options]
  * @returns {Promise<{ buffer: Buffer, fileName: string }>}
  * @throws {AppError} If the template is missing or evaluation not found
  */
-const buildEvaluationWorkbook = async (evaluationId) => {
+const buildEvaluationWorkbook = async (evaluationId, options = {}) => {
   const ExcelJS = getExcelJs();
   const evaluation = await evaluationService.getEvaluation(evaluationId);
   const scoreMap = buildScoreMap(evaluation.scores ?? []);
@@ -1742,7 +1762,7 @@ const buildEvaluationWorkbook = async (evaluationId) => {
     4
   );
 
-  populateHeaders(workbook, evaluation, traineeInfo, traineeName);
+  populateHeaders(workbook, evaluation, traineeInfo, traineeName, options);
   populateBootcampActualCriteria(workbook, scoreMap, scoreboardAverages);
   populateBootcampDerivedActuals(workbook, scoreMap, scoreboardAverages);
   populateBootcampComputedSummaries(workbook, bootcampResults);

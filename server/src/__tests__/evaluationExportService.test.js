@@ -232,7 +232,9 @@ describe("evaluationExportService", () => {
       ],
     });
 
-    const { buffer } = await buildEvaluationWorkbook("eval-1");
+    const { buffer } = await buildEvaluationWorkbook("eval-1", {
+      exportedByName: "Erica Admin",
+    });
     expect(adminReportService.appendChecklistSheetToWorkbook).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({ userId: "user-1", sheetName: "Checklist" })
@@ -268,9 +270,19 @@ describe("evaluationExportService", () => {
     expect(performance.getCell("E6").value).toBe("2025-01-01");
     expect(part1.getCell("E6").value).toBe("2025-01-01");
     expect(technicalSheet.getCell("D6").value).toBe("2025-01-01");
-    expect(scorecard.getCell("B56").value).toBe("JUAN DELA CRUZ");
-    expect(part1.getCell("E8").value).toBe("MS. MARIA SANTOS");
-    expect(technicalSheet.getCell("D8").value).toBe("MS. MARIA SANTOS");
+    expect(dashboard.getCell("D8").value).toBe("ERICA ADMIN");
+    expect(scorecard.getCell("D8").value).toBe("ERICA ADMIN");
+    expect(endorsement.getCell("E8").value).toBe("ERICA ADMIN");
+    expect(performance.getCell("E8").value).toBe("ERICA ADMIN");
+    expect(performance.getCell("H26").value).toBe("ERICA ADMIN");
+    expect(scorecard.getCell("B57").value).toBe("JUAN DELA CRUZ");
+    expect(scorecard.getCell("H57").value).toBe("ERICA ADMIN");
+    expect(scorecard.getCell("M57").value).toBe("(Signature over Printed Name)");
+    expect(endorsement.getCell("H26").value).toBe("ERICA ADMIN");
+    expect(part1.getCell("E8").value).toBe("MARIA SANTOS");
+    expect(part1.getCell("H26").value).toBe("MARIA SANTOS");
+    expect(technicalSheet.getCell("D8").value).toBe("MARIA SANTOS");
+    expect(technicalSheet.getCell("F47").value).toBe("MARIA SANTOS");
     expect(endorsement.getCell("C26").value).toBe("JUAN DELA CRUZ");
     expect(performance.getCell("D26").value).toBe("JUAN DELA CRUZ");
     expect(part1.getCell("D26").value).toBe("JUAN DELA CRUZ");

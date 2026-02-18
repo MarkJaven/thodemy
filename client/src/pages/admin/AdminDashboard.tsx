@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useUser } from "../../hooks/useUser";
+import { useUserRole } from "../../hooks/useUserRole";
+import { supabase } from "../../lib/supabaseClient";
 import { superAdminService } from "../../services/superAdminService";
 import { auditLogService } from "../../services/auditLogService";
 import { adminTaskService } from "../../services/adminTaskService";
@@ -116,6 +118,32 @@ const EvaluationIcon = () => (
   </svg>
 );
 
+const ProfileIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+const formatDate = (value?: string | null) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const getTodayDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 type NavItem =
   | "overview"
   | "courses"
@@ -127,7 +155,8 @@ type NavItem =
   | "quiz"
   | "forms"
   | "reports"
-  | "evaluation";
+  | "evaluation"
+  | "profile";
 
 interface DashboardStats {
   activeCourses: number;
@@ -221,6 +250,93 @@ const AdminDashboard = () => {
 
   const { signOut } = useAuth();
   const { user } = useUser();
+  const { role: userRole, loading: roleLoading } = useUserRole(user?.id);
+  const todayDate = getTodayDateString();
+
+  // Profile state
+  const [profile, setProfile] = useState<any>(null);
+  const [profileDraft, setProfileDraft] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [isProfileEditing, setIsProfileEditing] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileUpdateError, setProfileUpdateError] = useState<string | null>(null);
+  const [profileUpdateSuccess, setProfileUpdateSuccess] = useState<string | null>(null);
+
+  // Fetch profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user || !supabase) return;
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        if (error) throw error;
+        setProfile(data);
+        setProfileDraft(data);
+      } catch (err) {
+        console.error('Error fetching profile:', err);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+    fetchProfile();
+  }, [user]);
+
+  const handleProfileFieldChange = (field: string, value: string) => {
+    setProfileDraft((prev: any) => ({ ...(prev ?? {}), [field]: value }));
+  };
+
+  const startProfileEdit = () => {
+    setProfileDraft(profile ?? {});
+    setIsProfileEditing(true);
+    setProfileUpdateError(null);
+    setProfileUpdateSuccess(null);
+  };
+
+  const cancelProfileEdit = () => {
+    setIsProfileEditing(false);
+    setProfileDraft(profile ?? {});
+    setProfileUpdateError(null);
+  };
+
+  const handleProfileSave = async () => {
+    if (!supabase || !user?.id) return;
+    if (profileDraft?.birthday && profileDraft.birthday > todayDate) {
+      setProfileUpdateError("Birthdate must not exceed today.");
+      return;
+    }
+    setProfileSaving(true);
+    setProfileUpdateError(null);
+    setProfileUpdateSuccess(null);
+    try {
+      const updates = {
+        first_name: profileDraft?.first_name ?? "",
+        last_name: profileDraft?.last_name ?? "",
+        gender: profileDraft?.gender ?? "",
+        birthday: profileDraft?.birthday ?? "",
+        address: profileDraft?.address ?? "",
+        company_id_no: profileDraft?.company_id_no ?? "",
+      };
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", user.id);
+      if (updateError) throw updateError;
+      setProfile((prev: any) => ({ ...(prev ?? {}), ...updates }));
+      setProfileDraft((prev: any) => ({ ...(prev ?? {}), ...updates }));
+      setIsProfileEditing(false);
+      setProfileUpdateSuccess("Profile updated.");
+      setTimeout(() => setProfileUpdateSuccess(null), 3000);
+    } catch (err) {
+      setProfileUpdateError(
+        err instanceof Error ? err.message : "Failed to update profile."
+      );
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const buildActivityTitle = (log: AuditLog) => {
     const details = (log.details ?? {}) as Record<string, unknown>;
@@ -626,7 +742,218 @@ const AdminDashboard = () => {
     { key: "forms", label: "Forms", icon: <FormsIcon /> },
     { key: "reports", label: "Reports", icon: <ReportsIcon /> },
     { key: "evaluation", label: "Evaluation", icon: <EvaluationIcon /> },
+    { key: "profile", label: "Profile", icon: <ProfileIcon /> },
   ];
+
+  const renderProfileSection = () => {
+    if (profileLoading) {
+      return (
+        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
+          <p className="text-sm text-slate-300">Loading profile...</p>
+        </div>
+      );
+    }
+
+    const profileView = (isProfileEditing ? profileDraft : profile) ?? {};
+    const displayName =
+      [profileView.first_name, profileView.last_name].filter(Boolean).join(" ") ||
+      user?.username ||
+      (user?.email ? user.email.split("@")[0] : "Admin");
+    const initials =
+      displayName
+        ?.split(" ")
+        .map((part: string) => part.charAt(0))
+        .join("")
+        .slice(0, 2)
+        .toUpperCase() ?? "AD";
+    const roleLabel = roleLoading
+      ? "Loading..."
+      : userRole === "superadmin"
+        ? "Super Admin"
+        : userRole === "admin"
+          ? "Admin"
+          : userRole === "user"
+            ? "User"
+            : "Not set";
+    const inputClass =
+      "w-full rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-accent-purple/40";
+    const readOnlyClass =
+      "w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white";
+    const mutedClass =
+      "w-full rounded-xl border border-slate-600/30 bg-slate-700/30 px-4 py-2 text-sm text-slate-400";
+
+    return (
+      <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple">
+              {initials}
+            </div>
+            <div>
+              <h2 className="font-display text-2xl text-white">{displayName}</h2>
+              <p className="text-sm text-slate-400">
+                {profileView.email ?? user?.email ?? "No email on file"}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {isProfileEditing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleProfileSave}
+                  disabled={profileSaving}
+                  className="rounded-full bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-violet px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-purple-glow transition hover:opacity-90 disabled:opacity-60"
+                >
+                  {profileSaving ? "Saving..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelProfileEdit}
+                  className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-200 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={startProfileEdit}
+                className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white hover:bg-white/20"
+              >
+                Edit
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
+              First Name
+            </label>
+            {isProfileEditing ? (
+              <input
+                type="text"
+                value={profileView.first_name ?? ""}
+                onChange={(event) => handleProfileFieldChange("first_name", event.target.value)}
+                className={inputClass}
+              />
+            ) : (
+              <div className={readOnlyClass}>{profileView.first_name || "Not set"}</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
+              Last Name
+            </label>
+            {isProfileEditing ? (
+              <input
+                type="text"
+                value={profileView.last_name ?? ""}
+                onChange={(event) => handleProfileFieldChange("last_name", event.target.value)}
+                className={inputClass}
+              />
+            ) : (
+              <div className={readOnlyClass}>{profileView.last_name || "Not set"}</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
+              Gender
+            </label>
+            {isProfileEditing ? (
+              <select
+                value={profileView.gender ?? ""}
+                onChange={(event) => handleProfileFieldChange("gender", event.target.value)}
+                className={inputClass}
+              >
+                <option value="" className="bg-ink-700">Select gender</option>
+                <option value="male" className="bg-ink-700">Male</option>
+                <option value="female" className="bg-ink-700">Female</option>
+                <option value="other" className="bg-ink-700">Other</option>
+                <option value="prefer-not-to-say" className="bg-ink-700">
+                  Prefer not to say
+                </option>
+              </select>
+            ) : (
+              <div className={`${readOnlyClass} capitalize`}>
+                {(profileView.gender ?? "Not set").replace(/[-_]/g, " ")}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
+              Birthday
+            </label>
+            {isProfileEditing ? (
+              <input
+                type="date"
+                value={profileView.birthday ?? ""}
+                onChange={(event) => handleProfileFieldChange("birthday", event.target.value)}
+                max={todayDate}
+                className={inputClass}
+              />
+            ) : (
+              <div className={readOnlyClass}>
+                {profileView.birthday ? formatDate(profileView.birthday) : "Not set"}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
+              Company ID
+            </label>
+            {isProfileEditing ? (
+              <input
+                type="text"
+                value={profileView.company_id_no ?? ""}
+                onChange={(event) => handleProfileFieldChange("company_id_no", event.target.value)}
+                className={inputClass}
+              />
+            ) : (
+              <div className={readOnlyClass}>{profileView.company_id_no || "Not set"}</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
+              Role
+            </label>
+            <div className={mutedClass}>{roleLabel}</div>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
+            Address
+          </label>
+          {isProfileEditing ? (
+            <textarea
+              rows={3}
+              value={profileView.address ?? ""}
+              onChange={(event) => handleProfileFieldChange("address", event.target.value)}
+              className={`${inputClass} resize-none`}
+            />
+          ) : (
+            <div className={`${readOnlyClass} whitespace-pre-wrap`}>
+              {profileView.address || "Not set"}
+            </div>
+          )}
+        </div>
+
+        {profileUpdateError && (
+          <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            {profileUpdateError}
+          </div>
+        )}
+        {profileUpdateSuccess && (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            {profileUpdateSuccess}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderContent = () => {
     switch (activeNav) {
@@ -657,6 +984,8 @@ const AdminDashboard = () => {
         return <ReportsSection />;
       case "evaluation":
         return <EvaluationSection />;
+      case "profile":
+        return renderProfileSection();
       default:
         return renderOverview();
     }
@@ -1115,9 +1444,20 @@ const AdminDashboard = () => {
                 </button>
 
                 {/* Avatar */}
-                <div className="w-9 h-9 rounded-full bg-ink-700 border border-white/10 flex items-center justify-center text-xs font-semibold text-white">
-                  {user?.email?.substring(0, 2).toUpperCase() || "AD"}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveNav("profile")}
+                  title="Profile"
+                  className="w-9 h-9 rounded-full bg-ink-700 border border-white/10 flex items-center justify-center text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors"
+                >
+                  {[profile?.first_name, profile?.last_name].filter(Boolean).length > 0
+                    ? [profile.first_name, profile.last_name]
+                        .filter(Boolean)
+                        .map((n: string) => n.charAt(0))
+                        .join("")
+                        .toUpperCase()
+                    : user?.email?.substring(0, 2).toUpperCase() || "AD"}
+                </button>
               </div>
             </div>
           </header>
