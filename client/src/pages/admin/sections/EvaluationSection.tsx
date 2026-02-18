@@ -2903,15 +2903,6 @@ const toWholeScoreOption = (
       ),
     },
     {
-      key: "learning_path_title",
-      header: "Learning Path",
-      render: (row: Evaluation) => (
-        <span className="text-slate-300">
-          {row.learning_path_title || "â€”"}
-        </span>
-      ),
-    },
-    {
       key: "status",
       header: "Status",
       render: (row: Evaluation) => (
