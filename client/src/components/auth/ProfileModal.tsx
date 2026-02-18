@@ -20,7 +20,16 @@ interface ProfileData {
   profile_setup_completed: boolean;
 }
 
+const getTodayDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
+  const todayDate = getTodayDateString();
   const [profile, setProfile] = useState<ProfileData>({
     first_name: '',
     last_name: '',
@@ -98,6 +107,10 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
+    if (profile.birthday && profile.birthday > todayDate) {
+      setError('Birthdate must not exceed today');
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -297,6 +310,7 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                           type="date"
                           value={profile.birthday}
                           onChange={(e) => handleInputChange('birthday', e.target.value)}
+                          max={todayDate}
                           className={inputClass}
                         />
                       ) : (

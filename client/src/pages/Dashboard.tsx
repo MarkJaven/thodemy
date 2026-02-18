@@ -158,6 +158,14 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+const getTodayDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const WORK_HOURS_PER_DAY = 8;
 const CURSOR_EPSILON = 1e-6;
 
@@ -663,6 +671,7 @@ const topicStatusStyles: Record<string, string> = {
 };
 
 const Dashboard = () => {
+  const todayDate = getTodayDateString();
   const { user, isLoading: userLoading, verified } = useUser();
   const { signOut } = useAuth();
   const navigate = useNavigate();
@@ -1388,6 +1397,10 @@ const Dashboard = () => {
     if (!supabase || !user?.id) return;
     if (!profile?.profile_setup_completed) {
       setProfileUpdateError("Complete account setup first before editing your profile.");
+      return;
+    }
+    if (profileDraft?.birthday && profileDraft.birthday > todayDate) {
+      setProfileUpdateError("Birthdate must not exceed today.");
       return;
     }
     setProfileSaving(true);
@@ -3336,6 +3349,7 @@ const Dashboard = () => {
                 type="date"
                 value={profileView.birthday ?? ""}
                 onChange={(event) => handleProfileFieldChange("birthday", event.target.value)}
+                max={todayDate}
                 className={inputClass}
               />
             ) : (
