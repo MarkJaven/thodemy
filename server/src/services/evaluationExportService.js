@@ -6,6 +6,7 @@
 
 const path = require("path");
 const { evaluationService } = require("./evaluationService");
+const { adminReportService } = require("./adminReportService");
 const { AppError } = require("../utils/errors");
 
 let cachedExcelJs = null;
@@ -798,6 +799,7 @@ const clearColumnRange = (worksheet, column, startRow, endRow) => {
  * @param {string} traineeName - Display name
  */
 const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
+  const employeeName = safeUpper(traineeName);
   const department = safeUpper(traineeInfo.department);
   const position = safeUpper(traineeInfo.position || "TRAINEE");
   const trainer = safeUpper(traineeInfo.trainer);
@@ -807,7 +809,9 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   );
   const supervisorPosition = String(traineeInfo.supervisor_position || "").trim();
   const coveredPeriod = formatCoveredPeriod(evaluation.period_start, evaluation.period_end);
-  const dateHired = formatDateText(traineeInfo.date_hired);
+  const dateHired = formatDateText(
+    evaluation.period_start || traineeInfo.onboarding_date || traineeInfo.date_hired
+  );
   const reviewedDate = formatDateText(evaluation.updated_at || new Date().toISOString());
 
   const dashboard = workbook.getWorksheet("Dashboard");
@@ -830,28 +834,32 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
     formatDateText(traineeInfo.date_endorsed || traineeInfo.target_join_date)
   );
   overwriteCell(scorecard, "D8", trainer);
+  overwriteCell(scorecard, "B56", employeeName);
 
   const endorsement = workbook.getWorksheet("BootcampEndorsementScoreCard");
   overwriteCell(endorsement, "E4", "SSCGI BOOTCAMP");
   overwriteCell(endorsement, "C5", "EMPLOYEE NAME");
-  overwriteCell(endorsement, "E5", safeUpper(traineeName));
+  overwriteCell(endorsement, "E5", employeeName);
   overwriteCell(endorsement, "E6", dateHired);
   overwriteCell(endorsement, "E7", coveredPeriod);
   overwriteCell(endorsement, "E8", trainer);
+  overwriteCell(endorsement, "C26", employeeName);
 
   const performance = workbook.getWorksheet("Performance Evaluation");
   overwriteCell(performance, "E4", endorsedDepartment);
-  overwriteCell(performance, "E5", safeUpper(traineeName));
+  overwriteCell(performance, "E5", employeeName);
   overwriteCell(performance, "E6", dateHired);
   overwriteCell(performance, "E7", coveredPeriod);
   overwriteCell(performance, "E8", trainer);
+  overwriteCell(performance, "D26", employeeName);
 
   const part1 = workbook.getWorksheet("Part 1 Evaluation");
   overwriteCell(part1, "E4", endorsedDepartment);
-  overwriteCell(part1, "E5", safeUpper(traineeName));
+  overwriteCell(part1, "E5", employeeName);
   overwriteCell(part1, "E6", dateHired);
   overwriteCell(part1, "E7", coveredPeriod);
-  overwriteCell(part1, "E8", trainer);
+  overwriteCell(part1, "E8", supervisor || trainer);
+  overwriteCell(part1, "D26", employeeName);
 
   const behavioral = workbook.getWorksheet("Behavioral Evaluation");
   overwriteCell(behavioral, "B6", safeUpper(traineeName));
@@ -865,7 +873,8 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   overwriteCell(technical, "F6", coveredPeriod);
   overwriteCell(technical, "D7", position || "TRAINEE");
   overwriteCell(technical, "F7", reviewedDate);
-  overwriteCell(technical, "D8", trainer);
+  overwriteCell(technical, "D8", supervisor || trainer);
+  overwriteCell(technical, "D47", employeeName);
 
   const regularization = workbook.getWorksheet("Regularization Endorsement");
   overwriteCell(regularization, "D6", safeUpper(traineeName));
@@ -1262,6 +1271,20 @@ const TECHNICAL_TOTAL_ROWS = [
   { h: "H40", i: "I40", members: ["H39"] },
 ];
 
+/** Cells in the Technical sheet header that display the adjectival rating % total. */
+const TECHNICAL_ADJECTIVAL_RATING_CELLS = [
+  "H5",
+  "I5",
+  "H6",
+  "I6",
+  "H7",
+  "I7",
+  "H8",
+  "I8",
+  "H9",
+  "I9",
+];
+
 /** Writes technical evaluation scores to their mapped cells and updates COMPUTED % results. */
 const populateTechnicalScores = (workbook, scoreMap) => {
   const technical = workbook.getWorksheet("Technical Evaluation");
@@ -1300,7 +1323,13 @@ const populateTechnicalScores = (workbook, scoreMap) => {
     const weight = TECHNICAL_WEIGHT_MAP[cell] || 0;
     return sum + ((toNumber(val) || 0) / TECHNICAL_MAX_SCORE) * weight;
   }, 0);
-  overwriteCell(technical, "I12", round(grandTotal, 4));
+  const roundedGrandTotal = round(grandTotal, 4);
+  overwriteCell(technical, "I12", roundedGrandTotal);
+
+  // Ensure static viewers (without formula recalculation) still show the correct rating %.
+  for (const cellRef of TECHNICAL_ADJECTIVAL_RATING_CELLS) {
+    overwriteCellWithFormulaResult(technical, cellRef, roundedGrandTotal);
+  }
 };
 
 /** Writes behavioral evaluation scores to their mapped cells. */
@@ -1629,7 +1658,13 @@ const populatePerformanceSummary = (
   overwriteCell(summary, "D3", safeUpper(traineeName));
   overwriteCell(summary, "D4", safeUpper(traineeInfo.department));
   overwriteCell(summary, "D5", safeUpper(traineeInfo.nickname || traineeName));
-  overwriteCell(summary, "D6", formatDateText(traineeInfo.date_hired));
+  overwriteCell(
+    summary,
+    "D6",
+    formatDateText(
+      evaluation.period_start || traineeInfo.onboarding_date || traineeInfo.date_hired
+    )
+  );
   overwriteCell(summary, "D7", coveredPeriod);
   overwriteCell(summary, "D8", safeUpper(traineeInfo.trainer));
 
@@ -1687,8 +1722,14 @@ const buildEvaluationWorkbook = async (evaluationId) => {
     });
   }
 
-  // Export should not include raw Checklist tab from the source template.
+  // Replace the raw template checklist with a generated user checklist tab.
   removeWorksheetByName(workbook, "Checklist");
+  if (evaluation.user_id) {
+    await adminReportService.appendChecklistSheetToWorkbook(workbook, {
+      userId: evaluation.user_id,
+      sheetName: "Checklist",
+    });
+  }
 
   workbook.calcProperties.fullCalcOnLoad = true;
 
