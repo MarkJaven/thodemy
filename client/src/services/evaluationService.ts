@@ -101,10 +101,10 @@ export const evaluationApiService = {
     updates: Partial<{
       status: string;
       trainee_info: Record<string, unknown>;
-      period_start: string;
-      period_end: string;
-      learning_path_id: string;
-      evaluator_id: string;
+      period_start: string | null;
+      period_end: string | null;
+      learning_path_id: string | null;
+      evaluator_id: string | null;
     }>
   ): Promise<{ id: string; status: string; updated_at: string }> {
     try {

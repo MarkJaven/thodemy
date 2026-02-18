@@ -249,6 +249,8 @@ const SHEET2_RATING_ROLES = [
 const getSheet2CriterionKey = (roleKey: string, dimensionKey: string) =>
   `sheet2_${roleKey}_${dimensionKey}`;
 
+const SUPERVISOR_TITLE_OPTIONS = ["", "Mr.", "Ms.", "Mrs."] as const;
+
 const getBootcampStrengthKey = (category: string) => `cat_${category}_strength`;
 
 const getBootcampImprovementKey = (category: string) =>
@@ -327,10 +329,26 @@ const EvaluationSection = () => {
     periodStart: "",
     periodEnd: "",
     position: "",
-    department: "",
+    jobTitle: "",
+    endorsedDepartment: "",
+    supervisorTitle: "",
+    supervisor: "",
+    supervisorPosition: "",
   });
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isEditMetaOpen, setIsEditMetaOpen] = useState(false);
+  const [editMetaSaving, setEditMetaSaving] = useState(false);
+  const [editMetaForm, setEditMetaForm] = useState({
+    periodStart: "",
+    periodEnd: "",
+    position: "",
+    jobTitle: "",
+    endorsedDepartment: "",
+    supervisorTitle: "",
+    supervisor: "",
+    supervisorPosition: "",
+  });
 
   // Score editing state
   const [pendingScores, setPendingScores] = useState<Map<string, ScoreInput>>(
@@ -392,6 +410,41 @@ const EvaluationSection = () => {
       setSelectedEval(detail);
       setActiveTab("scorecard");
       initPendingScores(detail.scores);
+    } catch (loadError) {
+      setActionError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load evaluation.",
+      );
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const openEditMetaModal = (detail: EvaluationDetail) => {
+    const info = (detail.trainee_info as Record<string, unknown>) || {};
+    setEditMetaForm({
+      periodStart: detail.period_start || "",
+      periodEnd: detail.period_end || "",
+      position: String(info.position || ""),
+      jobTitle: String(info.current_job_title || info.department || ""),
+      endorsedDepartment: String(info.endorsed_department || ""),
+      supervisorTitle: String(info.supervisor_title || ""),
+      supervisor: String(info.supervisor || ""),
+      supervisorPosition: String(info.supervisor_position || ""),
+    });
+    setIsEditMetaOpen(true);
+  };
+
+  const openDetailAndEdit = async (evaluation: Evaluation) => {
+    setDetailLoading(true);
+    setActionError(null);
+    try {
+      const detail = await evaluationApiService.getEvaluation(evaluation.id);
+      setSelectedEval(detail);
+      setActiveTab("scorecard");
+      initPendingScores(detail.scores);
+      openEditMetaModal(detail);
     } catch (loadError) {
       setActionError(
         loadError instanceof Error
@@ -721,7 +774,12 @@ const toWholeScoreOption = (
         periodEnd: createForm.periodEnd || undefined,
         traineeInfo: {
           position: createForm.position,
-          department: createForm.department,
+          department: createForm.endorsedDepartment,
+          current_job_title: createForm.jobTitle,
+          endorsed_department: createForm.endorsedDepartment,
+          supervisor_title: createForm.supervisorTitle,
+          supervisor: createForm.supervisor,
+          supervisor_position: createForm.supervisorPosition,
         },
       });
       setIsCreateOpen(false);
@@ -1044,6 +1102,44 @@ const toWholeScoreOption = (
     }
   };
 
+  const handleSaveMetaDetails = async () => {
+    if (!selectedEval) return;
+    setEditMetaSaving(true);
+    setActionError(null);
+    try {
+      const existingInfo =
+        (selectedEval.trainee_info as Record<string, unknown>) || {};
+      const existingDepartment = String(existingInfo.department || "").trim();
+      await evaluationApiService.updateEvaluation(selectedEval.id, {
+        period_start: editMetaForm.periodStart || null,
+        period_end: editMetaForm.periodEnd || null,
+        trainee_info: {
+          ...existingInfo,
+          position: editMetaForm.position.trim(),
+          department: existingDepartment || editMetaForm.endorsedDepartment.trim(),
+          current_job_title: editMetaForm.jobTitle.trim(),
+          endorsed_department: editMetaForm.endorsedDepartment.trim(),
+          supervisor_title: editMetaForm.supervisorTitle.trim(),
+          supervisor: editMetaForm.supervisor.trim(),
+          supervisor_position: editMetaForm.supervisorPosition.trim(),
+        },
+      });
+      const detail = await evaluationApiService.getEvaluation(selectedEval.id);
+      setSelectedEval(detail);
+      initPendingScores(detail.scores);
+      await loadList();
+      setIsEditMetaOpen(false);
+    } catch (updateError) {
+      setActionError(
+        updateError instanceof Error
+          ? updateError.message
+          : "Unable to update evaluation details.",
+      );
+    } finally {
+      setEditMetaSaving(false);
+    }
+  };
+
   const handleExport = async (evalId: string) => {
     try {
       // Ensure the latest in-form edits are persisted before generating Excel.
@@ -1267,7 +1363,7 @@ const toWholeScoreOption = (
         </div>
 
         {/* Trainee Info */}
-        <div className="grid grid-cols-2 gap-4 rounded-xl border border-white/10 bg-ink-800 p-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 rounded-xl border border-white/10 bg-ink-800 p-4 sm:grid-cols-3 lg:grid-cols-6">
           <div>
             <p className="text-xs text-slate-400">Position</p>
             <p className="text-sm text-white">
@@ -1276,10 +1372,29 @@ const toWholeScoreOption = (
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-400">Department</p>
+            <p className="text-xs text-slate-400">Job Title</p>
             <p className="text-sm text-white">
               {(selectedEval.trainee_info as Record<string, string>)
-                ?.department || "â€”"}
+                ?.current_job_title || "â€”"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400">Endorsed Department</p>
+            <p className="text-sm text-white">
+              {(selectedEval.trainee_info as Record<string, string>)
+                ?.endorsed_department || "â€”"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400">Supervisor</p>
+            <p className="text-sm text-white">
+              {(() => {
+                const info = selectedEval.trainee_info as Record<string, string>;
+                const supervisor = String(info?.supervisor || "").trim();
+                const title = String(info?.supervisor_title || "").trim();
+                const display = [title, supervisor].filter(Boolean).join(" ").trim();
+                return display || "â€”";
+              })()}
             </p>
           </div>
           <div>
@@ -1299,6 +1414,12 @@ const toWholeScoreOption = (
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => openEditMetaModal(selectedEval)}
+            className="rounded-lg border border-white/10 bg-ink-800 px-4 py-2 text-sm text-slate-300 hover:bg-ink-700"
+          >
+            Edit Details
+          </button>
           <button
             onClick={handleAutoPopulate}
             disabled={savingScores}
@@ -1357,6 +1478,173 @@ const toWholeScoreOption = (
           {activeTab === "sheet2_rating" && renderSheet2Rating()}
           {activeTab === "summary" && renderSummary()}
         </div>
+
+        <Modal
+          isOpen={isEditMetaOpen}
+          title="Edit Evaluation Details"
+          onClose={() => setIsEditMetaOpen(false)}
+          size="lg"
+          footer={
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIsEditMetaOpen(false)}
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveMetaDetails}
+                disabled={editMetaSaving}
+                className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50"
+              >
+                {editMetaSaving ? "Saving..." : "Save Details"}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm text-slate-300">
+                  Period Start
+                </label>
+                <input
+                  type="date"
+                  value={editMetaForm.periodStart}
+                  onChange={(e) =>
+                    setEditMetaForm((prev) => ({
+                      ...prev,
+                      periodStart: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-slate-300">
+                  Period End
+                </label>
+                <input
+                  type="date"
+                  value={editMetaForm.periodEnd}
+                  onChange={(e) =>
+                    setEditMetaForm((prev) => ({
+                      ...prev,
+                      periodEnd: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm text-slate-300">
+                  Position
+                </label>
+                <input
+                  type="text"
+                  value={editMetaForm.position}
+                  onChange={(e) =>
+                    setEditMetaForm((prev) => ({
+                      ...prev,
+                      position: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white placeholder-slate-600"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-slate-300">
+                  Job Title
+                </label>
+                <input
+                  type="text"
+                  value={editMetaForm.jobTitle}
+                  onChange={(e) =>
+                    setEditMetaForm((prev) => ({
+                      ...prev,
+                      jobTitle: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white placeholder-slate-600"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-sm text-slate-300">
+                  Endorsed Department
+                </label>
+                <input
+                  type="text"
+                  value={editMetaForm.endorsedDepartment}
+                  onChange={(e) =>
+                    setEditMetaForm((prev) => ({
+                      ...prev,
+                      endorsedDepartment: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white placeholder-slate-600"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-slate-300">
+                  Supervisor Title
+                </label>
+                <select
+                  value={editMetaForm.supervisorTitle}
+                  onChange={(e) =>
+                    setEditMetaForm((prev) => ({
+                      ...prev,
+                      supervisorTitle: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
+                >
+                  <option value="">Select title</option>
+                  {SUPERVISOR_TITLE_OPTIONS.filter(Boolean).map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-slate-300">
+                  Supervisor
+                </label>
+                <input
+                  type="text"
+                  value={editMetaForm.supervisor}
+                  onChange={(e) =>
+                    setEditMetaForm((prev) => ({
+                      ...prev,
+                      supervisor: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white placeholder-slate-600"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-slate-300">
+                Supervisor Position
+              </label>
+              <input
+                type="text"
+                value={editMetaForm.supervisorPosition}
+                onChange={(e) =>
+                  setEditMetaForm((prev) => ({
+                    ...prev,
+                    supervisorPosition: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white placeholder-slate-600"
+              />
+            </div>
+          </div>
+        </Modal>
 
         <Modal
           isOpen={Boolean(scoreboardModalDraft)}
@@ -2668,6 +2956,26 @@ const toWholeScoreOption = (
           <button
             onClick={(e) => {
               e.stopPropagation();
+              openDetailAndEdit(row);
+            }}
+            className="rounded border border-white/10 px-2 py-1 text-xs text-slate-300 hover:bg-white/5"
+            title="Edit details"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 113 3L7 19l-4 1 1-4 12.5-12.5z" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
               handleExport(row.id);
             }}
             className="rounded border border-white/10 px-2 py-1 text-xs text-slate-300 hover:bg-white/5"
@@ -2705,7 +3013,7 @@ const toWholeScoreOption = (
           </button>
         </div>
       ),
-      width: "80px",
+      width: "120px",
     },
   ];
 
@@ -2727,7 +3035,11 @@ const toWholeScoreOption = (
               periodStart: "",
               periodEnd: "",
               position: "",
-              department: "",
+              jobTitle: "",
+              endorsedDepartment: "",
+              supervisorTitle: "",
+              supervisor: "",
+              supervisorPosition: "",
             });
             setActionError(null);
             setIsCreateOpen(true);
@@ -2895,21 +3207,96 @@ const toWholeScoreOption = (
             </div>
             <div>
               <label className="mb-1 block text-sm text-slate-300">
-                Department
+                Job Title
               </label>
               <input
                 type="text"
-                value={createForm.department}
+                value={createForm.jobTitle}
                 onChange={(e) =>
                   setCreateForm((prev) => ({
                     ...prev,
-                    department: e.target.value,
+                    jobTitle: e.target.value,
+                  }))
+                }
+                placeholder="e.g., Software Developer I"
+                className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white placeholder-slate-600"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-sm text-slate-300">
+                Endorsed Department
+              </label>
+              <input
+                type="text"
+                value={createForm.endorsedDepartment}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    endorsedDepartment: e.target.value,
                   }))
                 }
                 placeholder="e.g., Engineering"
                 className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white placeholder-slate-600"
               />
             </div>
+            <div>
+              <label className="mb-1 block text-sm text-slate-300">
+                Supervisor Title
+              </label>
+              <select
+                value={createForm.supervisorTitle}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    supervisorTitle: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
+              >
+                <option value="">Select title</option>
+                {SUPERVISOR_TITLE_OPTIONS.filter(Boolean).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-slate-300">
+                Supervisor
+              </label>
+              <input
+                type="text"
+                value={createForm.supervisor}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    supervisor: e.target.value,
+                  }))
+                }
+                placeholder="e.g., Juan Dela Cruz"
+                className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white placeholder-slate-600"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-slate-300">
+              Supervisor Position
+            </label>
+            <input
+              type="text"
+              value={createForm.supervisorPosition}
+              onChange={(e) =>
+                setCreateForm((prev) => ({
+                  ...prev,
+                  supervisorPosition: e.target.value,
+                }))
+              }
+              placeholder="e.g., Manager - Research and Development"
+              className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white placeholder-slate-600"
+            />
           </div>
         </div>
       </Modal>
