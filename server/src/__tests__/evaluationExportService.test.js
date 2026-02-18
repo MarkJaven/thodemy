@@ -20,12 +20,15 @@ describe("evaluationExportService", () => {
       user_id: "user-1",
       trainee_name: "Juan Dela Cruz",
       trainee_info: {
-        department: "engineering",
+        department: "bootcamp",
         position: "trainee",
         trainer: "coach one",
         nickname: "juandelacruz",
         date_hired: "2025-01-01",
         endorsed_department: "engineering",
+        supervisor_title: "Ms.",
+        supervisor: "Maria Santos",
+        supervisor_position: "Manager - Research and Development",
         date_endorsed: "2025-06-01",
       },
       period_start: "2025-01-01",
@@ -241,9 +244,16 @@ describe("evaluationExportService", () => {
     // Header placement check: values should stay in yellow D:F cells, not overwrite green labels B:C.
     expect(String(scorecard.getCell("B3").value || "")).toContain("Employee Name");
     expect(scorecard.getCell("D3").value).toBe("JUAN DELA CRUZ");
+    expect(scorecard.getCell("D4").value).toBe("SSCGI BOOTCAMP");
+    expect(dashboard.getCell("D4").value).toBe("BOOTCAMPER");
+    expect(dashboard.getCell("D5").value).toBe("SSCGI BOOTCAMP");
+    expect(endorsement.getCell("E4").value).toBe("SSCGI BOOTCAMP");
+    expect(endorsement.getCell("C5").value).toBe("EMPLOYEE NAME");
+    expect(performance.getCell("E4").value).toBe("ENGINEERING");
+    expect(part1.getCell("E4").value).toBe("ENGINEERING");
     expect(behavioralSheet.getCell("B6").value).toBe("JUAN DELA CRUZ");
-    expect(behavioralSheet.getCell("B7").value).toBe("TRAINEE");
-    expect(behavioralSheet.getCell("B8").value).toBeNull();
+    expect(behavioralSheet.getCell("B7").value).toBe("BOOTCAMPER");
+    expect(behavioralSheet.getCell("B8").value).toBe("SSCGI BOOTCAMP");
 
     // Formula preservation checks.
     expect(dashboard.getCell("F14").value).toEqual(
@@ -400,6 +410,15 @@ describe("evaluationExportService", () => {
     expect(regularization.getCell("H19").value).toBeNull();
     expect(regularization.getCell("D34").value).toBeNull();
     expect(regularization.getCell("E34").value).toBeNull();
+    expect(regularization.getCell("D8").value).toBe("ENGINEERING");
+    expect(regularization.getCell("G39").value).toBe("MS. MARIA SANTOS");
+    expect(regularization.getCell("H39").value).toBe("MS. MARIA SANTOS");
+    expect(regularization.getCell("G40").value).toBe(
+      "Manager - Research and Development"
+    );
+    expect(regularization.getCell("H40").value).toBe(
+      "Manager - Research and Development"
+    );
     expect(regularization.getCell("G57").value).toBe("JUAN DELA CRUZ");
     expect(regularization.getCell("H57").value).toBe("JUAN DELA CRUZ");
 
