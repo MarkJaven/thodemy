@@ -1620,9 +1620,6 @@ const toWholeScoreOption = (
   // â"€â"€ Scorecard Tab â"€â"€
 
   function renderScorecard() {
-    const quizGrades = getQuizGradesEntries();
-    const quizAvgEquivalent = computeQuizGradesAverage();
-
     return (
       <div className="space-y-6">
         <h3 className="text-lg font-semibold text-white">
@@ -1702,80 +1699,6 @@ const toWholeScoreOption = (
           );
         })}
 
-        {/* Quiz Grades Computation Section */}
-        <div className="rounded-lg border border-yellow-500/30 bg-yellow-900/10 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h4 className="text-sm font-bold text-white">
-              Summative Assessment - Quiz Grades
-            </h4>
-            {quizAvgEquivalent !== null && (
-              <span className="text-sm text-yellow-300">
-                Avg Equivalent: {quizAvgEquivalent.toFixed(1)}
-              </span>
-            )}
-          </div>
-          <p className="mb-3 text-xs text-slate-400">
-            Auto-populated from quiz scores. Equivalent = 0 when score is 0;
-            otherwise (Score / Total Items) * 50 + 50.
-          </p>
-
-          {quizGrades.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/10 text-left text-xs text-slate-400">
-                    <th className="px-2 py-2 font-medium w-10">#</th>
-                    <th className="px-2 py-2 font-medium">Assessment</th>
-                    <th className="px-2 py-2 font-medium w-20 text-center">
-                      Score
-                    </th>
-                    <th className="px-2 py-2 font-medium w-24 text-center">
-                      Total Items
-                    </th>
-                    <th className="px-2 py-2 font-medium w-24 text-center">
-                      Equivalent
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quizGrades.map((entry, index) => {
-                    const equivalent = computeQuizEquivalent(
-                      entry.score,
-                      entry.max_score,
-                    );
-                    return (
-                      <tr
-                        key={entry.criterion_key}
-                        className="border-b border-white/5"
-                      >
-                        <td className="px-2 py-2 text-slate-400">
-                          {index + 1}
-                        </td>
-                        <td className="px-2 py-2 text-white">
-                          {entry.criterion_label || entry.criterion_key}
-                        </td>
-                        <td className="px-2 py-2 text-center text-white">
-                          {entry.score ?? "--"}
-                        </td>
-                        <td className="px-2 py-2 text-center text-slate-300">
-                          {entry.max_score ?? "--"}
-                        </td>
-                        <td className="px-2 py-2 text-center text-yellow-200">
-                          {equivalent !== null ? equivalent.toFixed(1) : "--"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-white/5 px-4 py-6 text-center text-sm text-slate-500">
-              No quiz grades yet. Click "Auto-populate from Quiz/Activity" to
-              pull quiz scores.
-            </div>
-          )}
-        </div>
       </div>
     );
   }
@@ -2187,7 +2110,10 @@ const toWholeScoreOption = (
                   <td className="px-2 py-2">
                     <input
                       type="text"
-                      value={getRemarks(PERFORMANCE_FEEDBACK_SHEET, strengthKey)}
+                      value={getRemarks(
+                        PERFORMANCE_FEEDBACK_SHEET,
+                        strengthKey,
+                      )}
                       onChange={(e) =>
                         setRemarksValue(
                           PERFORMANCE_FEEDBACK_SHEET,

@@ -323,6 +323,20 @@ const getBootcampFeedbackForCategory = (scoreMap, category) =>
 const getPerformanceFeedbackForCategory = (scoreMap, category) =>
   getCategoryFeedbackForSheet(scoreMap, PERFORMANCE_FEEDBACK_SHEET, category);
 
+/**
+ * Dashboard feedback mapping:
+ * source of truth is performance evaluation feedback.
+ */
+const getDashboardFeedbackForCategory = (scoreMap, category) =>
+  getPerformanceFeedbackForCategory(scoreMap, category);
+
+/**
+ * Part1 feedback mapping:
+ * source of truth is bootcamp endorsement feedback.
+ */
+const getPart1FeedbackForCategory = (scoreMap, category) =>
+  getBootcampFeedbackForCategory(scoreMap, category);
+
 
 /** Normalizes a score to a 0–5 scale based on its max possible score. */
 const normalizeScoreToFive = (score, maxScore) => {
@@ -890,16 +904,28 @@ const populateDashboardScores = (workbook, scoreMap, bootcampResults, performanc
       round(performanceContribution, 4)
     );
 
-    // Dashboard FEEDBACK FORM (top table) should mirror Bootcamp Endorsement feedback.
-    const feedbackRow = bootcampRows[index];
-    const { strength, improvement } = getBootcampFeedbackForCategory(scoreMap, category);
-    overwriteCell(dashboard, `G${feedbackRow}`, null);
-    overwriteCell(dashboard, `L${feedbackRow}`, null);
+    // Dashboard bootcamp rows: performance feedback (GHIJK 14-20, LMNOP 14-20).
+    const bootcampFeedbackRow = bootcampRows[index];
+    const { strength, improvement } = getDashboardFeedbackForCategory(scoreMap, category);
+    overwriteCell(dashboard, `G${bootcampFeedbackRow}`, null);
+    overwriteCell(dashboard, `L${bootcampFeedbackRow}`, null);
     if (strength) {
-      overwriteCell(dashboard, `G${feedbackRow}`, strength);
+      overwriteCell(dashboard, `G${bootcampFeedbackRow}`, strength);
     }
     if (improvement) {
-      overwriteCell(dashboard, `L${feedbackRow}`, improvement);
+      overwriteCell(dashboard, `L${bootcampFeedbackRow}`, improvement);
+    }
+
+    // Dashboard performance rows: endorsement feedback (GHIJK 26-32, LMNOP 26-32).
+    const perfFeedbackRow = performanceRows[index];
+    const endorsementFeedback = getBootcampFeedbackForCategory(scoreMap, category);
+    overwriteCell(dashboard, `G${perfFeedbackRow}`, null);
+    overwriteCell(dashboard, `L${perfFeedbackRow}`, null);
+    if (endorsementFeedback.strength) {
+      overwriteCell(dashboard, `G${perfFeedbackRow}`, endorsementFeedback.strength);
+    }
+    if (endorsementFeedback.improvement) {
+      overwriteCell(dashboard, `L${perfFeedbackRow}`, endorsementFeedback.improvement);
     }
   }
 };
@@ -968,7 +994,7 @@ const populateBootcampEndorsementFeedback = (workbook, scoreMap) => {
     overwriteCell(endorsement, `F${row}`, null);
     overwriteCell(endorsement, `H${row}`, null);
 
-    const { strength, improvement } = getBootcampFeedbackForCategory(scoreMap, category);
+    const { strength, improvement } = getPerformanceFeedbackForCategory(scoreMap, category);
 
     if (strength) {
       overwriteCell(endorsement, `F${row}`, strength);
@@ -996,17 +1022,24 @@ const populatePerformanceSheets = (workbook, scoreMap, performanceResults) => {
     overwriteCell(part1Sheet, `F${config.row}`, null);
     overwriteCell(part1Sheet, `H${config.row}`, null);
 
-    const { strength, improvement } = getPerformanceFeedbackForCategory(
+    const performanceFeedback = getPerformanceFeedbackForCategory(
       scoreMap,
       config.category
     );
-    if (strength) {
-      overwriteCell(performanceSheet, `F${config.row}`, strength);
-      overwriteCell(part1Sheet, `F${config.row}`, strength);
+    const part1Feedback = getPart1FeedbackForCategory(scoreMap, config.category);
+
+    if (performanceFeedback.strength) {
+      overwriteCell(performanceSheet, `F${config.row}`, performanceFeedback.strength);
     }
-    if (improvement) {
-      overwriteCell(performanceSheet, `H${config.row}`, improvement);
-      overwriteCell(part1Sheet, `H${config.row}`, improvement);
+    if (performanceFeedback.improvement) {
+      overwriteCell(performanceSheet, `H${config.row}`, performanceFeedback.improvement);
+    }
+
+    if (part1Feedback.strength) {
+      overwriteCell(part1Sheet, `F${config.row}`, part1Feedback.strength);
+    }
+    if (part1Feedback.improvement) {
+      overwriteCell(part1Sheet, `H${config.row}`, part1Feedback.improvement);
     }
   }
 };
