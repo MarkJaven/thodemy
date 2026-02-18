@@ -83,6 +83,15 @@ export const superAdminService = {
 
   async updateUserProfile(userId: string, payload: Partial<UserProfile>): Promise<void> {
     const client = requireSupabase();
+    const { data: profile, error: profileError } = await client
+      .from("profiles")
+      .select("profile_setup_completed")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profileError) throw new Error(profileError.message);
+    if (!profile?.profile_setup_completed) {
+      throw new Error("User must complete account setup before profile editing is allowed.");
+    }
     const { error } = await client.from("profiles").update(payload).eq("id", userId);
     if (error) throw new Error(error.message);
   },
