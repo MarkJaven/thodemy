@@ -10,7 +10,27 @@
       "Bash(npx vite build)",
       "Bash(node:*)",
       "Bash(python:*)",
-      "Bash(npx jest:*)"
+      "Bash(npx jest:*)",
+      "Bash(sourcery:*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(\"C:/Users/ANDREW/AppData/Roaming/Python/Python312/Scripts/sourcery.exe\" review --enable security --verbose \"c:/Users/ANDREW/OneDrive - Systems and Software Consulting Group, Inc/Documents/ThodemyProject/thodemy/client/src\")",
+      "Bash(\"C:/Users/ANDREW/AppData/Roaming/Python/Python312/Scripts/sourcery.exe\" review --verbose \"c:/Users/ANDREW/OneDrive - Systems and Software Consulting Group, Inc/Documents/ThodemyProject/thodemy/server/src\")",
+      "Bash(\"C:/Users/ANDREW/AppData/Roaming/Python/Python312/Scripts/sourcery.exe\" review --verbose \"c:/Users/ANDREW/OneDrive - Systems and Software Consulting Group, Inc/Documents/ThodemyProject/thodemy/client/src\")",
+      "Bash(npm audit:*)",
+      "Bash(\"C:/Users/ANDREW/AppData/Roaming/Python/Python312/Scripts/njsscan.exe\" \"c:/Users/ANDREW/OneDrive - Systems and Software Consulting Group, Inc/Documents/ThodemyProject/thodemy/server/src\")",
+      "Bash(\"C:/Users/ANDREW/AppData/Roaming/Python/Python312/Scripts/njsscan.exe\" --json --missing-controls \"c:/Users/ANDREW/OneDrive - Systems and Software Consulting Group, Inc/Documents/ThodemyProject/thodemy/server/src\")",
+      "Bash(\"C:/Users/ANDREW/AppData/Roaming/Python/Python312/Scripts/semgrep.exe\" --version)",
+      "Read(//c/Users/ANDREW/AppData/Roaming/Python/Python312/Scripts/**)",
+      "Bash(ls:*)",
+      "Bash(\"C:/Users/ANDREW/AppData/Roaming/Python/Python312/Scripts/semgrep\" --version)",
+      "Bash(npx --yes eslint-plugin-security:*)",
+      "Bash(npm install:*)",
+      "Bash(snyk test:*)",
+      "Bash(npx --yes better-npm-audit:*)",
+      "Bash(npx eslint:*)",
+      "Bash(./node_modules/.bin/eslint:*)"
     ]
   }
 }

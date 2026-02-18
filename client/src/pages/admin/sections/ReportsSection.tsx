@@ -242,18 +242,17 @@ const ReportsSection = () => {
   /* ---- derived data ---- */
 
   const userOptions = useMemo(() => {
-    const mapped = users
-      .filter((user) => user.role === "user")
-      .map((user) => {
-        const name =
-          [user.first_name, user.last_name].filter(Boolean).join(" ") ||
-          user.username ||
-          user.email ||
-          "Unknown user";
-        const label = user.email ? `${name} | ${user.email}` : name;
-        return { id: user.id, label, name };
-      });
-    return mapped;
+    return users
+          .filter((user) => user.role === "user")
+          .map((user) => {
+            const name =
+              [user.first_name, user.last_name].filter(Boolean).join(" ") ||
+              user.username ||
+              user.email ||
+              "Unknown user";
+            const label = user.email ? `${name} | ${user.email}` : name;
+            return { id: user.id, label, name };
+          });
   }, [users]);
 
   const filteredDropdownOptions = useMemo(() => {

@@ -21,7 +21,7 @@ export const waitForPusherConnection = (pusher, timeout = 5000) => {
       reject(new Error("Pusher not initialized"));
       return;
     }
-    const state = pusher.connection.state;
+    const {state} = pusher.connection;
     if (state === "connected") {
       resolve(pusher);
       return;

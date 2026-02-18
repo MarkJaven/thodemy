@@ -671,8 +671,7 @@ const applyHeaderStyle = (row) => {
 };
 
 const applyAllBorders = (sheet) => {
-  const rowCount = sheet.rowCount;
-  const columnCount = sheet.columnCount;
+  const {rowCount, columnCount} = sheet;
   const border = {
     top: { style: "thin", color: { argb: "FF000000" } },
     left: { style: "thin", color: { argb: "FF000000" } },

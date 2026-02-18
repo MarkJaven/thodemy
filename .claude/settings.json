@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PATH=\"$PATH:/c/Users/ANDREW/AppData/Roaming/Python/Python312/Scripts\")"
+    ]
+  }
+}
