@@ -274,6 +274,21 @@ const clampScore = (value, min = 0, max = 5) => {
 /** Trims and uppercases a string value, defaulting to empty string. */
 const safeUpper = (value) => String(value || "").trim().toUpperCase();
 
+/** Combines an optional title prefix (Mr./Ms./Mrs.) with a name safely. */
+const buildTitledName = (title, name) => {
+  const trimmedTitle = String(title || "").trim();
+  const trimmedName = String(name || "").trim();
+  if (!trimmedTitle) return trimmedName;
+  if (!trimmedName) return trimmedTitle;
+
+  const normalizedTitle = trimmedTitle.replace(/\./g, "").toLowerCase();
+  const normalizedName = trimmedName.replace(/\./g, "").toLowerCase();
+  if (normalizedName.startsWith(`${normalizedTitle} `)) {
+    return trimmedName;
+  }
+  return `${trimmedTitle} ${trimmedName}`;
+};
+
 /** Formats a date value as an ISO date string (YYYY-MM-DD). */
 const formatDateText = (value) => {
   if (!value) return "";
@@ -787,14 +802,18 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   const position = safeUpper(traineeInfo.position || "TRAINEE");
   const trainer = safeUpper(traineeInfo.trainer);
   const endorsedDepartment = safeUpper(traineeInfo.endorsed_department || traineeInfo.department);
+  const supervisor = safeUpper(
+    buildTitledName(traineeInfo.supervisor_title, traineeInfo.supervisor)
+  );
+  const supervisorPosition = String(traineeInfo.supervisor_position || "").trim();
   const coveredPeriod = formatCoveredPeriod(evaluation.period_start, evaluation.period_end);
   const dateHired = formatDateText(traineeInfo.date_hired);
   const reviewedDate = formatDateText(evaluation.updated_at || new Date().toISOString());
 
   const dashboard = workbook.getWorksheet("Dashboard");
   overwriteCell(dashboard, "D3", safeUpper(traineeName));
-  overwriteCell(dashboard, "D4", position || "TRAINEE");
-  overwriteCell(dashboard, "D5", department);
+  overwriteCell(dashboard, "D4", "BOOTCAMPER");
+  overwriteCell(dashboard, "D5", "SSCGI BOOTCAMP");
   overwriteCell(dashboard, "D6", coveredPeriod);
   overwriteCell(dashboard, "D7", endorsedDepartment);
   overwriteCell(dashboard, "D8", trainer);
@@ -802,7 +821,7 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   const scorecard = workbook.getWorksheet("BootCampScoreCard");
   // In template: labels are on merged B:C (green), values are on merged D:F (yellow).
   overwriteCell(scorecard, "D3", safeUpper(traineeName));
-  overwriteCell(scorecard, "D4", department);
+  overwriteCell(scorecard, "D4", "SSCGI BOOTCAMP");
   overwriteCell(scorecard, "D5", dateHired);
   overwriteCell(scorecard, "D6", coveredPeriod);
   overwriteCell(
@@ -813,21 +832,22 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   overwriteCell(scorecard, "D8", trainer);
 
   const endorsement = workbook.getWorksheet("BootcampEndorsementScoreCard");
-  overwriteCell(endorsement, "E4", department);
+  overwriteCell(endorsement, "E4", "SSCGI BOOTCAMP");
+  overwriteCell(endorsement, "C5", "EMPLOYEE NAME");
   overwriteCell(endorsement, "E5", safeUpper(traineeName));
   overwriteCell(endorsement, "E6", dateHired);
   overwriteCell(endorsement, "E7", coveredPeriod);
   overwriteCell(endorsement, "E8", trainer);
 
   const performance = workbook.getWorksheet("Performance Evaluation");
-  overwriteCell(performance, "E4", department);
+  overwriteCell(performance, "E4", endorsedDepartment);
   overwriteCell(performance, "E5", safeUpper(traineeName));
   overwriteCell(performance, "E6", dateHired);
   overwriteCell(performance, "E7", coveredPeriod);
   overwriteCell(performance, "E8", trainer);
 
   const part1 = workbook.getWorksheet("Part 1 Evaluation");
-  overwriteCell(part1, "E4", department);
+  overwriteCell(part1, "E4", endorsedDepartment);
   overwriteCell(part1, "E5", safeUpper(traineeName));
   overwriteCell(part1, "E6", dateHired);
   overwriteCell(part1, "E7", coveredPeriod);
@@ -835,8 +855,8 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
 
   const behavioral = workbook.getWorksheet("Behavioral Evaluation");
   overwriteCell(behavioral, "B6", safeUpper(traineeName));
-  overwriteCell(behavioral, "B7", "TRAINEE");
-  overwriteCell(behavioral, "B8", null);
+  overwriteCell(behavioral, "B7", "BOOTCAMPER");
+  overwriteCell(behavioral, "B8", "SSCGI BOOTCAMP");
 
   const technical = workbook.getWorksheet("Technical Evaluation");
   overwriteCell(technical, "D5", safeUpper(traineeName));
@@ -850,7 +870,7 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   const regularization = workbook.getWorksheet("Regularization Endorsement");
   overwriteCell(regularization, "D6", safeUpper(traineeName));
   overwriteCell(regularization, "D7", position || "TRAINEE");
-  overwriteCell(regularization, "D8", department);
+  overwriteCell(regularization, "D8", endorsedDepartment);
   overwriteCell(regularization, "D9", coveredPeriod);
   overwriteCell(
     regularization,
@@ -869,6 +889,20 @@ const populateHeaders = (workbook, evaluation, traineeInfo, traineeName) => {
   );
   overwriteCell(regularization, "G57", safeUpper(traineeName));
   overwriteCell(regularization, "H57", safeUpper(traineeName));
+
+  // Replace template default supervisor name/position.
+  overwriteCell(regularization, "G39", null);
+  overwriteCell(regularization, "H39", null);
+  overwriteCell(regularization, "G40", null);
+  overwriteCell(regularization, "H40", null);
+  if (supervisor) {
+    overwriteCell(regularization, "G39", supervisor);
+    overwriteCell(regularization, "H39", supervisor);
+  }
+  if (supervisorPosition) {
+    overwriteCell(regularization, "G40", supervisorPosition);
+    overwriteCell(regularization, "H40", supervisorPosition);
+  }
 };
 
 /** Populates derived actual scores on the BootCampScoreCard (compliance, quiz, ethics). */
