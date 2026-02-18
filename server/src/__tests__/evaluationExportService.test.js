@@ -234,6 +234,7 @@ describe("evaluationExportService", () => {
     const behavioralSheet = workbook.getWorksheet("Behavioral Evaluation");
     const technicalSheet = workbook.getWorksheet("Technical Evaluation");
     const sheet2 = workbook.getWorksheet("Sheet2");
+    const regularization = workbook.getWorksheet("Regularization Endorsement");
     const summary = workbook.getWorksheet("Performance Summary");
     const checklist = workbook.getWorksheet("Checklist");
 
@@ -346,6 +347,61 @@ describe("evaluationExportService", () => {
       expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
     );
     expect(performance.getCell("E15").value.result).toBeCloseTo(0.15, 4);
+
+    // Regularization Endorsement computed scores should be fully cached.
+    const perfF19Result = performance.getCell("F19").value.result || 0;
+    const perfF20Result = performance.getCell("F20").value.result || 0;
+    const getComputedCellNumber = (cellValue) =>
+      cellValue && typeof cellValue === "object"
+        ? Number(cellValue.result ?? 0)
+        : Number(cellValue ?? 0);
+
+    expect(getComputedCellNumber(regularization.getCell("E16").value)).toBeCloseTo(
+      perfF19Result,
+      4
+    );
+    expect(getComputedCellNumber(regularization.getCell("E17").value)).toBeCloseTo(
+      perfF19Result,
+      4
+    );
+    expect(getComputedCellNumber(regularization.getCell("E18").value)).toBeCloseTo(
+      perfF19Result,
+      4
+    );
+    expect(getComputedCellNumber(regularization.getCell("E19").value)).toBeCloseTo(
+      perfF19Result,
+      4
+    );
+    expect(getComputedCellNumber(regularization.getCell("E22").value)).toBeCloseTo(
+      perfF20Result,
+      4
+    );
+    expect(getComputedCellNumber(regularization.getCell("E23").value)).toBeCloseTo(
+      perfF20Result,
+      4
+    );
+    expect(getComputedCellNumber(regularization.getCell("E24").value)).toBeCloseTo(
+      perfF20Result,
+      4
+    );
+    expect(getComputedCellNumber(regularization.getCell("E25").value)).toBeCloseTo(
+      perfF20Result,
+      4
+    );
+    expect(getComputedCellNumber(regularization.getCell("E27").value)).toBeCloseTo(
+      perfF19Result + perfF20Result,
+      4
+    );
+
+    // Remove stale description comments and default current job title.
+    expect(regularization.getCell("G16").value).toBeNull();
+    expect(regularization.getCell("H16").value).toBeNull();
+    expect(regularization.getCell("G19").value).toBeNull();
+    expect(regularization.getCell("H19").value).toBeNull();
+    expect(regularization.getCell("D34").value).toBeNull();
+    expect(regularization.getCell("E34").value).toBeNull();
+    expect(regularization.getCell("G57").value).toBe("JUAN DELA CRUZ");
+    expect(regularization.getCell("H57").value).toBe("JUAN DELA CRUZ");
 
     // Laboratory Activities (left matrix) should not include quiz entries.
     const leftLabels = [];
