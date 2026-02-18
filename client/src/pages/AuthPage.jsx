@@ -144,7 +144,7 @@ const AuthPage = () => {
         return;
       }
 
-      const role = result.role;
+      const {role} = result;
       setRoleCheckStatus("idle");
       setLoadingTarget(null);
 
@@ -167,7 +167,7 @@ const AuthPage = () => {
   };
 
   const isSubmitting = loadingTarget === "form" || loadingTarget === "role";
-  const isConfigured = authService.isConfigured;
+  const {isConfigured} = authService;
   const handleRoleRetry = () => {
     if (!roleCheckUserId) return;
     resolveRoleAndRedirect(roleCheckUserId);

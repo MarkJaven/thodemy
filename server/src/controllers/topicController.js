@@ -294,7 +294,7 @@ const syncCourseAndLearningPathTotalsForTopic = async (topicId, userId, topicTit
 const listTopics = async (req, res, next) => {
   try {
     const userId = req.auth?.sub ?? null;
-    const userRole = req.userRole;
+    const {userRole} = req;
     let query = supabaseAdmin
       .from("topics")
       .select(TOPIC_SELECT_FIELDS)
@@ -326,7 +326,7 @@ const listTopics = async (req, res, next) => {
 const createTopic = async (req, res, next) => {
   try {
     const userId = req.auth?.sub ?? null;
-    const userRole = req.userRole;
+    const {userRole} = req;
     const payload = req.body || {};
     const {
       title,

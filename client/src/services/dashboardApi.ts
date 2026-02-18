@@ -394,7 +394,7 @@ export const dashboardApi = {
     const mockData = buildMockTopicsData(effectiveUserId);
 
     const userFilter = userId ? { user_id: userId } : undefined;
-    let topics = mockData.topics;
+    let {topics} = mockData;
     if (supabase) {
       const { data, error } = await supabase
         .from("topics")
