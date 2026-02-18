@@ -85,6 +85,15 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     }).format(parsed);
   };
 
+  const formatDate = (value?: string | null) => {
+    if (!value) return "Not set";
+    const parsed = new Date(value + "T00:00:00");
+    if (Number.isNaN(parsed.getTime())) return "Not set";
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+    }).format(parsed);
+  };
+
   const getUserInitial = (user: AdminUser | null) => {
     const label = user?.username || user?.email || "U";
     return label.charAt(0).toUpperCase();
@@ -635,16 +644,16 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <p className="text-2xs uppercase tracking-widest text-slate-400">Timeline</p>
                 <div className="mt-4 space-y-3 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Created</span>
-                    <span className="font-medium text-white">{formatDateTime(selectedUser?.created_at)}</span>
+                    <span className="text-slate-400">Onboarding</span>
+                    <span className="font-medium text-white">{formatDate(selectedUser?.onboarding_date)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Last updated</span>
-                    <span className="font-medium text-white">{formatDateTime(selectedUser?.updated_at)}</span>
+                    <span className="text-slate-400">Training Start</span>
+                    <span className="font-medium text-white">{formatDate(selectedUser?.training_starting_date)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Role updated</span>
-                    <span className="font-medium text-white">{formatDateTime(selectedUser?.role_updated_at)}</span>
+                    <span className="text-slate-400">Regularization</span>
+                    <span className="font-medium text-white">{formatDate(selectedUser?.target_regularization_date)}</span>
                   </div>
                 </div>
               </div>

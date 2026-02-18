@@ -326,8 +326,7 @@ const EvaluationSection = () => {
   const [createForm, setCreateForm] = useState({
     userId: "",
     learningPathId: "",
-    periodStart: "",
-    periodEnd: "",
+    endorsementDate: "",
     position: "",
     jobTitle: "",
     endorsedDepartment: "",
@@ -340,8 +339,7 @@ const EvaluationSection = () => {
   const [isEditMetaOpen, setIsEditMetaOpen] = useState(false);
   const [editMetaSaving, setEditMetaSaving] = useState(false);
   const [editMetaForm, setEditMetaForm] = useState({
-    periodStart: "",
-    periodEnd: "",
+    endorsementDate: "",
     position: "",
     jobTitle: "",
     endorsedDepartment: "",
@@ -402,6 +400,17 @@ const EvaluationSection = () => {
     loadList();
   }, [loadList]);
 
+  const formatDateDisplay = (value: unknown) => {
+    if (!value) return "â€”";
+    const raw = String(value).trim();
+    if (!raw) return "â€”";
+    const leadingDate = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (leadingDate?.[1]) return leadingDate[1];
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    return parsed.toISOString().slice(0, 10);
+  };
+
   const openDetail = async (evaluation: Evaluation) => {
     setDetailLoading(true);
     setActionError(null);
@@ -424,8 +433,9 @@ const EvaluationSection = () => {
   const openEditMetaModal = (detail: EvaluationDetail) => {
     const info = (detail.trainee_info as Record<string, unknown>) || {};
     setEditMetaForm({
-      periodStart: detail.period_start || "",
-      periodEnd: detail.period_end || "",
+      endorsementDate: String(
+        info.date_endorsed || info.target_join_date || "",
+      ),
       position: String(info.position || ""),
       jobTitle: String(info.current_job_title || info.department || ""),
       endorsedDepartment: String(info.endorsed_department || ""),
@@ -770,13 +780,12 @@ const toWholeScoreOption = (
       await evaluationApiService.createEvaluation({
         userId: createForm.userId,
         learningPathId: createForm.learningPathId || undefined,
-        periodStart: createForm.periodStart || undefined,
-        periodEnd: createForm.periodEnd || undefined,
         traineeInfo: {
           position: createForm.position,
           department: createForm.endorsedDepartment,
           current_job_title: createForm.jobTitle,
           endorsed_department: createForm.endorsedDepartment,
+          date_endorsed: createForm.endorsementDate || undefined,
           supervisor_title: createForm.supervisorTitle,
           supervisor: createForm.supervisor,
           supervisor_position: createForm.supervisorPosition,
@@ -1111,14 +1120,13 @@ const toWholeScoreOption = (
         (selectedEval.trainee_info as Record<string, unknown>) || {};
       const existingDepartment = String(existingInfo.department || "").trim();
       await evaluationApiService.updateEvaluation(selectedEval.id, {
-        period_start: editMetaForm.periodStart || null,
-        period_end: editMetaForm.periodEnd || null,
         trainee_info: {
           ...existingInfo,
           position: editMetaForm.position.trim(),
           department: existingDepartment || editMetaForm.endorsedDepartment.trim(),
           current_job_title: editMetaForm.jobTitle.trim(),
           endorsed_department: editMetaForm.endorsedDepartment.trim(),
+          date_endorsed: editMetaForm.endorsementDate || null,
           supervisor_title: editMetaForm.supervisorTitle.trim(),
           supervisor: editMetaForm.supervisor.trim(),
           supervisor_position: editMetaForm.supervisorPosition.trim(),
@@ -1398,10 +1406,14 @@ const toWholeScoreOption = (
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-400">Period</p>
+            <p className="text-xs text-slate-400">Endorsement Date</p>
             <p className="text-sm text-white">
-              {selectedEval.period_start || "â€”"} to{" "}
-              {selectedEval.period_end || "â€”"}
+              {formatDateDisplay(
+                (selectedEval.trainee_info as Record<string, unknown>)
+                  ?.date_endorsed ||
+                  (selectedEval.trainee_info as Record<string, unknown>)
+                    ?.target_join_date,
+              )}
             </p>
           </div>
           <div>
@@ -1503,39 +1515,21 @@ const toWholeScoreOption = (
           }
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm text-slate-300">
-                  Period Start
-                </label>
-                <input
-                  type="date"
-                  value={editMetaForm.periodStart}
-                  onChange={(e) =>
-                    setEditMetaForm((prev) => ({
-                      ...prev,
-                      periodStart: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm text-slate-300">
-                  Period End
-                </label>
-                <input
-                  type="date"
-                  value={editMetaForm.periodEnd}
-                  onChange={(e) =>
-                    setEditMetaForm((prev) => ({
-                      ...prev,
-                      periodEnd: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
-                />
-              </div>
+            <div>
+              <label className="mb-1 block text-sm text-slate-300">
+                Endorsement Date
+              </label>
+              <input
+                type="date"
+                value={editMetaForm.endorsementDate}
+                onChange={(e) =>
+                  setEditMetaForm((prev) => ({
+                    ...prev,
+                    endorsementDate: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -2929,11 +2923,14 @@ const toWholeScoreOption = (
       ),
     },
     {
-      key: "period",
-      header: "Period",
+      key: "endorsement_date",
+      header: "Endorsement Date",
       render: (row: Evaluation) => (
         <span className="text-sm text-slate-400">
-          {row.period_start || "â€”"} to {row.period_end || "â€”"}
+          {formatDateDisplay(
+            (row.trainee_info as Record<string, unknown>)?.date_endorsed ||
+              (row.trainee_info as Record<string, unknown>)?.target_join_date,
+          )}
         </span>
       ),
     },
@@ -3032,8 +3029,7 @@ const toWholeScoreOption = (
             setCreateForm({
               userId: "",
               learningPathId: "",
-              periodStart: "",
-              periodEnd: "",
+              endorsementDate: "",
               position: "",
               jobTitle: "",
               endorsedDepartment: "",
@@ -3111,12 +3107,13 @@ const toWholeScoreOption = (
             </label>
             <select
               value={createForm.userId}
-              onChange={(e) =>
+              onChange={(e) => {
+                const selectedUserId = e.target.value;
                 setCreateForm((prev) => ({
                   ...prev,
-                  userId: e.target.value,
-                }))
-              }
+                  userId: selectedUserId,
+                }));
+              }}
               className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
             >
               <option value="">Select a trainee...</option>
@@ -3153,39 +3150,21 @@ const toWholeScoreOption = (
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1 block text-sm text-slate-300">
-                Period Start
-              </label>
-              <input
-                type="date"
-                value={createForm.periodStart}
-                onChange={(e) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    periodStart: e.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-slate-300">
-                Period End
-              </label>
-              <input
-                type="date"
-                value={createForm.periodEnd}
-                onChange={(e) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    periodEnd: e.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
-              />
-            </div>
+          <div>
+            <label className="mb-1 block text-sm text-slate-300">
+              Endorsement Date
+            </label>
+            <input
+              type="date"
+              value={createForm.endorsementDate}
+              onChange={(e) =>
+                setCreateForm((prev) => ({
+                  ...prev,
+                  endorsementDate: e.target.value,
+                }))
+              }
+              className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
