@@ -1,6 +1,17 @@
+/**
+ * Admin User Service
+ * Handles user account management including creation, updates, and deactivation.
+ * @module services/adminUserService
+ */
+
 const { supabaseAdmin } = require("../config/supabase");
 const { ConflictError, ExternalServiceError, DatabaseError } = require("../utils/errors");
 
+/**
+ * Validates that no other superadmin exists besides the target user.
+ * @param {string} [targetUserId] - User ID to exclude from the check
+ * @throws {ConflictError} If another superadmin already exists
+ */
 const ensureSingleSuperAdmin = async (targetUserId) => {
   const { data, error } = await supabaseAdmin
     .from("user_roles")
@@ -23,6 +34,11 @@ const ensureSingleSuperAdmin = async (targetUserId) => {
   }
 };
 
+/**
+ * Nullifies all foreign key references to a user across related tables.
+ * @param {string} userId - ID of the user being removed
+ * @throws {DatabaseError} If a reference update fails
+ */
 const nullifyUserReferences = async (userId) => {
   const references = [
     { table: "user_roles", column: "created_by" },
