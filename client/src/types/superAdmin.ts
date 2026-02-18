@@ -24,6 +24,9 @@ export type AdminUser = UserProfile & {
   role: Role;
   role_updated_at?: string | null;
   is_active?: boolean;
+  onboarding_date?: string | null;
+  training_starting_date?: string | null;
+  target_regularization_date?: string | null;
 };
 
 export type Course = {

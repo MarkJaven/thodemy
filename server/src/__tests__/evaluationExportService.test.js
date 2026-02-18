@@ -6,7 +6,16 @@ jest.mock("../services/evaluationService", () => ({
   },
 }));
 
+jest.mock("../services/adminReportService", () => ({
+  adminReportService: {
+    appendChecklistSheetToWorkbook: jest.fn(async (workbook, { sheetName = "Checklist" } = {}) => {
+      workbook.addWorksheet(sheetName);
+    }),
+  },
+}));
+
 const { evaluationService } = require("../services/evaluationService");
+const { adminReportService } = require("../services/adminReportService");
 const { buildEvaluationWorkbook } = require("../services/evaluationExportService");
 
 describe("evaluationExportService", () => {
@@ -24,7 +33,7 @@ describe("evaluationExportService", () => {
         position: "trainee",
         trainer: "coach one",
         nickname: "juandelacruz",
-        date_hired: "2025-01-01",
+        date_hired: "2024-01-01",
         endorsed_department: "engineering",
         supervisor_title: "Ms.",
         supervisor: "Maria Santos",
@@ -224,6 +233,10 @@ describe("evaluationExportService", () => {
     });
 
     const { buffer } = await buildEvaluationWorkbook("eval-1");
+    expect(adminReportService.appendChecklistSheetToWorkbook).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ userId: "user-1", sheetName: "Checklist" })
+    );
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
@@ -251,6 +264,17 @@ describe("evaluationExportService", () => {
     expect(endorsement.getCell("C5").value).toBe("EMPLOYEE NAME");
     expect(performance.getCell("E4").value).toBe("ENGINEERING");
     expect(part1.getCell("E4").value).toBe("ENGINEERING");
+    expect(endorsement.getCell("E6").value).toBe("2025-01-01");
+    expect(performance.getCell("E6").value).toBe("2025-01-01");
+    expect(part1.getCell("E6").value).toBe("2025-01-01");
+    expect(technicalSheet.getCell("D6").value).toBe("2025-01-01");
+    expect(scorecard.getCell("B56").value).toBe("JUAN DELA CRUZ");
+    expect(part1.getCell("E8").value).toBe("MS. MARIA SANTOS");
+    expect(technicalSheet.getCell("D8").value).toBe("MS. MARIA SANTOS");
+    expect(endorsement.getCell("C26").value).toBe("JUAN DELA CRUZ");
+    expect(performance.getCell("D26").value).toBe("JUAN DELA CRUZ");
+    expect(part1.getCell("D26").value).toBe("JUAN DELA CRUZ");
+    expect(technicalSheet.getCell("D47").value).toBe("JUAN DELA CRUZ");
     expect(behavioralSheet.getCell("B6").value).toBe("JUAN DELA CRUZ");
     expect(behavioralSheet.getCell("B7").value).toBe("BOOTCAMPER");
     expect(behavioralSheet.getCell("B8").value).toBe("SSCGI BOOTCAMP");
@@ -283,6 +307,10 @@ describe("evaluationExportService", () => {
     const part1E12Result = part1.getCell("E12").value.result;
     const technicalI18Result = technicalSheet.getCell("I18").value.result;
     expect(part1E12Result).toBeCloseTo(technicalI18Result || 0, 4);
+    expect(technicalSheet.getCell("H5").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
+    );
+    expect(Number(technicalSheet.getCell("H5").value.result)).toBeCloseTo(0.08, 4);
     expect(dashboard.getCell("F26").value).toEqual(
       expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
     );
@@ -483,7 +511,7 @@ describe("evaluationExportService", () => {
     expect(summary.getCell("I13").value).toBeNull();
     expect(summary.getCell("K13").value).toBeNull();
     expect(summary.getCell("J4").value).toBe("Consistently failed to expectations.");
-    expect(checklist).toBeUndefined();
+    expect(checklist).toBeDefined();
   });
 
   it("sets quiz equivalent to 0 when quiz score is 0", async () => {
@@ -532,6 +560,10 @@ describe("evaluationExportService", () => {
     });
 
     const { buffer } = await buildEvaluationWorkbook("eval-2");
+    expect(adminReportService.appendChecklistSheetToWorkbook).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ userId: "user-2", sheetName: "Checklist" })
+    );
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
@@ -578,7 +610,7 @@ describe("evaluationExportService", () => {
     expect(sheet2.getCell("B2").fill).not.toEqual(
       expect.objectContaining({ pattern: "solid" })
     );
-    expect(checklist).toBeUndefined();
+    expect(checklist).toBeDefined();
     expect(scorecard.getCell("D47").value).toBe("☐");
     expect(scorecard.getCell("F47").value).toBe("☐");
   });

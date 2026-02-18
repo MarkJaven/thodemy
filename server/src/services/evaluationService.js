@@ -46,6 +46,36 @@ const round = (value, places = 2) => {
 const ALLOWED_SCORE_SOURCES = new Set(["manual", "auto_quiz", "auto_activity"]);
 
 /**
+ * Loads default evaluation period from trainee profile timeline.
+ * @param {string} userId - Trainee user ID
+ * @returns {Promise<{periodStart: string|null, periodEnd: string|null}>}
+ * @throws {ExternalServiceError}
+ */
+const getUserTimelinePeriod = async (userId) => {
+  if (!userId) {
+    return { periodStart: null, periodEnd: null };
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("onboarding_date, target_regularization_date")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new ExternalServiceError("Unable to load trainee timeline dates", {
+      code: error.code,
+      details: error.message,
+    });
+  }
+
+  return {
+    periodStart: data?.onboarding_date || null,
+    periodEnd: data?.target_regularization_date || null,
+  };
+};
+
+/**
  * Filters an array to keep only the latest entry for each unique key.
  * @param {Array} rows - Array of data rows
  * @param {Function} keyGetter - Function to extract unique key from a row
@@ -138,7 +168,9 @@ const listEvaluations = async ({ userId, status } = {}) => {
   if (userIds.length > 0) {
     const { data: profiles } = await supabaseAdmin
       .from("profiles")
-      .select("id, first_name, last_name, username, email")
+      .select(
+        "id, first_name, last_name, username, email, onboarding_date, target_regularization_date"
+      )
       .in("id", userIds);
     (profiles ?? []).forEach((p) => profileMap.set(p.id, p));
   }
@@ -164,6 +196,9 @@ const listEvaluations = async ({ userId, status } = {}) => {
 
   return (data ?? []).map((e) => ({
     ...e,
+    period_start: profileMap.get(e.user_id)?.onboarding_date || e.period_start,
+    period_end:
+      profileMap.get(e.user_id)?.target_regularization_date || e.period_end,
     trainee_name: formatName(profileMap.get(e.user_id)),
     trainee_email: profileMap.get(e.user_id)?.email || "",
     evaluator_name: formatName(profileMap.get(e.evaluator_id)),
@@ -215,7 +250,9 @@ const getEvaluation = async (evaluationId) => {
   if (data.user_id) {
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("id, first_name, last_name, username, email")
+      .select(
+        "id, first_name, last_name, username, email, onboarding_date, target_regularization_date"
+      )
       .eq("id", data.user_id)
       .single();
     traineeProfile = profile;
@@ -229,6 +266,9 @@ const getEvaluation = async (evaluationId) => {
 
   return {
     ...data,
+    period_start: traineeProfile?.onboarding_date || data.period_start,
+    period_end:
+      traineeProfile?.target_regularization_date || data.period_end,
     trainee_name: formatName(traineeProfile),
     trainee_email: traineeProfile?.email || "",
     scores: scores ?? [],
@@ -255,6 +295,10 @@ const createEvaluation = async ({
   periodStart,
   periodEnd,
 }) => {
+  const timelinePeriod = await getUserTimelinePeriod(userId);
+  const resolvedPeriodStart = timelinePeriod.periodStart || null;
+  const resolvedPeriodEnd = timelinePeriod.periodEnd || null;
+
   const { data, error } = await supabaseAdmin
     .from("evaluations")
     .insert({
@@ -262,8 +306,8 @@ const createEvaluation = async ({
       learning_path_id: learningPathId || null,
       evaluator_id: evaluatorId || null,
       trainee_info: traineeInfo || {},
-      period_start: periodStart || null,
-      period_end: periodEnd || null,
+      period_start: resolvedPeriodStart,
+      period_end: resolvedPeriodEnd,
       status: "draft",
     })
     .select("id")
@@ -299,6 +343,28 @@ const updateEvaluation = async (evaluationId, updates) => {
   const filtered = {};
   for (const key of allowedFields) {
     if (key in updates) filtered[key] = updates[key];
+  }
+
+  if ("period_start" in filtered || "period_end" in filtered) {
+    const { data: evaluation, error: evaluationError } = await supabaseAdmin
+      .from("evaluations")
+      .select("user_id")
+      .eq("id", evaluationId)
+      .single();
+
+    if (evaluationError) {
+      if (evaluationError.code === "PGRST116") {
+        throw new NotFoundError("Evaluation not found");
+      }
+      throw new ExternalServiceError("Unable to load evaluation", {
+        code: evaluationError.code,
+        details: evaluationError.message,
+      });
+    }
+
+    const timelinePeriod = await getUserTimelinePeriod(evaluation.user_id);
+    filtered.period_start = timelinePeriod.periodStart || null;
+    filtered.period_end = timelinePeriod.periodEnd || null;
   }
 
   const { data, error } = await supabaseAdmin
