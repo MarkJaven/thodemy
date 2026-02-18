@@ -124,6 +124,9 @@ const TECHNICAL_CELL_MAP = [
   { key: "te_testing", cell: "H26" },
   { key: "te_tools", cell: "H27" },
   { key: "te_best_practices", cell: "H30" },
+  { key: "te_attendance", cell: "H33" },
+  { key: "te_policy", cell: "H34" },
+  { key: "te_behavioral", cell: "H39" },
 ];
 
 /** Maps behavioral evaluation criteria to their Excel cell references. */
