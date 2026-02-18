@@ -167,6 +167,14 @@ describe("evaluationExportService", () => {
           source: "manual",
         },
         {
+          sheet: "technical",
+          criterion_key: "te_technical_knowledge",
+          criterion_label: "Tasks completed as stated in the WAS",
+          score: 4,
+          max_score: 5,
+          remarks: null,
+        },
+        {
           sheet: "behavioral",
           criterion_key: "bh_interpersonal_relations",
           criterion_label: "Interpersonal Relations",
@@ -197,7 +205,9 @@ describe("evaluationExportService", () => {
     const scorecard = workbook.getWorksheet("BootCampScoreCard");
     const scoreBoard = workbook.getWorksheet("ScoreBoard");
     const behavioralSheet = workbook.getWorksheet("Behavioral Evaluation");
+    const technicalSheet = workbook.getWorksheet("Technical Evaluation");
     const summary = workbook.getWorksheet("Performance Summary");
+    const checklist = workbook.getWorksheet("Checklist");
 
     // Header placement check: values should stay in yellow D:F cells, not overwrite green labels B:C.
     expect(String(scorecard.getCell("B3").value || "")).toContain("Employee Name");
@@ -230,6 +240,27 @@ describe("evaluationExportService", () => {
     expect(part1.getCell("E12").value).toEqual(
       expect.objectContaining({ formula: expect.any(String) })
     );
+    expect(part1.getCell("E12").value.formula).toContain("'Technical Evaluation'!I18");
+    const part1E12Result = part1.getCell("E12").value.result;
+    const technicalI18Result = technicalSheet.getCell("I18").value.result;
+    expect(part1E12Result).toBeCloseTo(technicalI18Result || 0, 4);
+    expect(dashboard.getCell("F26").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
+    );
+    expect(dashboard.getCell("F26").value.result).toBeCloseTo(part1E12Result || 0, 4);
+    expect(part1.getCell("E19").value).toEqual(
+      expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
+    );
+    const part1F19Value = part1.getCell("F19").value;
+    expect(part1F19Value).toEqual(
+      expect.objectContaining({ formula: expect.any(String) })
+    );
+    expect(part1.getCell("E19").value.result).toBeCloseTo(part1E12Result || 0, 4);
+    const part1SecondaryTotal =
+      part1F19Value && typeof part1F19Value === "object"
+        ? Number(part1F19Value.result ?? 0)
+        : 0;
+    expect(part1SecondaryTotal).toBeCloseTo(0, 4);
     expect(scorecard.getCell("N36").value).toEqual(
       expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
     );
@@ -321,6 +352,7 @@ describe("evaluationExportService", () => {
     expect(summary.getCell("I13").value).toBeNull();
     expect(summary.getCell("K13").value).toBeNull();
     expect(summary.getCell("J4").value).toBe("Consistently failed to expectations.");
+    expect(checklist).toBeUndefined();
   });
 
   it("sets quiz equivalent to 0 when quiz score is 0", async () => {
@@ -376,6 +408,7 @@ describe("evaluationExportService", () => {
     const scoreBoard = workbook.getWorksheet("ScoreBoard");
     const scorecard = workbook.getWorksheet("BootCampScoreCard");
     const behavioralSheet = workbook.getWorksheet("Behavioral Evaluation");
+    const checklist = workbook.getWorksheet("Checklist");
 
     expect(scoreBoard.getCell("AO4").value).toBe("Missed Quiz");
     expect(scoreBoard.getCell("AQ4").value).toBe(0);
@@ -408,6 +441,7 @@ describe("evaluationExportService", () => {
       expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
     );
     expect(behavioralSheet.getCell("E30").value.result).toBeCloseTo(0.3333, 4);
+    expect(checklist).toBeUndefined();
     expect(scorecard.getCell("D47").value).toBe("☐");
     expect(scorecard.getCell("F47").value).toBe("☐");
   });
