@@ -40,7 +40,7 @@ const withTimeout = (promise, durationMs, message) => {
 
 const getStoredSession = () => {
   if (typeof window === "undefined" || !supabase?.auth?.storageKey) return null;
-  const storageKey = supabase.auth.storageKey;
+  const {storageKey} = supabase.auth;
   try {
     const raw =
       window.localStorage.getItem(storageKey) ||

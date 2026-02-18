@@ -52,7 +52,7 @@ const nextWorkingDay = (date) => {
 
 const normalizeCursor = (cursor) => {
   let workingDate = ensureWorkingDay(cursor.date);
-  let remainingHours = cursor.remainingHours;
+  let {remainingHours} = cursor;
   if (workingDate.getTime() !== cursor.date.getTime()) {
     remainingHours = WORK_HOURS_PER_DAY;
   }
