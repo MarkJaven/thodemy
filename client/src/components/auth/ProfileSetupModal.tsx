@@ -19,7 +19,16 @@ interface OnboardingInfo {
   onboardingDate: string;
 }
 
+const getTodayDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
+  const todayDate = getTodayDateString();
   const [step, setStep] = useState(0);
   const [personalInfo, setPersonalInfo] = useState<PersonalInfo>({
     firstName: '',
@@ -97,6 +106,10 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
       setError('Please fill in all required fields');
       return;
     }
+    if (personalInfo.birthday > todayDate) {
+      setError('Birthdate must not exceed today');
+      return;
+    }
     setError(null);
     setStep(2);
   };
@@ -115,6 +128,10 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
     e.preventDefault();
     if (!onboardingInfo.onboardingDate) {
       setError('Please select onboarding date');
+      return;
+    }
+    if (onboardingInfo.onboardingDate > todayDate) {
+      setError('Starting/onboarding date must not exceed today');
       return;
     }
 
@@ -285,6 +302,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                       type="date"
                       value={personalInfo.birthday}
                       onChange={(e) => setPersonalInfo({ ...personalInfo, birthday: e.target.value })}
+                      max={todayDate}
                       className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-accent-purple focus:border-transparent transition-all duration-200"
                       required
                     />
@@ -378,6 +396,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                     type="date"
                     value={onboardingInfo.onboardingDate}
                     onChange={(e) => setOnboardingInfo({ ...onboardingInfo, onboardingDate: e.target.value })}
+                    max={todayDate}
                     className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-accent-purple focus:border-transparent transition-all duration-200"
                     required
                   />
