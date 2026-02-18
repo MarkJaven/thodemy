@@ -234,6 +234,7 @@ const BOOTCAMP_ENDORSEMENT_CONTRIBUTION_CELL_MAP = {
 
 const BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET = "bootcamp_endorsement_feedback";
 const PERFORMANCE_FEEDBACK_SHEET = "performance_feedback";
+const SHEET2_RATING_SHEET = "sheet2_rating";
 
 const BOOTCAMP_ENDORSEMENT_FEEDBACK_ROW_MAP = {
   A: 12,
@@ -350,6 +351,17 @@ const getDashboardFeedbackForCategory = (scoreMap, category) =>
  */
 const getPart1FeedbackForCategory = (scoreMap, category) =>
   getBootcampFeedbackForCategory(scoreMap, category);
+
+/** Builds the score key used by Sheet2 rating entries. */
+const getSheet2CriterionKey = (roleKey, dimensionKey) =>
+  `sheet2_${roleKey}_${dimensionKey}`;
+
+/** Converts a score to Sheet2 proficiency level (1-5 integer). */
+const toSheet2RatingLevel = (score) => {
+  const numeric = toNumber(score);
+  if (numeric === null) return null;
+  return Math.min(5, Math.max(1, Math.round(numeric)));
+};
 
 
 /** Normalizes a score to a 0–5 scale based on its max possible score. */
@@ -715,6 +727,33 @@ const overwriteCellWithFormulaResult = (worksheet, cellRef, result) => {
     }
   }
   overwriteCell(worksheet, cellRef, nextResult);
+};
+
+const SHEET2_RATING_ROLES = [
+  { key: "technical_business_analyst", row: 2 },
+  { key: "web_developer", row: 3 },
+  { key: "ui_ux_developer", row: 4 },
+  { key: "database_administrator", row: 5 },
+  { key: "qa_engineer", row: 6 },
+  { key: "data_engineer", row: 7 },
+  { key: "implementation_consultant", row: 8 },
+  { key: "developer", row: 9 },
+];
+
+const SHEET2_RATING_DIMENSIONS = [
+  { key: "technical_skills", column: "B" },
+  { key: "problem_solving", column: "C" },
+  { key: "communication", column: "D" },
+  { key: "collaboration", column: "E" },
+  { key: "formative_assessment", column: "F" },
+];
+
+const SHEET2_RATING_COLOR_BY_LEVEL = {
+  1: "FFEBF1DE",
+  2: "FFC4D79B",
+  3: "FF92D050",
+  4: "FF76933C",
+  5: "FF4F6228",
 };
 
 /** Reads a numeric value from a cell, preferring cached formula result when present. */
@@ -1218,6 +1257,54 @@ const populateBehavioralScores = (workbook, scoreMap) => {
   overwriteCellWithFormulaResult(behavioral, "E30", weightedScore);
 };
 
+/** Writes role-dimension ratings to Sheet2 (columns B:F, rows 2:9). */
+const populateSheet2Ratings = (workbook, scoreMap) => {
+  const sheet2 = workbook.getWorksheet("Sheet2");
+  if (!sheet2) return;
+
+  // Clear template defaults so exports only show values entered from the web tab.
+  for (const role of SHEET2_RATING_ROLES) {
+    for (const dimension of SHEET2_RATING_DIMENSIONS) {
+      const cellRef = `${dimension.column}${role.row}`;
+      const cell = sheet2.getCell(cellRef);
+      overwriteCell(sheet2, cellRef, null);
+      const clearedStyle = { ...(cell.style || {}) };
+      delete clearedStyle.fill;
+      cell.style = clearedStyle;
+    }
+  }
+
+  // Write saved values.
+  for (const role of SHEET2_RATING_ROLES) {
+    for (const dimension of SHEET2_RATING_DIMENSIONS) {
+      const criterionKey = getSheet2CriterionKey(role.key, dimension.key);
+      const score = getScoreValue(scoreMap, SHEET2_RATING_SHEET, criterionKey);
+      const level = toSheet2RatingLevel(score);
+      if (level === null) continue;
+
+      const cellRef = `${dimension.column}${role.row}`;
+      const cell = sheet2.getCell(cellRef);
+      overwriteCell(sheet2, cellRef, level);
+      const styledCell = { ...(cell.style || {}) };
+      styledCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: SHEET2_RATING_COLOR_BY_LEVEL[level] || "FF92D050" },
+      };
+      styledCell.font = {
+        ...(styledCell.font || cell.font || {}),
+        color: { argb: "FF000000" },
+      };
+      styledCell.alignment = {
+        ...(styledCell.alignment || cell.alignment || {}),
+        horizontal: "center",
+        vertical: "middle",
+      };
+      cell.style = styledCell;
+    }
+  }
+};
+
 /** Retrieves all quiz_grades entries from the score map, sorted by label. */
 const getQuizGradesEntries = (scoreMap) => {
   const entries = [];
@@ -1540,6 +1627,7 @@ const buildEvaluationWorkbook = async (evaluationId) => {
   populatePerformanceSheets(workbook, scoreMap, performanceResults);
   populateDashboardScores(workbook, scoreMap, bootcampResults);
   populateBehavioralScores(workbook, scoreMap);
+  populateSheet2Ratings(workbook, scoreMap);
   populatePerformanceSummary(
     workbook,
     evaluation,

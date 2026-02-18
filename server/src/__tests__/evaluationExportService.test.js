@@ -175,6 +175,33 @@ describe("evaluationExportService", () => {
           remarks: null,
         },
         {
+          sheet: "sheet2_rating",
+          category: "technical_business_analyst",
+          criterion_key: "sheet2_technical_business_analyst_technical_skills",
+          criterion_label: "Technical Business Analyst - Technical Skills",
+          score: 5,
+          max_score: 5,
+          remarks: null,
+        },
+        {
+          sheet: "sheet2_rating",
+          category: "technical_business_analyst",
+          criterion_key: "sheet2_technical_business_analyst_problem_solving",
+          criterion_label: "Technical Business Analyst - Problem-Solving",
+          score: 2,
+          max_score: 5,
+          remarks: null,
+        },
+        {
+          sheet: "sheet2_rating",
+          category: "technical_business_analyst",
+          criterion_key: "sheet2_technical_business_analyst_communication",
+          criterion_label: "Technical Business Analyst - Communication",
+          score: 3,
+          max_score: 5,
+          remarks: null,
+        },
+        {
           sheet: "behavioral",
           criterion_key: "bh_interpersonal_relations",
           criterion_label: "Interpersonal Relations",
@@ -206,6 +233,7 @@ describe("evaluationExportService", () => {
     const scoreBoard = workbook.getWorksheet("ScoreBoard");
     const behavioralSheet = workbook.getWorksheet("Behavioral Evaluation");
     const technicalSheet = workbook.getWorksheet("Technical Evaluation");
+    const sheet2 = workbook.getWorksheet("Sheet2");
     const summary = workbook.getWorksheet("Performance Summary");
     const checklist = workbook.getWorksheet("Checklist");
 
@@ -347,6 +375,34 @@ describe("evaluationExportService", () => {
     expect(scoreBoard.getCell(`AI${thodemyRow}`).value).toBe(0);
     expect(scoreBoard.getCell(`AK${thodemyRow}`).value).toBe(0);
 
+    // Sheet2 rating values should come only from evaluation scores.
+    expect(sheet2.getCell("B2").value).toBe(5);
+    expect(sheet2.getCell("B2").fill).toEqual(
+      expect.objectContaining({
+        type: "pattern",
+        pattern: "solid",
+        fgColor: expect.objectContaining({ argb: "FF4F6228" }),
+      })
+    );
+    expect(sheet2.getCell("C2").value).toBe(2);
+    expect(sheet2.getCell("C2").fill).toEqual(
+      expect.objectContaining({
+        type: "pattern",
+        pattern: "solid",
+        fgColor: expect.objectContaining({ argb: "FFC4D79B" }),
+      })
+    );
+    expect(sheet2.getCell("D2").value).toBe(3);
+    expect(sheet2.getCell("D2").fill).toEqual(
+      expect.objectContaining({
+        type: "pattern",
+        pattern: "solid",
+        fgColor: expect.objectContaining({ argb: "FF92D050" }),
+      })
+    );
+    expect(sheet2.getCell("E2").value).toBeNull();
+    expect(sheet2.getCell("B3").value).toBeNull();
+
     // Summary cleanup checks.
     expect(summary.getCell("F13").value).toBeNull();
     expect(summary.getCell("I13").value).toBeNull();
@@ -408,6 +464,7 @@ describe("evaluationExportService", () => {
     const scoreBoard = workbook.getWorksheet("ScoreBoard");
     const scorecard = workbook.getWorksheet("BootCampScoreCard");
     const behavioralSheet = workbook.getWorksheet("Behavioral Evaluation");
+    const sheet2 = workbook.getWorksheet("Sheet2");
     const checklist = workbook.getWorksheet("Checklist");
 
     expect(scoreBoard.getCell("AO4").value).toBe("Missed Quiz");
@@ -441,6 +498,11 @@ describe("evaluationExportService", () => {
       expect.objectContaining({ formula: expect.any(String), result: expect.any(Number) })
     );
     expect(behavioralSheet.getCell("E30").value.result).toBeCloseTo(0.3333, 4);
+    expect(sheet2.getCell("B2").value).toBeNull();
+    expect(sheet2.getCell("F9").value).toBeNull();
+    expect(sheet2.getCell("B2").fill).not.toEqual(
+      expect.objectContaining({ pattern: "solid" })
+    );
     expect(checklist).toBeUndefined();
     expect(scorecard.getCell("D47").value).toBe("☐");
     expect(scorecard.getCell("F47").value).toBe("☐");
