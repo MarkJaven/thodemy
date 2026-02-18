@@ -6,6 +6,7 @@ export type UserProfile = {
   last_name: string | null;
   username?: string | null;
   email: string | null;
+  profile_setup_completed?: boolean | null;
   created_at?: string | null;
   updated_at?: string | null;
 };

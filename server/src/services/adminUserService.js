@@ -111,7 +111,7 @@ const createUser = async ({ email, username, password, role, createdBy }) => {
 
   const { error: profileError } = await supabaseAdmin
     .from("profiles")
-    .upsert({ id: userId, username, email })
+    .upsert({ id: userId, username, email, profile_setup_completed: false })
     .select("id");
 
   if (profileError) {
@@ -235,7 +235,9 @@ const deleteUser = async (userId) => {
 const listUsers = async ({ roleFilter } = {}) => {
   const { data: profiles, error: profileError } = await supabaseAdmin
     .from("profiles")
-    .select("id, first_name, last_name, username, email, is_active, created_at, updated_at")
+    .select(
+      "id, first_name, last_name, username, email, is_active, profile_setup_completed, created_at, updated_at"
+    )
     .order("created_at", { ascending: false });
 
   if (profileError) {
