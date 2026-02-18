@@ -252,7 +252,7 @@ const listUsers = async ({ roleFilter } = {}) => {
   const { data: profiles, error: profileError } = await supabaseAdmin
     .from("profiles")
     .select(
-      "id, first_name, last_name, username, email, is_active, profile_setup_completed, created_at, updated_at"
+      "id, first_name, last_name, username, email, is_active, profile_setup_completed, created_at, updated_at, onboarding_date, training_starting_date, target_regularization_date"
     )
     .order("created_at", { ascending: false });
 

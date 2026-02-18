@@ -956,6 +956,49 @@ const buildUserChecklistWorkbook = async ({ userId } = {}) => {
   return { buffer, fileName };
 };
 
+const appendChecklistSheetToWorkbook = async (
+  workbook,
+  { userId, sheetName = "Checklist" } = {}
+) => {
+  if (!workbook) {
+    throw new AppError("Unable to append checklist sheet without a workbook.", 500, "EXPORT_WORKBOOK_REQUIRED");
+  }
+
+  const [rows, users] = await Promise.all([
+    loadUserChecklistRows({ userId }),
+    loadChecklistUsers({ userId }),
+  ]);
+
+  const rowsByUserId = new Map();
+  rows.forEach((row, index) => {
+    const fallbackKey = `${row.userName || ""}|${row.userEmail || ""}`;
+    const key = row.userId
+      ? String(row.userId)
+      : fallbackKey !== "|"
+        ? fallbackKey
+        : `unknown-${index}`;
+    if (!rowsByUserId.has(key)) {
+      rowsByUserId.set(key, []);
+    }
+    rowsByUserId.get(key).push(row);
+  });
+
+  const existingSheet = workbook.getWorksheet(sheetName);
+  if (existingSheet) {
+    workbook.removeWorksheet(existingSheet.id);
+  }
+
+  const summary = userId ? users[0] || { id: userId, userName: "", userEmail: "" } : users[0] || {};
+  const scopedRows = userId ? rowsByUserId.get(String(summary.id)) || rows : rows;
+  const sheet = workbook.addWorksheet(sheetName);
+  populateUserChecklistSheet(sheet, scopedRows, summary);
+  return sheet;
+};
+
 module.exports = {
-  adminReportService: { buildUserChecklistCsv, buildUserChecklistWorkbook },
+  adminReportService: {
+    buildUserChecklistCsv,
+    buildUserChecklistWorkbook,
+    appendChecklistSheetToWorkbook,
+  },
 };
