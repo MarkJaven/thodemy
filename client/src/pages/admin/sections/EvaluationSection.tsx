@@ -254,10 +254,10 @@ type TabKey =
   | "summary";
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "scorecard", label: "BootCamp ScoreCard" },
-  { key: "endorsement_feedback", label: "Endorsement Feedback" },
+  { key: "scorecard", label: "Trainee ScoreCard" },
+  { key: "endorsement_feedback", label: "Endorsement Performance Evaluation" },
   { key: "scoreboard", label: "ScoreBoard" },
-  { key: "performance", label: "Performance Evaluation" },
+  { key: "performance", label: "Bootcamp Performance Evaluation" },
   { key: "behavioral", label: "Behavioral Evaluation" },
   { key: "technical", label: "Technical Evaluation" },
   { key: "summary", label: "Summary / Dashboard" },
@@ -2076,7 +2076,7 @@ const toWholeScoreOption = (
     return (
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-white">
-          Performance Evaluation
+          Bootcamp Performance Evaluation
         </h3>
         <p className="text-sm text-slate-400">
           Actual is auto-computed from ScoreBoard and quiz/activity data. Fill
@@ -2329,14 +2329,17 @@ const toWholeScoreOption = (
 
   function renderTechnical() {
     const technicalCriteria = [
-      { key: "te_technical_knowledge", label: "Technical Knowledge" },
-      { key: "te_code_quality", label: "Code Quality" },
-      { key: "te_debugging", label: "Debugging and Problem-solving" },
-      { key: "te_system_design", label: "System Design" },
-      { key: "te_documentation", label: "Documentation" },
-      { key: "te_testing", label: "Testing Practices" },
-      { key: "te_tools", label: "Development Tools Proficiency" },
-      { key: "te_best_practices", label: "Best Practices and Standards" },
+      { key: "te_technical_knowledge", label: "Tasks completed as stated in the WAS", goal: "Tasks handled should be completed based on the weekly assigned activities" },
+      { key: "te_code_quality", label: "Milestones Completed on Time", goal: "Project Milestones should be completed as described in the approved project schedules" },
+      { key: "te_debugging", label: "Number of Customer Complaints", goal: "Avoid any customer escalation and/or complaints. Project team should be able to manage, mitigate any issues before it gets escalated" },
+      { key: "te_system_design", label: "Number of Action Listed vs. Completed", goal: "To ensure members time are well spent" },
+      { key: "te_documentation", label: "Number of Errors and/or Bug reported", goal: "To ensure quality of members output is given priority" },
+      { key: "te_testing", label: "Number of Tickets vs. Resolved", goal: "To ensure that service level commitment is prioritized and given importance" },
+      { key: "te_tools", label: "Abandon Rate", goal: "To ensure that all reported tickets are attended" },
+      { key: "te_best_practices", label: "Number Trainings Hours vs. Planned", goal: "To promote members development and help members build on strengths and address deficiencies" },
+      { key: "te_attendance", label: "Attendance", goal: "To ensure that members are present and arriving at work on time and in accordance with the policies and procedure" },
+      { key: "te_policy", label: "Policy", goal: "To ensure that employees and the organization abide by internal rules of conduct and external rules and regulations" },
+      { key: "te_behavioral", label: "Interpersonal Relations / Behavior", goal: "" },
     ];
 
     return (
@@ -2352,14 +2355,15 @@ const toWholeScoreOption = (
             <thead>
               <tr className="border-b border-white/10 text-left text-xs text-slate-400">
                 <th className="px-2 py-2 font-medium">Criterion</th>
+                <th className="px-2 py-2 font-medium">Goals / Targets</th>
                 <th className="px-2 py-2 font-medium w-24">Score (1-5)</th>
-                <th className="px-2 py-2 font-medium">Remarks</th>
               </tr>
             </thead>
             <tbody>
               {technicalCriteria.map((item) => (
                 <tr key={item.key} className="border-b border-white/5">
-                  <td className="px-2 py-2 text-white">{item.label}</td>
+                  <td className="px-2 py-2 text-white font-medium">{item.label}</td>
+                  <td className="px-2 py-2 text-slate-400 text-xs">{item.goal}</td>
                   <td className="px-2 py-2">
                     <input
                       type="number"
@@ -2380,17 +2384,6 @@ const toWholeScoreOption = (
                         });
                       }}
                       className="w-20 rounded border border-white/10 bg-ink-900 px-2 py-1 text-center text-white focus:border-purple-500 focus:outline-none"
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <input
-                      type="text"
-                      value={getRemarks("technical", item.key)}
-                      onChange={(e) =>
-                        setRemarksValue("technical", item.key, e.target.value)
-                      }
-                      placeholder="Optional remarks"
-                      className="w-full rounded border border-white/10 bg-ink-900 px-2 py-1 text-white placeholder-slate-600 focus:border-purple-500 focus:outline-none"
                     />
                   </td>
                 </tr>
