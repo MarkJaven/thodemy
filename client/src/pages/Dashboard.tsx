@@ -1368,6 +1368,10 @@ const Dashboard = () => {
   };
 
   const startProfileEdit = () => {
+    if (!profile?.profile_setup_completed) {
+      setProfileUpdateError("Complete account setup first before editing your profile.");
+      return;
+    }
     setProfileDraft(profile ?? {});
     setIsProfileEditing(true);
     setProfileUpdateError(null);
@@ -1382,6 +1386,10 @@ const Dashboard = () => {
 
   const handleProfileSave = async () => {
     if (!supabase || !user?.id) return;
+    if (!profile?.profile_setup_completed) {
+      setProfileUpdateError("Complete account setup first before editing your profile.");
+      return;
+    }
     setProfileSaving(true);
     setProfileUpdateError(null);
     setProfileUpdateSuccess(null);
@@ -3183,6 +3191,7 @@ const Dashboard = () => {
     }
 
     const profileView = (isProfileEditing ? profileDraft : profile) ?? {};
+    const isSetupCompleted = Boolean(profile?.profile_setup_completed);
     const displayName =
       profileView.full_name ||
       [profileView.first_name, profileView.last_name].filter(Boolean).join(" ") ||
@@ -3195,7 +3204,7 @@ const Dashboard = () => {
         .join("")
         .slice(0, 2)
         .toUpperCase() ?? "LR";
-    const statusLabel = profileView.profile_setup_completed
+    const statusLabel = isSetupCompleted
       ? "Profile completed"
       : "Profile incomplete";
     const roleLabel = roleLoading
@@ -3254,6 +3263,7 @@ const Dashboard = () => {
               <button
                 type="button"
                 onClick={startProfileEdit}
+                disabled={!isSetupCompleted}
                 className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white hover:bg-white/20"
               >
                 Edit
@@ -3404,6 +3414,11 @@ const Dashboard = () => {
           <p className="mt-2 text-xs text-slate-500">
             Training information is managed by your administrator.
           </p>
+          {!isSetupCompleted && (
+            <p className="mt-2 text-xs text-amber-300">
+              Complete account setup first before editing your profile.
+            </p>
+          )}
         </div>
 
         {profileUpdateError && (
@@ -3809,7 +3824,10 @@ const Dashboard = () => {
               .select('*')
               .eq('id', user.id)
               .single()
-              .then(({ data }) => setProfile(data));
+              .then(({ data }) => {
+                setProfile(data);
+                setProfileDraft(data);
+              });
           }
         }}
       />
