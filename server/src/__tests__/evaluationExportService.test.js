@@ -85,6 +85,20 @@ describe("evaluationExportService", () => {
           remarks: "Performance improvement A",
         },
         {
+          sheet: "performance_feedback",
+          criterion_key: "cat_D_strength",
+          score: null,
+          max_score: 5,
+          remarks: "Performance strength D",
+        },
+        {
+          sheet: "performance_feedback",
+          criterion_key: "cat_D_improvement",
+          score: null,
+          max_score: 5,
+          remarks: "Performance improvement D",
+        },
+        {
           sheet: "quiz_grades",
           criterion_key: "quiz_alpha",
           criterion_label: "Quiz Alpha",
@@ -196,10 +210,20 @@ describe("evaluationExportService", () => {
     expect(dashboard.getCell("F14").value).toEqual(
       expect.objectContaining({ formula: expect.any(String) })
     );
-    expect(dashboard.getCell("G14").value).toBe("Strong ownership");
-    expect(dashboard.getCell("L14").value).toBe("Sharpen communication");
+    // Dashboard feedback now sources from performance_feedback (not bootcamp endorsement).
+    expect(dashboard.getCell("G14").value).toBe("Performance strength A");
+    expect(dashboard.getCell("L14").value).toBe("Performance improvement A");
     expect(dashboard.getCell("G15").value).toBeNull();
     expect(dashboard.getCell("L15").value).toBeNull();
+    expect(dashboard.getCell("G17").value).toBe("Performance strength D");
+    expect(dashboard.getCell("L17").value).toBe("Performance improvement D");
+    // Dashboard performance rows (26-32) should show endorsement feedback.
+    expect(dashboard.getCell("G26").value).toBe("Strong ownership");
+    expect(dashboard.getCell("L26").value).toBe("Sharpen communication");
+    expect(dashboard.getCell("G27").value).toBeNull();
+    expect(dashboard.getCell("L27").value).toBeNull();
+    expect(dashboard.getCell("G29").value).toBe("Responsive to clients");
+    expect(dashboard.getCell("L29").value).toBe("Improve SLA turnaround");
     expect(performance.getCell("E12").value).toEqual(
       expect.objectContaining({ formula: expect.any(String) })
     );
@@ -246,12 +270,17 @@ describe("evaluationExportService", () => {
     expect(behavioralSheet.getCell("E30").value.result).toBeCloseTo(0.4, 4);
 
     // Feedback propagation checks.
-    expect(endorsement.getCell("F12").value).toBe("Strong ownership");
-    expect(endorsement.getCell("H12").value).toBe("Sharpen communication");
+    // BootcampEndorsementScoreCard now sources from performance_feedback.
+    expect(endorsement.getCell("F12").value).toBe("Performance strength A");
+    expect(endorsement.getCell("H12").value).toBe("Performance improvement A");
     expect(performance.getCell("F12").value).toBe("Performance strength A");
     expect(performance.getCell("H12").value).toBe("Performance improvement A");
-    expect(part1.getCell("F12").value).toBe("Performance strength A");
-    expect(part1.getCell("H12").value).toBe("Performance improvement A");
+    expect(part1.getCell("F12").value).toBe("Strong ownership");
+    expect(part1.getCell("H12").value).toBe("Sharpen communication");
+    expect(performance.getCell("F15").value).toBe("Performance strength D");
+    expect(performance.getCell("H15").value).toBe("Performance improvement D");
+    expect(part1.getCell("F15").value).toBe("Responsive to clients");
+    expect(part1.getCell("H15").value).toBe("Improve SLA turnaround");
 
     // Weight correctness check (Category D contribution now 0.15).
     expect(performance.getCell("E15").value).toEqual(
