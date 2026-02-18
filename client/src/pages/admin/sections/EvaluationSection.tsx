@@ -225,6 +225,29 @@ const SCOREBOARD_ACTIVITY_KEY_SEPARATOR = "::";
 const SCOREBOARD_META_CATEGORY = "__activity_meta";
 const BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET = "bootcamp_endorsement_feedback";
 const PERFORMANCE_FEEDBACK_SHEET = "performance_feedback";
+const SHEET2_RATING_SHEET = "sheet2_rating";
+
+const SHEET2_RATING_DIMENSIONS = [
+  { key: "technical_skills", label: "Technical Skills", max: 5 },
+  { key: "problem_solving", label: "Problem-Solving", max: 5 },
+  { key: "communication", label: "Communication", max: 5 },
+  { key: "collaboration", label: "Collaboration", max: 5 },
+  { key: "formative_assessment", label: "Formative Assessment", max: 5 },
+] as const;
+
+const SHEET2_RATING_ROLES = [
+  { key: "technical_business_analyst", label: "Technical Business Analyst" },
+  { key: "web_developer", label: "Web Developer" },
+  { key: "ui_ux_developer", label: "UI/UX Developer" },
+  { key: "database_administrator", label: "Database Administrator" },
+  { key: "qa_engineer", label: "QA Engineer" },
+  { key: "data_engineer", label: "Data Engineer" },
+  { key: "implementation_consultant", label: "Implementation Consultant" },
+  { key: "developer", label: "Developer" },
+] as const;
+
+const getSheet2CriterionKey = (roleKey: string, dimensionKey: string) =>
+  `sheet2_${roleKey}_${dimensionKey}`;
 
 const getBootcampStrengthKey = (category: string) => `cat_${category}_strength`;
 
@@ -251,6 +274,7 @@ type TabKey =
   | "performance"
   | "behavioral"
   | "technical"
+  | "sheet2_rating"
   | "summary";
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -260,6 +284,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "performance", label: "Bootcamp Performance Evaluation" },
   { key: "behavioral", label: "Behavioral Evaluation" },
   { key: "technical", label: "Technical Evaluation" },
+  { key: "sheet2_rating", label: "Role Competency Matrix" },
   { key: "summary", label: "Summary / Dashboard" },
 ];
 
@@ -1209,7 +1234,7 @@ const toWholeScoreOption = (
               }}
               className="rounded-lg border border-white/10 bg-ink-800 px-3 py-2 text-sm text-slate-300 hover:bg-ink-700"
             >
-              &larr; Back
+              Back
             </button>
             <div>
               <h2 className="text-xl font-semibold text-white">
@@ -1329,6 +1354,7 @@ const toWholeScoreOption = (
           {activeTab === "performance" && renderPerformance()}
           {activeTab === "behavioral" && renderBehavioral()}
           {activeTab === "technical" && renderTechnical()}
+          {activeTab === "sheet2_rating" && renderSheet2Rating()}
           {activeTab === "summary" && renderSummary()}
         </div>
 
@@ -2386,6 +2412,92 @@ const toWholeScoreOption = (
                       className="w-20 rounded border border-white/10 bg-ink-900 px-2 py-1 text-center text-white focus:border-purple-500 focus:outline-none"
                     />
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  // Sheet2 Rating Tab
+
+  function renderSheet2Rating() {
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-white">
+          Role Competency Matrix
+        </h3>
+        <p className="text-sm text-slate-400">
+          Rate each role from 1 to 5 across core competencies. These values
+          populate the Excel
+          <span className="mx-1 font-medium text-slate-300">Sheet2</span>
+          tab when exported.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-left text-xs text-slate-400">
+                <th className="px-2 py-2 font-medium">Role</th>
+                {SHEET2_RATING_DIMENSIONS.map((dimension) => (
+                  <th
+                    key={dimension.key}
+                    className="px-2 py-2 font-medium text-center"
+                  >
+                    {dimension.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {SHEET2_RATING_ROLES.map((role) => (
+                <tr key={role.key} className="border-b border-white/5">
+                  <td className="px-2 py-2 font-medium text-white">
+                    {role.label}
+                  </td>
+                  {SHEET2_RATING_DIMENSIONS.map((dimension) => {
+                    const criterionKey = getSheet2CriterionKey(
+                      role.key,
+                      dimension.key,
+                    );
+                    const currentScore = getScore(
+                      SHEET2_RATING_SHEET,
+                      criterionKey,
+                    );
+                    return (
+                      <td key={criterionKey} className="px-2 py-2 text-center">
+                        <input
+                          type="number"
+                          min={1}
+                          max={dimension.max}
+                          step={1}
+                          value={currentScore ?? ""}
+                          onChange={(e) => {
+                            const parsed = e.target.value
+                              ? parseFloat(e.target.value)
+                              : NaN;
+                            const value = Number.isFinite(parsed)
+                              ? Math.round(
+                                  Math.min(Math.max(parsed, 1), dimension.max),
+                                )
+                              : null;
+                            setScoreValue(
+                              SHEET2_RATING_SHEET,
+                              criterionKey,
+                              value,
+                              {
+                                category: role.key,
+                                criterion_label: `${role.label} - ${dimension.label}`,
+                                max_score: dimension.max,
+                              },
+                            );
+                          }}
+                          className="w-20 rounded border border-white/10 bg-ink-900 px-2 py-1 text-center text-white focus:border-purple-500 focus:outline-none"
+                        />
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
