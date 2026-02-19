@@ -34,10 +34,17 @@ const buildEntry = (level, message, context) => ({
 });
 
 /**
- * Resolve an absolute log file path.
+ * Resolve an absolute log file path, confined to the project directory.
  * @returns {string}
  */
-const resolveLogPath = () => path.resolve(process.cwd(), env.logFilePath);
+const LOG_BASE_DIR = path.resolve(process.cwd());
+const resolveLogPath = () => {
+  const resolved = path.resolve(LOG_BASE_DIR, env.logFilePath);
+  if (!resolved.startsWith(LOG_BASE_DIR + path.sep) && resolved !== LOG_BASE_DIR) {
+    throw new Error(`Log file path escapes base directory: ${env.logFilePath}`);
+  }
+  return resolved;
+};
 
 /**
  * Ensure the log directory exists.
