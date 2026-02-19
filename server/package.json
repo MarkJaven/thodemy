@@ -34,6 +34,17 @@
     "supertest": "^7.1.3"
   },
   "overrides": {
-    "minimatch": "^10.2.1"
+    "exceljs": {
+      "archiver": {
+        "readdir-glob": {
+          "minimatch": "^10.2.1"
+        },
+        "archiver-utils": {
+          "glob": {
+            "minimatch": "^10.2.1"
+          }
+        }
+      }
+    }
   }
 }
