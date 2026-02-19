@@ -4,6 +4,7 @@ const cors = require("cors");
 const { buildCorsOptions } = require("./config/cors");
 const { requestLogger } = require("./middleware/logger");
 const { sanitizeRequest } = require("./middleware/sanitize");
+const { verifyCsrfOrigin } = require("./middleware/csrf");
 const routes = require("./routes");
 const { NotFoundError } = require("./utils/errors");
 const { errorHandler } = require("./middleware/errorHandler");
@@ -15,6 +16,7 @@ app.use(cors(buildCorsOptions()));
 app.use(express.json({ limit: "1mb" }));
 app.use(requestLogger);
 app.use(sanitizeRequest);
+app.use(verifyCsrfOrigin);
 
 // Health checks and basic root response for hosting providers
 app.get("/", (_req, res) => res.status(200).json({ status: "ok" }));

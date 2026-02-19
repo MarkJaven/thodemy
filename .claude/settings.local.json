@@ -30,7 +30,9 @@
       "Bash(snyk test:*)",
       "Bash(npx --yes better-npm-audit:*)",
       "Bash(npx eslint:*)",
-      "Bash(./node_modules/.bin/eslint:*)"
+      "Bash(./node_modules/.bin/eslint:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm view:*)"
     ]
   }
 }
