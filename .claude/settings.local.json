@@ -32,7 +32,9 @@
       "Bash(npx eslint:*)",
       "Bash(./node_modules/.bin/eslint:*)",
       "Bash(npm ls:*)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(npm run dev:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

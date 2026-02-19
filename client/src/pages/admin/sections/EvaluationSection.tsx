@@ -104,18 +104,6 @@ const BOOTCAMP_CRITERIA: {
       },
     ],
   },
-  {
-    category: "G",
-    label: "ETHICS AND VALUES",
-    items: [
-      {
-        key: "g1_integrity",
-        label: "Integrity and Professionalism",
-        weight: 5,
-      },
-      { key: "g2_respect", label: "Respect and Inclusivity", weight: 5 },
-    ],
-  },
 ];
 
 const CATEGORY_WEIGHTS: Record<string, number> = {
@@ -125,7 +113,6 @@ const CATEGORY_WEIGHTS: Record<string, number> = {
   D: 10,
   E: 10,
   F: 10,
-  G: 10,
 };
 
 const PERFORMANCE_CATEGORY_WEIGHTS: Record<string, number> = {
@@ -135,7 +122,6 @@ const PERFORMANCE_CATEGORY_WEIGHTS: Record<string, number> = {
   pe_d: 15,
   pe_e: 5,
   pe_f: 5,
-  pe_g: 15,
 };
 
 const PERFORMANCE_CATEGORY_ROWS = [
@@ -175,12 +161,6 @@ const PERFORMANCE_CATEGORY_ROWS = [
     label: "Category F - Compliance",
     weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_f,
   },
-  {
-    key: "pe_g",
-    category: "G",
-    label: "Category G - Ethics and Values",
-    weight: PERFORMANCE_CATEGORY_WEIGHTS.pe_g,
-  },
 ] as const;
 
 const SCOREBOARD_CRITERIA = BOOTCAMP_CRITERIA.flatMap((group) =>
@@ -214,8 +194,6 @@ const SCOREBOARD_CRITERION_MAX_SCORES: Record<string, number> = {
   e2_feedback: 20,
   f1_policies: 5,
   f2_reporting: 5,
-  g1_integrity: 5,
-  g2_respect: 5,
 };
 
 const getCriterionMaxScore = (criterionKey: string) =>
