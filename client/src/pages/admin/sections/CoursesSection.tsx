@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Modal from "../../../components/admin/Modal";
+import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import {
   adminCourseService,
   CourseDetail,
@@ -182,6 +183,14 @@ const buildTopicGroupsFromCorequisites = (
     }));
 };
 
+type ConfirmDialogState = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void | Promise<void>;
+};
+
 const MAX_COURSE_DESCRIPTION_LENGTH = 5000;
 
 const CoursesSection = () => {
@@ -214,6 +223,7 @@ const CoursesSection = () => {
   const [detail, setDetail] = useState<CourseDetail | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
   const topicLookup = useMemo(() => new Map(topics.map((topic) => [topic.id.trim(), topic])), [topics]);
 
@@ -417,6 +427,82 @@ const CoursesSection = () => {
     }
   };
 
+  const hasFormChanges = useMemo(() => {
+    if (!isFormOpen) return false;
+    const normalizedCurrentTopicIds = normalizeTopicIds(formState.topic_ids, topicLookup);
+    const normalizedCurrentGroups = normalizeTopicGroups(
+      formState.topic_groups,
+      normalizedCurrentTopicIds,
+    );
+    const currentSnapshot = {
+      title: formState.title,
+      description: formState.description,
+      status: formState.status,
+      topic_ids: normalizedCurrentTopicIds,
+      topic_groups: normalizedCurrentGroups,
+      pending_group_topic_ids: pendingTopicIdsInOrder,
+      pending_group_name: groupNameInput.trim(),
+    };
+
+    const baselineSnapshot = selectedCourse
+      ? (() => {
+          const baselineTopicIds = normalizeTopicIds(selectedCourse.topic_ids ?? [], topicLookup);
+          const baselineGroups = normalizeTopicGroups(
+            selectedCourse.topic_groups ??
+              buildTopicGroupsFromCorequisites(
+                normalizeRelationMap(selectedCourse.topic_corequisites, new Set(baselineTopicIds)),
+                baselineTopicIds,
+              ),
+            baselineTopicIds,
+          );
+          return {
+            title: selectedCourse.title,
+            description: selectedCourse.description ?? "",
+            status: selectedCourse.status ?? "draft",
+            topic_ids: baselineTopicIds,
+            topic_groups: baselineGroups,
+            pending_group_topic_ids: [],
+            pending_group_name: "",
+          };
+        })()
+      : {
+          title: "",
+          description: "",
+          status: "draft",
+          topic_ids: [],
+          topic_groups: [],
+          pending_group_topic_ids: [],
+          pending_group_name: "",
+        };
+
+    return JSON.stringify(currentSnapshot) !== JSON.stringify(baselineSnapshot);
+  }, [
+    formState,
+    groupNameInput,
+    isFormOpen,
+    pendingTopicIdsInOrder,
+    selectedCourse,
+    topicLookup,
+  ]);
+
+  const requestCloseForm = () => {
+    if (saving || formLoading) return;
+    if (!hasFormChanges) {
+      setIsFormOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard course changes?",
+      description: "You have unsaved course changes. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsFormOpen(false);
+        setActionError(null);
+      },
+    });
+  };
+
   const updateTopicIds = (nextIds: string[]) => {
     const uniqueIds = normalizeTopicIds(nextIds, topicLookup);
     const keepIds = new Set(uniqueIds);
@@ -592,40 +678,44 @@ const CoursesSection = () => {
 
   const handleArchiveToggle = async (course: CourseSummary) => {
     const nextStatus = course.status === "archived" ? "draft" : "archived";
-    const confirmed = window.confirm(
-      `${nextStatus === "archived" ? "Deactivate" : "Activate"} "${course.title}"?`
-    );
-    if (!confirmed) return;
-    setActionError(null);
-    try {
-      const normalizedTopicIds = normalizeTopicIds(course.topic_ids ?? [], topicLookup);
-      const keepIds = new Set(normalizedTopicIds);
-      const normalizedGroups = normalizeTopicGroups(
-        course.topic_groups ??
-          buildTopicGroupsFromCorequisites(
-            normalizeRelationMap(course.topic_corequisites, keepIds),
+    setConfirmDialog({
+      title: `${nextStatus === "archived" ? "Deactivate" : "Activate"} course?`,
+      description: `${nextStatus === "archived" ? "Deactivate" : "Activate"} "${course.title}"?`,
+      confirmLabel: nextStatus === "archived" ? "Deactivate" : "Activate",
+      variant: "danger",
+      onConfirm: async () => {
+        setActionError(null);
+        try {
+          const normalizedTopicIds = normalizeTopicIds(course.topic_ids ?? [], topicLookup);
+          const keepIds = new Set(normalizedTopicIds);
+          const normalizedGroups = normalizeTopicGroups(
+            course.topic_groups ??
+              buildTopicGroupsFromCorequisites(
+                normalizeRelationMap(course.topic_corequisites, keepIds),
+                normalizedTopicIds
+              ),
             normalizedTopicIds
-          ),
-        normalizedTopicIds
-      );
-      await adminCourseService.updateCourse(course.id, {
-        title: course.title,
-        description: course.description ?? "",
-        status: nextStatus,
-        topic_ids: normalizedTopicIds,
-        topic_prerequisites: {},
-        topic_groups: normalizedGroups,
-        topic_corequisites: {},
-        enrollment_enabled: course.enrollment_enabled ?? true,
-        enrollment_limit: course.enrollment_limit ?? null,
-        start_at: course.start_at ?? null,
-      });
-      await loadData();
-    } catch (toggleError) {
-      setActionError(
-        toggleError instanceof Error ? toggleError.message : "Unable to update course status."
-      );
-    }
+          );
+          await adminCourseService.updateCourse(course.id, {
+            title: course.title,
+            description: course.description ?? "",
+            status: nextStatus,
+            topic_ids: normalizedTopicIds,
+            topic_prerequisites: {},
+            topic_groups: normalizedGroups,
+            topic_corequisites: {},
+            enrollment_enabled: course.enrollment_enabled ?? true,
+            enrollment_limit: course.enrollment_limit ?? null,
+            start_at: course.start_at ?? null,
+          });
+          await loadData();
+        } catch (toggleError) {
+          setActionError(
+            toggleError instanceof Error ? toggleError.message : "Unable to update course status."
+          );
+        }
+      },
+    });
   };
 
   const openDetail = async (course: CourseSummary) => {
@@ -842,14 +932,14 @@ const CoursesSection = () => {
           isOpen={isFormOpen}
           title={selectedCourse ? "Edit Course" : "Create New Course"}
           description="Design your course by adding topics and estimating duration."
-          onClose={() => (saving ? null : setIsFormOpen(false))}
+          onClose={requestCloseForm}
           size="full"
           topAligned
           footer={
             <>
               <button
                 type="button"
-                onClick={() => setIsFormOpen(false)}
+                onClick={requestCloseForm}
                 className="btn-secondary"
               >
                 Cancel
@@ -1242,6 +1332,22 @@ const CoursesSection = () => {
           </div>
         )}
         </Modal>
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirm action"}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Confirm"}
+        variant={confirmDialog?.variant ?? "default"}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) {
+            await action();
+          }
+        }}
+      />
       </div>
     </div>
   );

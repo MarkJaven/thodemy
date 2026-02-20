@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../../../components/admin/Modal";
+import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import {
   adminLearningPathService,
   type LearningPathSummary,
@@ -11,6 +12,14 @@ import {
 } from "../../../services/adminCourseService";
 
 const statusOptions = ["draft", "published", "archived"] as const;
+
+type ConfirmDialogState = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void | Promise<void>;
+};
 
 const LearningPathsSection = () => {
   const [learningPaths, setLearningPaths] = useState<LearningPathSummary[]>([]);
@@ -46,6 +55,7 @@ const LearningPathsSection = () => {
   const [removingEnrollmentId, setRemovingEnrollmentId] = useState<
     string | null
   >(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
   const courseLookup = useMemo(
     () => new Map(courses.map((c) => [c.id, c])),
@@ -148,6 +158,51 @@ const LearningPathsSection = () => {
     setIsFormOpen(true);
   };
 
+  const hasFormChanges = useMemo(() => {
+    if (!isFormOpen) return false;
+    const baseline = selectedPath
+      ? {
+          title: selectedPath.title,
+          description: selectedPath.description ?? "",
+          status: selectedPath.status ?? "draft",
+          enrollment_enabled: selectedPath.enrollment_enabled ?? true,
+          enrollment_limit: selectedPath.enrollment_limit
+            ? String(selectedPath.enrollment_limit)
+            : "",
+          start_at: selectedPath.start_at ? selectedPath.start_at.slice(0, 10) : "",
+          course_ids: selectedPath.course_ids ?? [],
+        }
+      : {
+          title: "",
+          description: "",
+          status: "draft",
+          enrollment_enabled: true,
+          enrollment_limit: "",
+          start_at: "",
+          course_ids: [],
+        };
+    return JSON.stringify(formState) !== JSON.stringify(baseline);
+  }, [formState, isFormOpen, selectedPath]);
+
+  const requestCloseForm = () => {
+    if (saving) return;
+    if (!hasFormChanges) {
+      setIsFormOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard learning path changes?",
+      description:
+        "You have unsaved learning path changes. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsFormOpen(false);
+        setActionError(null);
+      },
+    });
+  };
+
   const handleAddCourse = (courseId: string) => {
     if (formState.course_ids.includes(courseId)) return;
     setFormState((prev) => ({
@@ -217,21 +272,25 @@ const LearningPathsSection = () => {
 
   const handleArchiveToggle = async (path: LearningPathSummary) => {
     const nextStatus = path.status === "archived" ? "draft" : "archived";
-    const confirmed = window.confirm(
-      `${nextStatus === "archived" ? "Deactivate" : "Activate"} "${path.title}"?`
-    );
-    if (!confirmed) return;
-    setActionError(null);
-    try {
-      await adminLearningPathService.updateLearningPath(path.id, { status: nextStatus });
-      await loadData();
-    } catch (toggleError) {
-      setActionError(
-        toggleError instanceof Error
-          ? toggleError.message
-          : "Unable to update learning path status."
-      );
-    }
+    setConfirmDialog({
+      title: `${nextStatus === "archived" ? "Deactivate" : "Activate"} learning path?`,
+      description: `${nextStatus === "archived" ? "Deactivate" : "Activate"} "${path.title}"?`,
+      confirmLabel: nextStatus === "archived" ? "Deactivate" : "Activate",
+      variant: "danger",
+      onConfirm: async () => {
+        setActionError(null);
+        try {
+          await adminLearningPathService.updateLearningPath(path.id, { status: nextStatus });
+          await loadData();
+        } catch (toggleError) {
+          setActionError(
+            toggleError instanceof Error
+              ? toggleError.message
+              : "Unable to update learning path status."
+          );
+        }
+      },
+    });
   };
 
   const handleViewDetail = async (path: LearningPathSummary) => {
@@ -284,35 +343,39 @@ const LearningPathsSection = () => {
   };
 
   const handleKickEnrollment = async (enrollmentId: string) => {
-    const confirmed = window.confirm(
-      "Remove this student from the learning path?"
-    );
-    if (!confirmed) return;
-    setActionError(null);
-    setRemovingEnrollmentId(enrollmentId);
-    try {
-      await adminLearningPathService.updateLPEnrollmentStatus(
-        enrollmentId,
-        "removed"
-      );
-      if (detail) {
-        const updatedEnrollments = detail.enrollments.map((entry) =>
-          entry.id === enrollmentId
-            ? { ...entry, status: "removed" }
-            : entry
-        );
-        setDetail({ ...detail, enrollments: updatedEnrollments });
-      }
-      await loadData();
-    } catch (removeError) {
-      setActionError(
-        removeError instanceof Error
-          ? removeError.message
-          : "Unable to remove enrollment."
-      );
-    } finally {
-      setRemovingEnrollmentId(null);
-    }
+    setConfirmDialog({
+      title: "Remove learner?",
+      description: "Remove this student from the learning path?",
+      confirmLabel: "Remove",
+      variant: "danger",
+      onConfirm: async () => {
+        setActionError(null);
+        setRemovingEnrollmentId(enrollmentId);
+        try {
+          await adminLearningPathService.updateLPEnrollmentStatus(
+            enrollmentId,
+            "removed"
+          );
+          if (detail) {
+            const updatedEnrollments = detail.enrollments.map((entry) =>
+              entry.id === enrollmentId
+                ? { ...entry, status: "removed" }
+                : entry
+            );
+            setDetail({ ...detail, enrollments: updatedEnrollments });
+          }
+          await loadData();
+        } catch (removeError) {
+          setActionError(
+            removeError instanceof Error
+              ? removeError.message
+              : "Unable to remove enrollment."
+          );
+        } finally {
+          setRemovingEnrollmentId(null);
+        }
+      },
+    });
   };
 
   return (
@@ -510,14 +573,14 @@ const LearningPathsSection = () => {
         isOpen={isFormOpen}
         title={selectedPath ? "Edit Learning Path" : "Create New Learning Path"}
         description="Build a structured learning path by combining courses and configuring enrollment settings."
-        onClose={() => (saving ? null : setIsFormOpen(false))}
+        onClose={requestCloseForm}
         size="full"
         topAligned
         footer={
           <>
             <button
               type="button"
-              onClick={() => setIsFormOpen(false)}
+              onClick={requestCloseForm}
               className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 hover:text-white"
             >
               Cancel
@@ -1132,6 +1195,20 @@ const LearningPathsSection = () => {
           </div>
         )}
       </Modal>
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirm action"}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Confirm"}
+        variant={confirmDialog?.variant ?? "default"}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };
