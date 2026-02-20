@@ -21,7 +21,7 @@ type ConfirmDialogState = {
   onConfirm: () => void | Promise<void>;
 };
 
-// â”€â”€ Criteria definitions matching the Excel template â”€â”€
+// -- Criteria definitions matching the Excel template --
 
 const BOOTCAMP_CRITERIA: {
   category: string;
@@ -277,7 +277,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "summary", label: "Summary / Dashboard" },
 ];
 
-// â”€â”€ Utility â”€â”€
+// -- Utility --
 
 const statusColors: Record<string, string> = {
   draft: "bg-slate-600 text-slate-200",
@@ -291,7 +291,7 @@ const statusLabels: Record<string, string> = {
   finalized: "Finalized",
 };
 
-// â”€â”€ Component â”€â”€
+// -- Component --
 
 const EvaluationSection = () => {
   // List view state
@@ -426,9 +426,9 @@ const EvaluationSection = () => {
   }, [loadList]);
 
   const formatDateDisplay = (value: unknown) => {
-    if (!value) return "â€”";
+    if (!value) return "-";
     const raw = String(value).trim();
-    if (!raw) return "â€”";
+    if (!raw) return "-";
     const leadingDate = raw.match(/^(\d{4}-\d{2}-\d{2})/);
     if (leadingDate?.[1]) return leadingDate[1];
     const parsed = new Date(raw);
@@ -679,7 +679,7 @@ const toWholeScoreOption = (
     return list;
   };
 
-  // â”€â”€ Score Helpers â”€â”€
+  // -- Score Helpers --
 
   const getScore = (sheet: string, key: string): number | null => {
     const entry = pendingScores.get(`${sheet}:${key}`);
@@ -795,7 +795,7 @@ const toWholeScoreOption = (
     }
   };
 
-  // â”€â”€ CRUD â”€â”€
+  // -- CRUD --
 
   const handleCreate = async () => {
     if (!createForm.userId) return;
@@ -1225,7 +1225,7 @@ const toWholeScoreOption = (
     }
   };
 
-  // â”€â”€ Computed â”€â”€
+  // -- Computed --
 
   const computeCriterionScoreFromScoreboard = (
     criterionKey: string,
@@ -1305,7 +1305,7 @@ const toWholeScoreOption = (
     return "POOR";
   };
 
-  // â"€â"€ Quiz Grades Helpers â"€â"€
+  // -- Quiz Grades Helpers --
 
   const getQuizGradesEntries = (): ScoreInput[] =>
     Array.from(pendingScores.values()).filter(
@@ -1360,7 +1360,7 @@ const toWholeScoreOption = (
     return equivalents.reduce((sum, eq) => sum + eq, 0) / equivalents.length;
   };
 
-  // â"€â"€ Detail View â"€â"€
+  // -- Detail View --
 
   if (selectedEval) {
     const overallScore = computeOverallScore();
@@ -1416,21 +1416,21 @@ const toWholeScoreOption = (
             <p className="text-xs text-slate-400">Position</p>
             <p className="text-sm text-white">
               {(selectedEval.trainee_info as Record<string, string>)
-                ?.position || "â€”"}
+                ?.position || "-"}
             </p>
           </div>
           <div>
             <p className="text-xs text-slate-400">Job Title</p>
             <p className="text-sm text-white">
               {(selectedEval.trainee_info as Record<string, string>)
-                ?.current_job_title || "â€”"}
+                ?.current_job_title || "-"}
             </p>
           </div>
           <div>
             <p className="text-xs text-slate-400">Endorsed Department</p>
             <p className="text-sm text-white">
               {(selectedEval.trainee_info as Record<string, string>)
-                ?.endorsed_department || "â€”"}
+                ?.endorsed_department || "-"}
             </p>
           </div>
           <div>
@@ -1441,7 +1441,7 @@ const toWholeScoreOption = (
                 const supervisor = String(info?.supervisor || "").trim();
                 const title = String(info?.supervisor_title || "").trim();
                 const display = [title, supervisor].filter(Boolean).join(" ").trim();
-                return display || "â€”";
+                return display || "-";
               })()}
             </p>
           </div>
@@ -1965,7 +1965,7 @@ const toWholeScoreOption = (
     );
   }
 
-  // â"€â"€ Scorecard Tab â"€â"€
+  // -- Scorecard Tab --
 
   function renderScorecard() {
     return (
@@ -2501,7 +2501,7 @@ const toWholeScoreOption = (
     );
   }
 
-  // â”€â”€ Behavioral Evaluation Tab â”€â”€
+  // -- Behavioral Evaluation Tab --
 
   function renderBehavioral() {
     const behavioralCriteria = [
@@ -2673,7 +2673,7 @@ const toWholeScoreOption = (
     );
   }
 
-  // â”€â”€ Technical Evaluation Tab â”€â”€
+  // -- Technical Evaluation Tab --
 
   function renderTechnical() {
     const technicalCriteria = [
@@ -2829,7 +2829,7 @@ const toWholeScoreOption = (
     );
   }
 
-  // â”€â”€ Summary Tab â”€â”€
+  // -- Summary Tab --
 
   function renderSummary() {
     const bootcampPercent = computeBootcampPercent();
@@ -2929,7 +2929,7 @@ const toWholeScoreOption = (
     );
   }
 
-  // â”€â”€ List View â”€â”€
+  // -- List View --
 
   const columns = [
     {
@@ -2937,7 +2937,7 @@ const toWholeScoreOption = (
       header: "Trainee",
       render: (row: Evaluation) => (
         <div>
-          <p className="font-medium text-white">{row.trainee_name || "â€”"}</p>
+          <p className="font-medium text-white">{row.trainee_name || "-"}</p>
           <p className="text-xs text-slate-400">{row.trainee_email || ""}</p>
         </div>
       ),
@@ -2972,7 +2972,7 @@ const toWholeScoreOption = (
         <span className="text-sm text-slate-400">
           {row.updated_at
             ? new Date(row.updated_at).toLocaleDateString()
-            : "â€”"}
+            : "-"}
         </span>
       ),
     },
@@ -3328,7 +3328,7 @@ const toWholeScoreOption = (
   );
 };
 
-// â”€â”€ AddScoreboardEntry helper â”€â”€
+// -- AddScoreboardEntry helper --
 
 const AddScoreboardEntry = ({
   onAdd,
