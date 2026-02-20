@@ -1,8 +1,10 @@
 import { supabase } from "../lib/supabaseClient";
 import { apiClient } from "../lib/apiClient";
+import { getPusher } from "../lib/pusherClient";
 
 const DEVICE_ID_KEY = "thodemy_device_id";
 let memoryDeviceId = null;
+const isRateLimited = (error) => error?.response?.status === 429;
 
 export const getDeviceInfo = () => {
   const ua = navigator.userAgent || "";
@@ -44,6 +46,113 @@ export const getDeviceId = () => {
 };
 
 export const sessionService = {
+  async requestDeviceApproval() {
+    const deviceId = getDeviceId();
+    try {
+      const response = await apiClient.post("/api/session/approval/request", {
+        deviceId,
+        deviceInfo: getDeviceInfo(),
+      });
+      return response?.data?.data || null;
+    } catch (error) {
+      console.error("Error requesting device approval:", error?.response?.data || error);
+      throw error;
+    }
+  },
+
+  async resolveDeviceApproval(requestId, action) {
+    try {
+      const response = await apiClient.post("/api/session/approval/resolve", {
+        requestId,
+        action,
+      });
+      return response?.data?.data || null;
+    } catch (error) {
+      console.error("Error resolving device approval:", error?.response?.data || error);
+      throw error;
+    }
+  },
+
+  async fetchPendingDeviceApproval() {
+    try {
+      const response = await apiClient.get("/api/session/approval/pending");
+      return response?.data?.data?.request || null;
+    } catch (error) {
+      if (isRateLimited(error)) {
+        return null;
+      }
+      console.error("Error fetching pending device approval:", error?.response?.data || error);
+      return null;
+    }
+  },
+
+  async getDeviceApprovalStatus(requestId) {
+    try {
+      const response = await apiClient.get(`/api/session/approval/status/${requestId}`);
+      return response?.data?.data || null;
+    } catch (error) {
+      if (isRateLimited(error)) {
+        return null;
+      }
+      console.error("Error fetching device approval status:", error?.response?.data || error);
+      return null;
+    }
+  },
+
+  async waitForDeviceApproval({ userId, requestId, timeoutMs = 120000, pollIntervalMs = 5000 }) {
+    if (!requestId || !userId) {
+      return { status: "approved" };
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+      let pollTimer = null;
+      let timeoutTimer = null;
+      const pusher = getPusher();
+      const channel = pusher ? pusher.subscribe(`user-${userId}`) : null;
+
+      const cleanup = () => {
+        if (pollTimer) clearInterval(pollTimer);
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        if (channel) {
+          channel.unbind("device_login_response", onResponse);
+        }
+      };
+
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      };
+
+      const onResponse = (payload) => {
+        if (!payload || payload.requestId !== requestId) return;
+        finish({ status: payload.status || "unknown" });
+      };
+
+      if (channel) {
+        channel.bind("device_login_response", onResponse);
+      }
+
+      const poll = async () => {
+        if (settled) return;
+        const status = await sessionService.getDeviceApprovalStatus(requestId);
+        if (!status) return;
+        if (status.status && status.status !== "pending") {
+          finish({ status: status.status });
+        }
+      };
+
+      pollTimer = setInterval(poll, pollIntervalMs);
+      timeoutTimer = setTimeout(() => {
+        finish({ status: "timeout" });
+      }, timeoutMs);
+
+      poll();
+    });
+  },
+
   async createSession(userId) {
     if (!supabase || !userId) return;
     const deviceToken = getDeviceId();
@@ -91,28 +200,25 @@ export const sessionService = {
   },
 
   async deactivateAllSessions(userId) {
-    if (!supabase || !userId) return;
+    if (!userId) return;
     try {
-      await supabase
-        .from("user_sessions")
-        .update({ is_active: false })
-        .eq("user_id", userId);
+      await apiClient.post("/api/session/deactivate/all");
     } catch (error) {
       console.error("Error deactivating sessions:", error);
+      throw error;
     }
   },
 
   async deactivateCurrentSession(userId) {
-    if (!supabase || !userId) return;
+    if (!userId) return;
     const deviceToken = getDeviceId();
     try {
-      await supabase
-        .from("user_sessions")
-        .update({ is_active: false })
-        .eq("user_id", userId)
-        .eq("session_token", deviceToken);
+      await apiClient.post("/api/session/deactivate/current", {
+        deviceId: deviceToken,
+      });
     } catch (error) {
       console.error("Error deactivating current session:", error);
+      throw error;
     }
   },
 
