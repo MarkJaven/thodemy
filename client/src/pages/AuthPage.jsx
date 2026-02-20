@@ -24,6 +24,9 @@ const AuthPage = () => {
   const [roleCheckStatus, setRoleCheckStatus] = useState("idle");
   const [roleCheckError, setRoleCheckError] = useState(null);
   const [roleCheckUserId, setRoleCheckUserId] = useState(null);
+  const [approvalRequest, setApprovalRequest] = useState(null);
+  const [approvalError, setApprovalError] = useState(null);
+  const [approvalWaiting, setApprovalWaiting] = useState(false);
 
   /**
    * Reset view state when the auth mode changes.
@@ -35,6 +38,9 @@ const AuthPage = () => {
     setRoleCheckStatus("idle");
     setRoleCheckError(null);
     setRoleCheckUserId(null);
+    setApprovalError(null);
+    setApprovalRequest(null);
+    setApprovalWaiting(false);
 
     if (!authService.isConfigured) {
       setError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
@@ -105,6 +111,31 @@ const AuthPage = () => {
       const session = await authService.getSession();
       const userId = session?.user?.id;
       if (userId) {
+        const approval = await sessionService.requestDeviceApproval();
+        if (approval?.status === "pending" && approval.requestId) {
+          setLoadingTarget(null);
+          setApprovalWaiting(true);
+          setApprovalRequest({
+            requestId: approval.requestId,
+            deviceInfo: approval.deviceInfo || "New device",
+          });
+          const result = await sessionService.waitForDeviceApproval({
+            userId,
+            requestId: approval.requestId,
+          });
+          setApprovalWaiting(false);
+          if (result.status !== "approved") {
+            await authService.signOut();
+            const message =
+              result.status === "denied"
+                ? "This device was not approved. Please contact support."
+                : "Approval timed out. Please try signing in again.";
+            setApprovalError(message);
+            setError(message);
+            setApprovalRequest(null);
+            return;
+          }
+        }
         // Fire-and-forget to avoid blocking login on network delays.
         sessionService.createSession(userId).catch(() => {});
         sessionService.announceSession().catch(() => {});
@@ -452,6 +483,36 @@ const AuthPage = () => {
           </div>
         </div>
       </div>
+      {approvalRequest && approvalWaiting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-6 text-center shadow-2xl">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2l7 7-7 7-7-7 7-7z" />
+                <path d="M12 8v8" />
+              </svg>
+            </div>
+            <h3 className="mt-4 text-lg font-semibold text-white">Approve this login</h3>
+            <p className="mt-2 text-sm text-slate-300">
+              We sent a confirmation request to your other device. Approve to continue signing in.
+            </p>
+            {approvalError && <p className="mt-3 text-xs text-rose-300">{approvalError}</p>}
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={async () => {
+                  setApprovalWaiting(false);
+                  setApprovalRequest(null);
+                  await authService.signOut();
+                }}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

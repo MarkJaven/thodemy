@@ -8,6 +8,7 @@ import { getPusher } from "../lib/pusherClient";
 const AuthContext = createContext(null);
 
 const VERIFY_COOLDOWN_MS = 15000;
+const SESSION_DEACTIVATE_TIMEOUT_MS = 2500;
 const forcedSignOutLock = { value: false };
 
 const clearLocalAuthSession = () => {
@@ -65,6 +66,14 @@ const fetchUsername = async (userId) => {
   return data?.username ?? null;
 };
 
+const waitFor = (promise, timeoutMs) =>
+  Promise.race([
+    promise,
+    new Promise((resolve) => {
+      setTimeout(resolve, timeoutMs);
+    }),
+  ]);
+
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
@@ -72,6 +81,10 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
   const [verified, setVerified] = useState(false);
   const [forcedSignOutOpen, setForcedSignOutOpen] = useState(false);
+  const [deviceApprovalRequest, setDeviceApprovalRequest] = useState(null);
+  const [deviceApprovalOpen, setDeviceApprovalOpen] = useState(false);
+  const [deviceApprovalError, setDeviceApprovalError] = useState(null);
+  const [deviceApprovalLoading, setDeviceApprovalLoading] = useState(false);
 
   const forcedSignOutRef = useRef(false);
   const lastVerifyRef = useRef(0);
@@ -79,6 +92,8 @@ export const AuthProvider = ({ children }) => {
   const pusherChannelRef = useRef(null);
   const pollingStopRef = useRef(false);
   const pollingIntervalRef = useRef(null);
+  const approvalPollingIntervalRef = useRef(null);
+  const lastDeviceApprovalRef = useRef(null);
 
   const clearForcedSignOut = () => {
     forcedSignOutRef.current = false;
@@ -87,11 +102,41 @@ export const AuthProvider = ({ children }) => {
     setForcedSignOutOpen(false);
   };
 
+  const clearDeviceApproval = () => {
+    setDeviceApprovalRequest(null);
+    setDeviceApprovalOpen(false);
+    setDeviceApprovalError(null);
+    setDeviceApprovalLoading(false);
+    lastDeviceApprovalRef.current = null;
+  };
+
   const stopSessionPolling = () => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
     }
+  };
+
+  const stopApprovalPolling = () => {
+    if (approvalPollingIntervalRef.current) {
+      clearInterval(approvalPollingIntervalRef.current);
+      approvalPollingIntervalRef.current = null;
+    }
+  };
+
+  const handleDeviceApprovalPayload = (payload) => {
+    if (!payload?.requestId || !payload?.deviceId) return;
+    const deviceToken = getDeviceId();
+    if (payload.deviceId === deviceToken) return;
+    if (lastDeviceApprovalRef.current === payload.requestId) return;
+    lastDeviceApprovalRef.current = payload.requestId;
+    setDeviceApprovalRequest({
+      requestId: payload.requestId,
+      deviceId: payload.deviceId,
+      deviceInfo: payload.deviceInfo || "New device",
+      requestedAt: payload.requestedAt || null,
+    });
+    setDeviceApprovalOpen(true);
   };
 
   const startSessionPolling = (userId) => {
@@ -120,7 +165,27 @@ export const AuthProvider = ({ children }) => {
     pollingIntervalRef.current = setInterval(checkSession, 10000);
   };
 
+  const startApprovalPolling = (userId) => {
+    stopApprovalPolling();
+    if (!userId) return;
+    const poll = async () => {
+      if (!userId) return;
+      try {
+        const pending = await sessionService.fetchPendingDeviceApproval();
+        if (pending && pending.requestId) {
+          handleDeviceApprovalPayload(pending);
+        }
+      } catch {
+        // ignore polling errors
+      }
+    };
+    approvalPollingIntervalRef.current = setInterval(poll, 10000);
+    poll();
+  };
+
   const subscribeToPusher = (userId) => {
+    // Always keep approval polling active as a fallback in case realtime events are missed.
+    startApprovalPolling(userId);
     const pusher = getPusher();
     if (!pusher || !userId) {
       startSessionPolling(userId);
@@ -152,6 +217,9 @@ export const AuthProvider = ({ children }) => {
           setForcedSignOutOpen(true);
           signOut({ redirectTo: null, skipServerDeactivation: true });
         }
+      });
+      channel.bind("device_login_request", (payload) => {
+        handleDeviceApprovalPayload(payload);
       });
       pusherChannelRef.current = channel;
     };
@@ -188,14 +256,15 @@ export const AuthProvider = ({ children }) => {
             setVerified(true);
           }
           verifyAccountActive(lastVerifyRef, verifyInFlightRef).catch(() => {});
-          subscribeToPusher(authUser.id);
-        } else {
-          setUser(null);
-          setVerified(true);
-        }
-      } catch (error) {
-        if (!isMounted) return;
-        setAuthError(error.message);
+        subscribeToPusher(authUser.id);
+      } else {
+        setUser(null);
+        setVerified(true);
+        clearDeviceApproval();
+      }
+    } catch (error) {
+      if (!isMounted) return;
+      setAuthError(error.message);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -221,6 +290,7 @@ export const AuthProvider = ({ children }) => {
       } else {
         setUser(null);
         setVerified(true);
+        clearDeviceApproval();
         if (pusherChannelRef.current) {
           const p = getPusher();
           pusherChannelRef.current.unbind_all();
@@ -242,6 +312,7 @@ export const AuthProvider = ({ children }) => {
       isMounted = false;
       subscription?.unsubscribe?.();
       stopSessionPolling();
+      stopApprovalPolling();
       if (pusherChannelRef.current) {
         const p = getPusher();
         pusherChannelRef.current.unbind_all();
@@ -266,11 +337,21 @@ export const AuthProvider = ({ children }) => {
       p?.unsubscribe(pusherChannelRef.current.name);
       pusherChannelRef.current = null;
     }
+    stopApprovalPolling();
+    clearDeviceApproval();
 
     // Deactivate sessions on server
     if (!skipServerDeactivation && currentUserId) {
-      sessionService.deactivateAllSessions(currentUserId).catch(() => {});
-      sessionService.deactivateCurrentSession(currentUserId).catch(() => {});
+      await Promise.allSettled([
+        waitFor(
+          sessionService.deactivateCurrentSession(currentUserId),
+          SESSION_DEACTIVATE_TIMEOUT_MS
+        ),
+        waitFor(
+          sessionService.deactivateAllSessions(currentUserId),
+          SESSION_DEACTIVATE_TIMEOUT_MS
+        ),
+      ]);
     }
 
     // Fire-and-forget remote sign-out so UI doesn't hang if the network is slow.
@@ -334,6 +415,86 @@ export const AuthProvider = ({ children }) => {
                 className="rounded-xl bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-violet px-4 py-2 text-sm font-semibold text-white"
               >
                 Return to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deviceApprovalOpen && deviceApprovalRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-6 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2l7 7-7 7-7-7 7-7z" />
+                  <path d="M12 8v8" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">New device sign-in</h3>
+                <p className="text-sm text-slate-400">
+                  {deviceApprovalRequest.deviceInfo || "A new device"} is requesting access.
+                </p>
+              </div>
+            </div>
+            <p className="mt-4 text-sm text-slate-300">
+              If this was you, approve to continue on the new device. Deny to keep this session active.
+            </p>
+            {deviceApprovalError && (
+              <p className="mt-3 text-xs text-rose-300">{deviceApprovalError}</p>
+            )}
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                disabled={deviceApprovalLoading}
+                onClick={async () => {
+                  setDeviceApprovalLoading(true);
+                  setDeviceApprovalError(null);
+                  try {
+                    await sessionService.resolveDeviceApproval(
+                      deviceApprovalRequest.requestId,
+                      "deny"
+                    );
+                    clearDeviceApproval();
+                  } catch (error) {
+                    if (error?.response?.status === 429) {
+                      setDeviceApprovalError("Too many requests. Please wait a few seconds and try again.");
+                    } else {
+                      setDeviceApprovalError("Unable to deny request. Please try again.");
+                    }
+                  } finally {
+                    setDeviceApprovalLoading(false);
+                  }
+                }}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Deny
+              </button>
+              <button
+                type="button"
+                disabled={deviceApprovalLoading}
+                onClick={async () => {
+                  setDeviceApprovalLoading(true);
+                  setDeviceApprovalError(null);
+                  try {
+                    await sessionService.resolveDeviceApproval(
+                      deviceApprovalRequest.requestId,
+                      "approve"
+                    );
+                    clearDeviceApproval();
+                  } catch (error) {
+                    if (error?.response?.status === 429) {
+                      setDeviceApprovalError("Too many requests. Please wait a few seconds and try again.");
+                    } else {
+                      setDeviceApprovalError("Unable to approve request. Please try again.");
+                    }
+                  } finally {
+                    setDeviceApprovalLoading(false);
+                  }
+                }}
+                className="rounded-xl bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-violet px-4 py-2 text-sm font-semibold text-white"
+              >
+                Approve
               </button>
             </div>
           </div>

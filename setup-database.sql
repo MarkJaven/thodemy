@@ -68,6 +68,29 @@ end;
 $$;
 
 -- ============================================
+-- DEVICE LOGIN APPROVALS
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS public.device_login_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  device_token text NOT NULL,
+  device_info text,
+  user_agent text,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied', 'expired')),
+  requested_at timestamptz NOT NULL DEFAULT now(),
+  resolved_at timestamptz,
+  resolved_by uuid REFERENCES auth.users(id)
+);
+
+CREATE INDEX IF NOT EXISTS device_login_requests_user_status_idx
+  ON public.device_login_requests(user_id, status);
+CREATE INDEX IF NOT EXISTS device_login_requests_requested_at_idx
+  ON public.device_login_requests(requested_at DESC);
+
+ALTER TABLE public.device_login_requests ENABLE ROW LEVEL SECURITY;
+
+-- ============================================
 -- MAIN SCHEMA (from cleanup-and-schema.sql)
 -- ============================================
 

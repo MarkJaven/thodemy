@@ -7,7 +7,7 @@ const baseConfig = {
   legacyHeaders: false,
   skip: (req) => req.method === "OPTIONS",
   keyGenerator: (req) => {
-    const scope = req.baseUrl || req.path || "";
+    const scope = `${req.baseUrl || ""}${req.path || ""}`;
     return `${req.ip}:${scope}`;
   },
 };
@@ -30,4 +30,14 @@ const authLimiter = rateLimit({
   limit: env.authRateLimitMax,
 });
 
-module.exports = { generalLimiter, authLimiter };
+/**
+ * Rate limiter for authenticated session coordination endpoints.
+ * Polling and approval checks need higher throughput than login endpoints.
+ * @returns {import("express").RequestHandler}
+ */
+const sessionLimiter = rateLimit({
+  ...baseConfig,
+  limit: Math.max(env.rateLimitMax, 300),
+});
+
+module.exports = { generalLimiter, authLimiter, sessionLimiter };
