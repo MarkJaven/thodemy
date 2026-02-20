@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
+import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import { useUser } from "../../../hooks/useUser";
 import { superAdminService } from "../../../services/superAdminService";
 import { topicSubmissionService } from "../../../services/topicSubmissionService";
@@ -40,6 +41,22 @@ type ActivitiesSectionProps = {
     | null;
   onFocusHandled?: () => void;
   variant?: "full" | "approvals" | "projects";
+};
+
+type ConfirmDialogState = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void | Promise<void>;
+};
+
+const EMPTY_PROJECT_FORM_STATE = {
+  title: "",
+  description: "",
+  course_id: "",
+  user_id: "",
+  status: "active",
 };
 
 const ActivitiesSection = ({
@@ -83,6 +100,8 @@ const ActivitiesSection = ({
   const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<string | null>(null);
   const [updatingLPEnrollmentId, setUpdatingLPEnrollmentId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<TopicSubmission | null>(null);
@@ -182,8 +201,9 @@ const ActivitiesSection = ({
 
   const openCreate = () => {
     setSelectedActivity(null);
-    setFormState({ title: "", description: "", course_id: "", user_id: "", status: "active" });
+    setFormState({ ...EMPTY_PROJECT_FORM_STATE });
     setActionError(null);
+    setActionSuccess(null);
     setIsFormOpen(true);
   };
 
@@ -197,15 +217,53 @@ const ActivitiesSection = ({
       status: activity.status ?? "active",
     });
     setActionError(null);
+    setActionSuccess(null);
     setIsFormOpen(true);
   };
 
+  const hasProjectFormChanges = useMemo(() => {
+    if (!isFormOpen) return false;
+    const baseline = selectedActivity
+      ? {
+          title: selectedActivity.title,
+          description: selectedActivity.description ?? "",
+          course_id: selectedActivity.course_id ?? "",
+          user_id: selectedActivity.user_id ?? "",
+          status: selectedActivity.status ?? "active",
+        }
+      : EMPTY_PROJECT_FORM_STATE;
+    return JSON.stringify(formState) !== JSON.stringify(baseline);
+  }, [formState, isFormOpen, selectedActivity]);
+
+  const requestCloseProjectForm = () => {
+    if (saving) return;
+    if (!hasProjectFormChanges) {
+      setIsFormOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard project changes?",
+      description: "You have unsaved project changes. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsFormOpen(false);
+        setActionError(null);
+      },
+    });
+  };
+
   const handleSave = async () => {
+    if (!formState.title.trim()) {
+      setActionError("Project title is required.");
+      return;
+    }
     setSaving(true);
     setActionError(null);
+    setActionSuccess(null);
     const payload = {
-      title: formState.title,
-      description: formState.description,
+      title: formState.title.trim(),
+      description: formState.description.trim(),
       course_id: formState.course_id || null,
       user_id: formState.user_id || null,
       status: formState.status,
@@ -217,6 +275,9 @@ const ActivitiesSection = ({
         await superAdminService.createActivity(payload);
       }
       setIsFormOpen(false);
+      setActionSuccess(
+        selectedActivity ? "Project updated successfully." : "Project created successfully.",
+      );
       await loadData();
     } catch (saveError) {
       setActionError(saveError instanceof Error ? saveError.message : "Unable to save project.");
@@ -226,35 +287,57 @@ const ActivitiesSection = ({
   };
 
   const handleDelete = async (activityId: string) => {
-    const previous = activities;
-    setActivities((prev) => prev.filter((activity) => activity.id !== activityId));
-    setSaving(true);
-    setActionError(null);
-    try {
-      await superAdminService.deleteActivity(activityId);
-    } catch (deleteError) {
-      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete project.");
-      setActivities(previous);
-    } finally {
-      setSaving(false);
-    }
+    setConfirmDialog({
+      title: "Delete project?",
+      description: "This removes the project and all related submissions.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        const previous = activities;
+        setActivities((prev) => prev.filter((activity) => activity.id !== activityId));
+        setSaving(true);
+        setActionError(null);
+        setActionSuccess(null);
+        try {
+          await superAdminService.deleteActivity(activityId);
+          setActionSuccess("Project deleted successfully.");
+        } catch (deleteError) {
+          setActionError(
+            deleteError instanceof Error ? deleteError.message : "Unable to delete project.",
+          );
+          setActivities(previous);
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const handleDeleteSubmission = async (submissionId: string) => {
-    const previous = submissions;
-    setSubmissions((prev) => prev.filter((submission) => submission.id !== submissionId));
-    setSaving(true);
-    setActionError(null);
-    try {
-      await superAdminService.deleteActivitySubmission(submissionId);
-    } catch (deleteError) {
-      setActionError(
-        deleteError instanceof Error ? deleteError.message : "Unable to delete submission."
-      );
-      setSubmissions(previous);
-    } finally {
-      setSaving(false);
-    }
+    setConfirmDialog({
+      title: "Delete project submission?",
+      description: "This removes the learner's submission and review record.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        const previous = submissions;
+        setSubmissions((prev) => prev.filter((submission) => submission.id !== submissionId));
+        setSaving(true);
+        setActionError(null);
+        setActionSuccess(null);
+        try {
+          await superAdminService.deleteActivitySubmission(submissionId);
+          setActionSuccess("Submission deleted successfully.");
+        } catch (deleteError) {
+          setActionError(
+            deleteError instanceof Error ? deleteError.message : "Unable to delete submission.",
+          );
+          setSubmissions(previous);
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const openProjectReview = (submission: ActivitySubmission) => {
@@ -1261,7 +1344,16 @@ const ActivitiesSection = ({
         </>
       )}
 
-      {actionError && <p className="text-xs text-rose-200">{actionError}</p>}
+      {actionSuccess && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-200">
+          {actionSuccess}
+        </div>
+      )}
+      {actionError && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+          {actionError}
+        </div>
+      )}
       {viewError && <p className="text-xs text-rose-200">{viewError}</p>}
 
       <Modal
@@ -1481,12 +1573,12 @@ const ActivitiesSection = ({
       <Modal
         isOpen={isFormOpen}
         title={selectedActivity ? "Edit project" : "Create project"}
-        onClose={() => setIsFormOpen(false)}
+        onClose={requestCloseProjectForm}
         footer={
           <>
             <button
               type="button"
-              onClick={() => setIsFormOpen(false)}
+              onClick={requestCloseProjectForm}
               className="btn-secondary"
             >
               Cancel
@@ -1670,6 +1762,20 @@ const ActivitiesSection = ({
           </div>
         )}
       </Modal>
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirm action"}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Confirm"}
+        variant={confirmDialog?.variant ?? "default"}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };

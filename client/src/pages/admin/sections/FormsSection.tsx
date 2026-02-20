@@ -1,8 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
+import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import { superAdminService } from "../../../services/superAdminService";
 import type { AdminUser, Form } from "../../../types/superAdmin";
+
+type ConfirmDialogState = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void | Promise<void>;
+};
+
+const EMPTY_FORM_STATE = {
+  title: "",
+  description: "",
+  status: "active",
+  assigned_user_id: "",
+  link_url: "",
+  start_at: "",
+  end_at: "",
+};
 
 const FormsSection = () => {
   const [forms, setForms] = useState<Form[]>([]);
@@ -23,6 +42,8 @@ const FormsSection = () => {
   });
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -47,16 +68,9 @@ const FormsSection = () => {
 
   const openCreate = () => {
     setSelectedForm(null);
-    setFormState({
-      title: "",
-      description: "",
-      status: "active",
-      assigned_user_id: "",
-      link_url: "",
-      start_at: "",
-      end_at: "",
-    });
+    setFormState({ ...EMPTY_FORM_STATE });
     setActionError(null);
+    setActionSuccess(null);
     setIsFormOpen(true);
   };
 
@@ -64,7 +78,7 @@ const FormsSection = () => {
     setSelectedForm(form);
     setFormState({
       title: form.title,
-      description: form.description,
+      description: form.description ?? "",
       status: form.status ?? "active",
       assigned_user_id: form.assigned_user_id ?? "",
       link_url: form.link_url ?? "",
@@ -72,12 +86,60 @@ const FormsSection = () => {
       end_at: form.end_at ? form.end_at.slice(0, 16) : "",
     });
     setActionError(null);
+    setActionSuccess(null);
     setIsFormOpen(true);
   };
 
+  const hasFormChanges = useMemo(() => {
+    if (!isFormOpen) return false;
+    const baseline = selectedForm
+      ? {
+          title: selectedForm.title,
+          description: selectedForm.description,
+          status: selectedForm.status ?? "active",
+          assigned_user_id: selectedForm.assigned_user_id ?? "",
+          link_url: selectedForm.link_url ?? "",
+          start_at: selectedForm.start_at ? selectedForm.start_at.slice(0, 16) : "",
+          end_at: selectedForm.end_at ? selectedForm.end_at.slice(0, 16) : "",
+        }
+      : EMPTY_FORM_STATE;
+    return JSON.stringify(formState) !== JSON.stringify(baseline);
+  }, [formState, isFormOpen, selectedForm]);
+
+  const requestCloseForm = () => {
+    if (saving) return;
+    if (!hasFormChanges) {
+      setIsFormOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard form changes?",
+      description: "You have unsaved form updates. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsFormOpen(false);
+        setActionError(null);
+      },
+    });
+  };
+
   const handleSave = async () => {
+    if (!formState.title.trim()) {
+      setActionError("Form title is required.");
+      return;
+    }
+    if (formState.start_at && formState.end_at) {
+      const startDate = new Date(formState.start_at);
+      const endDate = new Date(formState.end_at);
+      if (startDate > endDate) {
+        setActionError("End date/time must be later than start date/time.");
+        return;
+      }
+    }
     setSaving(true);
     setActionError(null);
+    setActionSuccess(null);
     try {
       if (selectedForm) {
         await superAdminService.updateForm({
@@ -108,6 +170,7 @@ const FormsSection = () => {
         });
       }
       setIsFormOpen(false);
+      setActionSuccess(selectedForm ? "Form updated successfully." : "Form created successfully.");
       await loadData();
     } catch (saveError) {
       setActionError(saveError instanceof Error ? saveError.message : "Unable to save form.");
@@ -117,16 +180,28 @@ const FormsSection = () => {
   };
 
   const handleDelete = async (formId: string) => {
-    setSaving(true);
-    setActionError(null);
-    try {
-      await superAdminService.deleteForm(formId);
-      await loadData();
-    } catch (deleteError) {
-      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete form.");
-    } finally {
-      setSaving(false);
-    }
+    setConfirmDialog({
+      title: "Delete form?",
+      description: "This removes the form and assigned schedule.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        setSaving(true);
+        setActionError(null);
+        setActionSuccess(null);
+        try {
+          await superAdminService.deleteForm(formId);
+          setActionSuccess("Form deleted successfully.");
+          await loadData();
+        } catch (deleteError) {
+          setActionError(
+            deleteError instanceof Error ? deleteError.message : "Unable to delete form.",
+          );
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const formColumns = useMemo(
@@ -241,17 +316,26 @@ const FormsSection = () => {
 
       <DataTable columns={formColumns} data={forms} emptyMessage="No forms created yet." />
 
-      {actionError && <p className="text-xs text-rose-200">{actionError}</p>}
+      {actionSuccess && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-200">
+          {actionSuccess}
+        </div>
+      )}
+      {actionError && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+          {actionError}
+        </div>
+      )}
 
       <Modal
         isOpen={isFormOpen}
         title={selectedForm ? "Edit form" : "Create form"}
-        onClose={() => setIsFormOpen(false)}
+        onClose={requestCloseForm}
         footer={
           <>
             <button
               type="button"
-              onClick={() => setIsFormOpen(false)}
+              onClick={requestCloseForm}
               className="btn-secondary"
             >
               Cancel
@@ -365,6 +449,20 @@ const FormsSection = () => {
         </div>
         {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
       </Modal>
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirm action"}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Confirm"}
+        variant={confirmDialog?.variant ?? "default"}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };
