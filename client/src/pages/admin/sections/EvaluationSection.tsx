@@ -1,6 +1,7 @@
-﻿import { useEffect, useState, useCallback } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
+import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import { superAdminService } from "../../../services/superAdminService";
 import {
   evaluationApiService,
@@ -11,6 +12,14 @@ import {
 } from "../../../services/evaluationService";
 import { apiClient } from "../../../lib/apiClient";
 import type { AdminUser, LearningPath } from "../../../types/superAdmin";
+
+type ConfirmDialogState = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void | Promise<void>;
+};
 
 // â”€â”€ Criteria definitions matching the Excel template â”€â”€
 
@@ -312,6 +321,17 @@ const EvaluationSection = () => {
     supervisor: "",
     supervisorPosition: "",
   });
+  const emptyCreateForm = {
+    userId: "",
+    learningPathId: "",
+    endorsementDate: "",
+    position: "",
+    jobTitle: "",
+    endorsedDepartment: "",
+    supervisorTitle: "",
+    supervisor: "",
+    supervisorPosition: "",
+  };
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isEditMetaOpen, setIsEditMetaOpen] = useState(false);
@@ -348,6 +368,33 @@ const EvaluationSection = () => {
     score: string;
     totalItems: string;
   } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(
+    null,
+  );
+
+  const hasCreateFormChanges = useMemo(() => {
+    if (!isCreateOpen) return false;
+    return JSON.stringify(createForm) !== JSON.stringify(emptyCreateForm);
+  }, [createForm, isCreateOpen]);
+
+  const requestCloseCreateModal = () => {
+    if (saving) return;
+    if (!hasCreateFormChanges) {
+      setIsCreateOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard evaluation details?",
+      description:
+        "You have unsaved evaluation details. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsCreateOpen(false);
+        setActionError(null);
+      },
+    });
+  };
 
   // Data Loading
 
@@ -783,24 +830,30 @@ const toWholeScoreOption = (
   };
 
   const handleDelete = async (evalId: string) => {
-    if (!window.confirm("Are you sure you want to delete this evaluation?"))
-      return;
-    try {
-      await evaluationApiService.deleteEvaluation(evalId);
-      if (selectedEval?.id === evalId) setSelectedEval(null);
-      await loadList();
-    } catch (delError) {
-      setActionError(
-        delError instanceof Error
-          ? delError.message
-          : "Unable to delete evaluation.",
-      );
-    }
+    setConfirmDialog({
+      title: "Delete evaluation?",
+      description:
+        "This permanently removes the evaluation record and its saved scores.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await evaluationApiService.deleteEvaluation(evalId);
+          if (selectedEval?.id === evalId) setSelectedEval(null);
+          await loadList();
+        } catch (delError) {
+          setActionError(
+            delError instanceof Error
+              ? delError.message
+              : "Unable to delete evaluation.",
+          );
+        }
+      },
+    });
   };
 
   const handleDeleteScoreboardActivity = async (activityKey: string) => {
     if (!selectedEval) return;
-    if (!window.confirm("Delete this scoreboard activity entry?")) return;
 
     const entriesForActivity = getScoreboardEntries().filter(
       (entry) => parseScoreboardEntry(entry).activityKey === activityKey,
@@ -811,74 +864,83 @@ const toWholeScoreOption = (
 
     if (entriesForActivity.length === 0 && !quizGradeEntry) return;
 
-    setSavingScores(true);
-    setActionError(null);
-    try {
-      if (scoreboardModalDraft?.activityKey === activityKey) {
-        closeScoreboardGradeModal();
-      }
+    setConfirmDialog({
+      title: "Delete scoreboard activity?",
+      description: "This removes all criteria scores tied to this activity.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        setSavingScores(true);
+        setActionError(null);
+        try {
+          if (scoreboardModalDraft?.activityKey === activityKey) {
+            closeScoreboardGradeModal();
+          }
 
-      setPendingScores((prev) => {
-        const next = new Map(prev);
-        for (const entry of entriesForActivity) {
-          next.delete(`scoreboard:${entry.criterion_key}`);
-        }
-        // Also remove quiz_grades entry
-        next.delete(`quiz_grades:${activityKey}`);
-        return next;
-      });
+          setPendingScores((prev) => {
+            const next = new Map(prev);
+            for (const entry of entriesForActivity) {
+              next.delete(`scoreboard:${entry.criterion_key}`);
+            }
+            // Also remove quiz_grades entry
+            next.delete(`quiz_grades:${activityKey}`);
+            return next;
+          });
 
-      const persistedScoreboardKeys = new Set(
-        (selectedEval.scores || [])
-          .filter((score) => score.sheet === "scoreboard")
-          .map((score) => score.criterion_key),
-      );
-
-      const persistedQuizGradesKeys = new Set(
-        (selectedEval.scores || [])
-          .filter((score) => score.sheet === "quiz_grades")
-          .map((score) => score.criterion_key),
-      );
-
-      const persistedEntries = entriesForActivity.filter((entry) =>
-        persistedScoreboardKeys.has(entry.criterion_key),
-      );
-
-      const needsServerDelete =
-        persistedEntries.length > 0 || persistedQuizGradesKeys.has(activityKey);
-
-      if (needsServerDelete) {
-        for (const entry of persistedEntries) {
-          await evaluationApiService.deleteScore(
-            selectedEval.id,
-            "scoreboard",
-            entry.criterion_key,
+          const persistedScoreboardKeys = new Set(
+            (selectedEval.scores || [])
+              .filter((score) => score.sheet === "scoreboard")
+              .map((score) => score.criterion_key),
           );
-        }
-        // Delete quiz_grades entry from server too
-        if (persistedQuizGradesKeys.has(activityKey)) {
-          await evaluationApiService.deleteScore(
-            selectedEval.id,
-            "quiz_grades",
-            activityKey,
-          );
-        }
 
-        const detail = await evaluationApiService.getEvaluation(
-          selectedEval.id,
-        );
-        setSelectedEval(detail);
-        initPendingScores(detail.scores);
-      }
-    } catch (deleteError) {
-      setActionError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "Unable to delete scoreboard entry.",
-      );
-    } finally {
-      setSavingScores(false);
-    }
+          const persistedQuizGradesKeys = new Set(
+            (selectedEval.scores || [])
+              .filter((score) => score.sheet === "quiz_grades")
+              .map((score) => score.criterion_key),
+          );
+
+          const persistedEntries = entriesForActivity.filter((entry) =>
+            persistedScoreboardKeys.has(entry.criterion_key),
+          );
+
+          const needsServerDelete =
+            persistedEntries.length > 0 ||
+            persistedQuizGradesKeys.has(activityKey);
+
+          if (needsServerDelete) {
+            for (const entry of persistedEntries) {
+              await evaluationApiService.deleteScore(
+                selectedEval.id,
+                "scoreboard",
+                entry.criterion_key,
+              );
+            }
+            // Delete quiz_grades entry from server too
+            if (persistedQuizGradesKeys.has(activityKey)) {
+              await evaluationApiService.deleteScore(
+                selectedEval.id,
+                "quiz_grades",
+                activityKey,
+              );
+            }
+
+            const detail = await evaluationApiService.getEvaluation(
+              selectedEval.id,
+            );
+            setSelectedEval(detail);
+            initPendingScores(detail.scores);
+          }
+        } catch (deleteError) {
+          setActionError(
+            deleteError instanceof Error
+              ? deleteError.message
+              : "Unable to delete scoreboard entry.",
+          );
+        } finally {
+          setSavingScores(false);
+        }
+      },
+    });
   };
 
   const openScoreboardGradeModal = (activity: ScoreboardActivity) => {
@@ -3044,12 +3106,12 @@ const toWholeScoreOption = (
       <Modal
         isOpen={isCreateOpen}
         title="Create Evaluation"
-        onClose={() => setIsCreateOpen(false)}
+        onClose={requestCloseCreateModal}
         size="md"
         footer={
           <div className="flex gap-3">
             <button
-              onClick={() => setIsCreateOpen(false)}
+              onClick={requestCloseCreateModal}
               className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5"
             >
               Cancel
@@ -3248,6 +3310,20 @@ const toWholeScoreOption = (
           </div>
         </div>
       </Modal>
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirm action"}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Confirm"}
+        variant={confirmDialog?.variant ?? "default"}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };
@@ -3287,3 +3363,4 @@ const AddScoreboardEntry = ({
 };
 
 export default EvaluationSection;
+

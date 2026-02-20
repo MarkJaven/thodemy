@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
+import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import { superAdminService } from "../../../services/superAdminService";
 import type { AdminUser, Role, UserProfile } from "../../../types/superAdmin";
 
-const roleOptions: Role[] = ["user", "admin", "superadmin"];
+const roleOptions: Role[] = ["user", "admin"];
 
 const roleConfig: Record<Role, { color: string; bgColor: string; borderColor: string }> = {
   user: {
@@ -26,6 +27,14 @@ const roleConfig: Record<Role, { color: string; bgColor: string; borderColor: st
 
 type UsersSectionProps = {
   readOnly?: boolean;
+};
+
+type ConfirmDialogState = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void | Promise<void>;
 };
 
 const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
@@ -57,6 +66,14 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   const [saving, setSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+
+  const defaultFormState = {
+    email: "",
+    username: "",
+    password: "",
+    role: "user" as Role,
+  };
 
   const loadUsers = async () => {
     setLoading(true);
@@ -109,7 +126,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   };
 
   const resetForm = () => {
-    setFormState({ email: "", username: "", password: "", role: "user" });
+    setFormState({ ...defaultFormState });
     setActionError(null);
   };
 
@@ -134,6 +151,58 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     setSelectedUser(user);
     setActionError(null);
     setIsDeleteOpen(true);
+  };
+
+  const hasCreateFormChanges = useMemo(() => {
+    if (!isCreateOpen) return false;
+    return JSON.stringify(formState) !== JSON.stringify(defaultFormState);
+  }, [formState, isCreateOpen]);
+
+  const hasEditFormChanges = useMemo(() => {
+    if (!isEditOpen || !selectedUser) return false;
+    const baseline = {
+      email: selectedUser.email ?? "",
+      username: selectedUser.username ?? "",
+      password: "",
+      role: selectedUser.role,
+    };
+    return JSON.stringify(formState) !== JSON.stringify(baseline);
+  }, [formState, isEditOpen, selectedUser]);
+
+  const requestCloseCreateModal = () => {
+    if (saving) return;
+    if (!hasCreateFormChanges) {
+      setIsCreateOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard new user details?",
+      description: "You have unsaved user details. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsCreateOpen(false);
+        setActionError(null);
+      },
+    });
+  };
+
+  const requestCloseEditModal = () => {
+    if (saving) return;
+    if (!hasEditFormChanges) {
+      setIsEditOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard user edits?",
+      description: "You have unsaved account changes. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsEditOpen(false);
+        setActionError(null);
+      },
+    });
   };
 
   const openProfile = (user: AdminUser) => {
@@ -721,13 +790,13 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
             isOpen={isCreateOpen}
             title="Create New User"
             description="Add a new user to the platform with specified role and credentials."
-            onClose={() => setIsCreateOpen(false)}
+            onClose={requestCloseCreateModal}
             variant="user"
             footer={
               <>
                 <button
                   type="button"
-                  onClick={() => setIsCreateOpen(false)}
+                  onClick={requestCloseCreateModal}
                   className="btn-secondary"
                 >
                   Cancel
@@ -815,13 +884,13 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
             isOpen={isEditOpen}
             title="Edit User"
             description="Update user details and permissions."
-            onClose={() => setIsEditOpen(false)}
+            onClose={requestCloseEditModal}
             variant="user"
             footer={
               <>
                 <button
                   type="button"
-                  onClick={() => setIsEditOpen(false)}
+                  onClick={requestCloseEditModal}
                   className="btn-secondary"
                 >
                   Cancel
@@ -974,6 +1043,20 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
           </Modal>
         </>
       )}
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirm action"}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Confirm"}
+        variant={confirmDialog?.variant ?? "default"}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };
