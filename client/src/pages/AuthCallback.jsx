@@ -9,6 +9,7 @@ import { superAdminService } from "../services/superAdminService";
  */
 const AuthCallback = () => {
   const [error, setError] = useState(null);
+  const [statusMessage, setStatusMessage] = useState("Hang tight while we secure your session.");
 
   useEffect(() => {
     /**
@@ -20,6 +21,23 @@ const AuthCallback = () => {
         await authService.exchangeCodeForSession(window.location.href);
         const session = await authService.getSession();
         if (session?.user?.id) {
+          const approval = await sessionService.requestDeviceApproval();
+          if (approval?.status === "pending" && approval.requestId) {
+            setStatusMessage("Approve this sign-in from your other device to continue.");
+            const result = await sessionService.waitForDeviceApproval({
+              userId: session.user.id,
+              requestId: approval.requestId,
+            });
+            if (result.status !== "approved") {
+              await authService.signOut();
+              setError(
+                result.status === "denied"
+                  ? "This device was not approved. Please contact support."
+                  : "Approval timed out. Please try signing in again."
+              );
+              return;
+            }
+          }
           await sessionService.createSession(session.user.id);
           await sessionService.announceSession();
         }
@@ -47,7 +65,7 @@ const AuthCallback = () => {
           <p className="mt-2 text-sm text-slate-400">
             {error
               ? "We could not complete the sign-in. Please try again."
-              : "Hang tight while we secure your session."}
+              : statusMessage}
           </p>
           {error && (
             <>

@@ -54,4 +54,52 @@ const sendForceLogout = async (userId, deviceId, deviceInfo) => {
   }
 };
 
-module.exports = { pusherService: { sendForceLogout } };
+/**
+ * Publish a device login request event for a user.
+ * @param {string} userId
+ * @param {{requestId: string, deviceId: string, deviceInfo?: string, requestedAt?: string}} payload
+ * @returns {Promise<void>}
+ */
+const sendDeviceLoginRequest = async (userId, payload) => {
+  const pusher = getClient();
+  if (!pusher) {
+    throw new ExternalServiceError("Pusher is not configured");
+  }
+  try {
+    await pusher.trigger(`user-${userId}`, "device_login_request", {
+      ...payload,
+      ts: Date.now(),
+    });
+  } catch (error) {
+    throw new ExternalServiceError("Failed to send device login request", {
+      details: error?.message,
+    });
+  }
+};
+
+/**
+ * Publish a device login resolution event for a user.
+ * @param {string} userId
+ * @param {{requestId: string, status: string}} payload
+ * @returns {Promise<void>}
+ */
+const sendDeviceLoginResolution = async (userId, payload) => {
+  const pusher = getClient();
+  if (!pusher) {
+    throw new ExternalServiceError("Pusher is not configured");
+  }
+  try {
+    await pusher.trigger(`user-${userId}`, "device_login_response", {
+      ...payload,
+      ts: Date.now(),
+    });
+  } catch (error) {
+    throw new ExternalServiceError("Failed to send device login resolution", {
+      details: error?.message,
+    });
+  }
+};
+
+module.exports = {
+  pusherService: { sendForceLogout, sendDeviceLoginRequest, sendDeviceLoginResolution },
+};
