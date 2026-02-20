@@ -55,12 +55,27 @@ const resolveLogPath = () => {
 };
 
 /**
+ * Validate that a file path is confined to the log base directory.
+ * @param {string} filePath
+ * @returns {string} The validated absolute path
+ */
+const validateLogPath = (filePath) => {
+  const resolved = path.resolve(filePath);
+  const relative = path.relative(LOG_BASE_DIR, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Log path escapes base directory: ${filePath}`);
+  }
+  return resolved;
+};
+
+/**
  * Ensure the log directory exists.
  * @param {string} filePath
  * @returns {void}
  */
 const ensureLogDirectory = (filePath) => {
-  const directory = path.dirname(filePath);
+  const validated = validateLogPath(filePath);
+  const directory = path.dirname(validated);
   fs.mkdirSync(directory, { recursive: true });
 };
 
@@ -71,7 +86,8 @@ const ensureLogDirectory = (filePath) => {
  */
 const getLogSize = (filePath) => {
   try {
-    return fs.statSync(filePath).size;
+    const validated = validateLogPath(filePath);
+    return fs.statSync(validated).size;
   } catch (error) {
     if (error.code === "ENOENT") {
       return 0;
@@ -92,15 +108,17 @@ const rotateLogs = (filePath) => {
   }
 
   for (let index = maxFiles - 1; index >= 1; index -= 1) {
-    const source = `${filePath}.${index}`;
-    const target = `${filePath}.${index + 1}`;
+    const source = validateLogPath(`${filePath}.${index}`);
+    const target = validateLogPath(`${filePath}.${index + 1}`);
     if (fs.existsSync(source)) {
       fs.renameSync(source, target);
     }
   }
 
-  if (fs.existsSync(filePath)) {
-    fs.renameSync(filePath, `${filePath}.1`);
+  const validatedPath = validateLogPath(filePath);
+  if (fs.existsSync(validatedPath)) {
+    const rotatedPath = validateLogPath(`${filePath}.1`);
+    fs.renameSync(validatedPath, rotatedPath);
   }
 };
 
