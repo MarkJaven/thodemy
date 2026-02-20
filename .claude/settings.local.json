@@ -34,7 +34,9 @@
       "Bash(npm ls:*)",
       "Bash(npm view:*)",
       "Bash(npm run dev:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(xxd:*)",
+      "Bash(python3 -c:*)"
     ]
   }
 }

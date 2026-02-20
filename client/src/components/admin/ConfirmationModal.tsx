@@ -21,34 +21,43 @@ const ConfirmationModal = ({
   onConfirm,
   onCancel,
 }: ConfirmationModalProps) => {
+  const isDanger = variant === "danger";
+
   return (
     <Modal
       isOpen={isOpen}
       title={title}
-      description={description}
       variant={variant}
-      size="sm"
+      size="md"
       onClose={onCancel}
       footer={
-        <>
+        <div className="flex w-full items-center justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
+            className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-300 transition hover:bg-white/10 hover:text-white"
           >
             {cancelLabel}
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-full bg-white px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-ink-900 transition hover:opacity-90"
+            className={`rounded-xl px-6 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] shadow-lg transition ${
+              isDanger
+                ? "bg-gradient-to-r from-rose-600 to-rose-500 text-white shadow-rose-500/25 hover:shadow-rose-500/40"
+                : "bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] text-white shadow-purple-500/25 hover:shadow-purple-500/40"
+            }`}
           >
             {confirmLabel}
           </button>
-        </>
+        </div>
       }
     >
-      <div className="text-sm text-slate-300">Please confirm to continue.</div>
+      {description && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <p className="text-sm leading-relaxed text-slate-300">{description}</p>
+        </div>
+      )}
     </Modal>
   );
 };

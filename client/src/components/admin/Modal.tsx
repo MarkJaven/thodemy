@@ -185,7 +185,7 @@ const Modal = ({
 
         {/* Footer */}
         {footer && (
-          <div className="flex-shrink-0 border-t border-white/10 bg-ink-850 px-6 py-4 sm:px-8">
+          <div className="flex-shrink-0 rounded-b-2xl border-t border-white/10 bg-ink-850 px-6 py-4 sm:px-8">
             <div className="flex flex-wrap items-center justify-end gap-3">{footer}</div>
           </div>
         )}
