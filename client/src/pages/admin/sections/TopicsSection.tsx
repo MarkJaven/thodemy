@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../../../components/admin/Modal";
+import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import { superAdminService } from "../../../services/superAdminService";
 import type { Topic } from "../../../types/superAdmin";
 
@@ -13,6 +14,14 @@ type TopicFormState = {
   link_url: string;
   time_allocated: number;
   time_unit: "hours" | "days";
+};
+
+type ConfirmDialogState = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void | Promise<void>;
 };
 
 const MAX_TOPIC_DESCRIPTION_LENGTH = 5000;
@@ -37,6 +46,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
     time_allocated: 1,
     time_unit: "days",
   });
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -115,6 +125,67 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
     });
     setActionError(null);
     setIsFormOpen(true);
+  };
+
+  const hasFormChanges = useMemo(() => {
+    if (!isFormOpen) return false;
+    const baseline = selectedTopic
+      ? {
+          title: selectedTopic.title,
+          description: selectedTopic.description ?? "",
+          link_url: selectedTopic.link_url ?? "",
+          time_allocated: Number(selectedTopic.time_allocated ?? 1),
+          time_unit: selectedTopic.time_unit === "hours" ? "hours" : "days",
+        }
+      : {
+          title: "",
+          description: "",
+          link_url: "",
+          time_allocated: 1,
+          time_unit: "days" as const,
+        };
+    return JSON.stringify(formState) !== JSON.stringify(baseline);
+  }, [formState, isFormOpen, selectedTopic]);
+
+  const requestCloseForm = () => {
+    if (saving) return;
+    if (!hasFormChanges) {
+      setIsFormOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard topic changes?",
+      description: "You have unsaved topic changes. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsFormOpen(false);
+        setActionError(null);
+      },
+    });
+  };
+
+  const openStatusConfirm = (topic: Topic) => {
+    const nextStatus = topic.status === "inactive" ? "active" : "inactive";
+    setConfirmDialog({
+      title: `${nextStatus === "active" ? "Activate" : "Deactivate"} topic?`,
+      description: `${nextStatus === "active" ? "Activate" : "Deactivate"} "${topic.title}"?`,
+      confirmLabel: nextStatus === "active" ? "Activate" : "Deactivate",
+      variant: "danger",
+      onConfirm: async () => {
+        setActionError(null);
+        try {
+          await superAdminService.updateTopic(topic.id, { status: nextStatus });
+          await loadData();
+        } catch (toggleError) {
+          setActionError(
+            toggleError instanceof Error
+              ? toggleError.message
+              : "Unable to update topic status."
+          );
+        }
+      },
+    });
   };
 
   const handleSave = async () => {
@@ -290,24 +361,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
-                        const nextStatus = topic.status === "inactive" ? "active" : "inactive";
-                        const confirmed = window.confirm(
-                          `${nextStatus === "active" ? "Activate" : "Deactivate"} "${topic.title}"?`
-                        );
-                        if (!confirmed) return;
-                        setActionError(null);
-                        try {
-                          await superAdminService.updateTopic(topic.id, { status: nextStatus });
-                          await loadData();
-                        } catch (toggleError) {
-                          setActionError(
-                            toggleError instanceof Error
-                              ? toggleError.message
-                              : "Unable to update topic status."
-                          );
-                        }
-                      }}
+                      onClick={() => openStatusConfirm(topic)}
                       className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/20"
                     >
                       {topic.status === "inactive" ? "Activate" : "Deactivate"}
@@ -404,24 +458,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                       </button>
                       <button
                         type="button"
-                        onClick={async () => {
-                          const nextStatus = topic.status === "inactive" ? "active" : "inactive";
-                          const confirmed = window.confirm(
-                            `${nextStatus === "active" ? "Activate" : "Deactivate"} "${topic.title}"?`
-                          );
-                          if (!confirmed) return;
-                          setActionError(null);
-                          try {
-                            await superAdminService.updateTopic(topic.id, { status: nextStatus });
-                            await loadData();
-                          } catch (toggleError) {
-                            setActionError(
-                              toggleError instanceof Error
-                                ? toggleError.message
-                                : "Unable to update topic status."
-                            );
-                          }
-                        }}
+                        onClick={() => openStatusConfirm(topic)}
                         className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/20"
                       >
                         {topic.status === "inactive" ? "Activate" : "Deactivate"}
@@ -441,12 +478,12 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
         isOpen={isFormOpen}
         title={selectedTopic ? "Edit topic" : "Create topic"}
         description="Set the core details for this topic."
-        onClose={() => (saving ? null : setIsFormOpen(false))}
+        onClose={requestCloseForm}
         footer={
           <>
             <button
               type="button"
-              onClick={() => setIsFormOpen(false)}
+              onClick={requestCloseForm}
               className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
             >
               Cancel
@@ -519,7 +556,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
             </span>
           </label>
           <label className="md:col-span-2 text-xs uppercase tracking-[0.25em] text-slate-400">
-            Topic link (optional)
+            Topic link
             <input
               type="url"
               placeholder="https://example.com/lesson"
@@ -532,6 +569,20 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
           </label>
         </div>
       </Modal>
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirm action"}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Confirm"}
+        variant={confirmDialog?.variant ?? "default"}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };

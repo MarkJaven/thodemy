@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Modal from "../components/admin/Modal";
+import ConfirmationModal from "../components/admin/ConfirmationModal";
 import Navbar from "../components/dashboard/Navbar";
 import { useAuth } from "../context/AuthContext";
 import { useTopicsData } from "../hooks/useTopicsData";
@@ -18,6 +19,14 @@ type TopicFormState = {
   time_unit: "hours" | "days";
   pre_requisites: string[];
   co_requisites: string[];
+};
+
+type ConfirmDialogState = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void | Promise<void>;
 };
 
 const MAX_TOPIC_DESCRIPTION_LENGTH = 5000;
@@ -80,6 +89,7 @@ const TopicsPage = () => {
   const [submissionMessage, setSubmissionMessage] = useState("");
   const [submittingSubmission, setSubmittingSubmission] = useState(false);
   const [submissionSuccess, setSubmissionSuccess] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [formState, setFormState] = useState<TopicFormState>({
     title: "",
     description: "",
@@ -144,7 +154,40 @@ const TopicsPage = () => {
 
   const handleCloseModal = () => {
     if (savingTopic) return;
-    setIsModalOpen(false);
+    const baseline = editingTopic
+      ? {
+          title: editingTopic.title,
+          description: editingTopic.description ?? "",
+          link_url: editingTopic.link_url ?? "",
+          time_allocated: Number(editingTopic.time_allocated ?? 1),
+          time_unit: editingTopic.time_unit === "hours" ? "hours" : "days",
+          pre_requisites: editingTopic.pre_requisites ?? [],
+          co_requisites: editingTopic.co_requisites ?? [],
+        }
+      : {
+          title: "",
+          description: "",
+          link_url: "",
+          time_allocated: 1,
+          time_unit: "days" as const,
+          pre_requisites: [] as string[],
+          co_requisites: [] as string[],
+        };
+    const hasChanges = JSON.stringify(formState) !== JSON.stringify(baseline);
+    if (!hasChanges) {
+      setIsModalOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard topic changes?",
+      description: "You have unsaved topic changes. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsModalOpen(false);
+        setActionError(null);
+      },
+    });
   };
 
   const handleSaveTopic = async () => {
@@ -191,19 +234,23 @@ const TopicsPage = () => {
   };
 
   const handleDeleteTopic = async (topic: Topic) => {
-    const confirmed = window.confirm(
-      `Archive "${topic.title}"? Learners will no longer see this topic.`
-    );
-    if (!confirmed) return;
-    setActionError(null);
-    try {
-      await superAdminService.deleteTopic(topic.id);
-      await refresh();
-    } catch (deleteError) {
-      const message =
-        deleteError instanceof Error ? deleteError.message : "Unable to delete the topic.";
-      setActionError(message);
-    }
+    setConfirmDialog({
+      title: "Archive topic?",
+      description: `Archive "${topic.title}"? Learners will no longer see this topic.`,
+      confirmLabel: "Archive",
+      variant: "danger",
+      onConfirm: async () => {
+        setActionError(null);
+        try {
+          await superAdminService.deleteTopic(topic.id);
+          await refresh();
+        } catch (deleteError) {
+          const message =
+            deleteError instanceof Error ? deleteError.message : "Unable to delete the topic.";
+          setActionError(message);
+        }
+      },
+    });
   };
 
   const handleOpenSubmission = (topic: Topic) => {
@@ -697,6 +744,20 @@ const TopicsPage = () => {
           </label>
         </div>
       </Modal>
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirm action"}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Confirm"}
+        variant={confirmDialog?.variant ?? "default"}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };

@@ -1,8 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
+import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import { superAdminService } from "../../../services/superAdminService";
 import type { AdminUser, Course, Quiz, QuizAttempt, QuizScore } from "../../../types/superAdmin";
+
+type ConfirmDialogState = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void | Promise<void>;
+};
+
+const EMPTY_QUIZ_FORM_STATE = {
+  title: "",
+  description: "",
+  status: "active",
+  course_id: "",
+  assigned_user_id: "",
+  link_url: "",
+  start_at: "",
+  end_at: "",
+  show_score: true,
+  max_score: "",
+};
+
+const EMPTY_SCORE_STATE = {
+  quiz_id: "",
+  user_id: "",
+  score: "",
+};
 
 const QuizzesSection = () => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -38,6 +66,8 @@ const QuizzesSection = () => {
 
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -68,19 +98,9 @@ const QuizzesSection = () => {
 
   const openCreate = () => {
     setSelectedQuiz(null);
-    setFormState({
-      title: "",
-      description: "",
-      status: "active",
-      course_id: "",
-      assigned_user_id: "",
-      link_url: "",
-      start_at: "",
-      end_at: "",
-      show_score: true,
-      max_score: "",
-    });
+    setFormState({ ...EMPTY_QUIZ_FORM_STATE });
     setActionError(null);
+    setActionSuccess(null);
     setIsFormOpen(true);
   };
 
@@ -99,11 +119,60 @@ const QuizzesSection = () => {
       max_score: quiz.max_score ? String(quiz.max_score) : "",
     });
     setActionError(null);
+    setActionSuccess(null);
     setIsFormOpen(true);
   };
 
+  const hasQuizFormChanges = useMemo(() => {
+    if (!isFormOpen) return false;
+    const baseline = selectedQuiz
+      ? {
+          title: selectedQuiz.title,
+          description: selectedQuiz.description ?? "",
+          status: selectedQuiz.status ?? "active",
+          course_id: selectedQuiz.course_id ?? "",
+          assigned_user_id: selectedQuiz.assigned_user_id ?? "",
+          link_url: selectedQuiz.link_url ?? "",
+          start_at: selectedQuiz.start_at ? selectedQuiz.start_at.slice(0, 16) : "",
+          end_at: selectedQuiz.end_at ? selectedQuiz.end_at.slice(0, 16) : "",
+          show_score: selectedQuiz.show_score ?? true,
+          max_score: selectedQuiz.max_score ? String(selectedQuiz.max_score) : "",
+        }
+      : EMPTY_QUIZ_FORM_STATE;
+    return JSON.stringify(formState) !== JSON.stringify(baseline);
+  }, [formState, isFormOpen, selectedQuiz]);
+
+  const requestCloseQuizForm = () => {
+    if (saving) return;
+    if (!hasQuizFormChanges) {
+      setIsFormOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard quiz changes?",
+      description: "You have unsaved quiz updates. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsFormOpen(false);
+        setActionError(null);
+      },
+    });
+  };
+
   const handleSave = async () => {
-    // Course is now optional - if no course is selected, quiz is visible to ALL enrolled learners (any course)
+    if (!formState.title.trim()) {
+      setActionError("Quiz title is required.");
+      return;
+    }
+    if (formState.start_at && formState.end_at) {
+      const startDate = new Date(formState.start_at);
+      const endDate = new Date(formState.end_at);
+      if (startDate > endDate) {
+        setActionError("End date/time must be later than start date/time.");
+        return;
+      }
+    }
     const maxScoreValue = formState.max_score ? Number(formState.max_score) : null;
     if (formState.max_score && Number.isNaN(maxScoreValue)) {
       setActionError("Max score must be a number.");
@@ -115,6 +184,7 @@ const QuizzesSection = () => {
     }
     setSaving(true);
     setActionError(null);
+    setActionSuccess(null);
     try {
       if (selectedQuiz) {
         await superAdminService.updateQuiz({
@@ -151,6 +221,7 @@ const QuizzesSection = () => {
         });
       }
       setIsFormOpen(false);
+      setActionSuccess(selectedQuiz ? "Quiz updated successfully." : "Quiz created successfully.");
       await loadData();
     } catch (saveError) {
       setActionError(saveError instanceof Error ? saveError.message : "Unable to save quiz.");
@@ -160,22 +231,35 @@ const QuizzesSection = () => {
   };
 
   const handleDelete = async (quizId: string) => {
-    setSaving(true);
-    setActionError(null);
-    try {
-      await superAdminService.deleteQuiz(quizId);
-      await loadData();
-    } catch (deleteError) {
-      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete quiz.");
-    } finally {
-      setSaving(false);
-    }
+    setConfirmDialog({
+      title: "Delete quiz?",
+      description: "This removes the quiz and related grading setup.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        setSaving(true);
+        setActionError(null);
+        setActionSuccess(null);
+        try {
+          await superAdminService.deleteQuiz(quizId);
+          setActionSuccess("Quiz deleted successfully.");
+          await loadData();
+        } catch (deleteError) {
+          setActionError(
+            deleteError instanceof Error ? deleteError.message : "Unable to delete quiz.",
+          );
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const openScoreCreate = () => {
     setSelectedScore(null);
-    setScoreState({ quiz_id: "", user_id: "", score: "" });
+    setScoreState({ ...EMPTY_SCORE_STATE });
     setActionError(null);
+    setActionSuccess(null);
     setIsScoreOpen(true);
   };
 
@@ -187,7 +271,38 @@ const QuizzesSection = () => {
       score: String(score.score),
     });
     setActionError(null);
+    setActionSuccess(null);
     setIsScoreOpen(true);
+  };
+
+  const hasScoreFormChanges = useMemo(() => {
+    if (!isScoreOpen) return false;
+    const baseline = selectedScore
+      ? {
+          quiz_id: selectedScore.quiz_id,
+          user_id: selectedScore.user_id,
+          score: String(selectedScore.score),
+        }
+      : EMPTY_SCORE_STATE;
+    return JSON.stringify(scoreState) !== JSON.stringify(baseline);
+  }, [isScoreOpen, scoreState, selectedScore]);
+
+  const requestCloseScoreForm = () => {
+    if (saving) return;
+    if (!hasScoreFormChanges) {
+      setIsScoreOpen(false);
+      return;
+    }
+    setConfirmDialog({
+      title: "Discard score changes?",
+      description: "You have unsaved score updates. Leaving now will discard them.",
+      confirmLabel: "Discard",
+      variant: "danger",
+      onConfirm: () => {
+        setIsScoreOpen(false);
+        setActionError(null);
+      },
+    });
   };
 
   const handleSaveScore = async () => {
@@ -219,6 +334,7 @@ const QuizzesSection = () => {
     }
     setSaving(true);
     setActionError(null);
+    setActionSuccess(null);
     try {
       const existingScore = scores.find(
         (entry) =>
@@ -235,6 +351,7 @@ const QuizzesSection = () => {
         });
       }
       setIsScoreOpen(false);
+      setActionSuccess(selectedScore ? "Score updated successfully." : "Score saved successfully.");
       await loadData();
     } catch (saveError) {
       setActionError(saveError instanceof Error ? saveError.message : "Unable to save score.");
@@ -244,16 +361,28 @@ const QuizzesSection = () => {
   };
 
   const handleDeleteScore = async (scoreId: string) => {
-    setSaving(true);
-    setActionError(null);
-    try {
-      await superAdminService.deleteQuizScore(scoreId);
-      await loadData();
-    } catch (deleteError) {
-      setActionError(deleteError instanceof Error ? deleteError.message : "Unable to delete score.");
-    } finally {
-      setSaving(false);
-    }
+    setConfirmDialog({
+      title: "Delete score?",
+      description: "This removes the recorded quiz score.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        setSaving(true);
+        setActionError(null);
+        setActionSuccess(null);
+        try {
+          await superAdminService.deleteQuizScore(scoreId);
+          setActionSuccess("Score deleted successfully.");
+          await loadData();
+        } catch (deleteError) {
+          setActionError(
+            deleteError instanceof Error ? deleteError.message : "Unable to delete score.",
+          );
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const handleViewProof = async (attempt: QuizAttempt) => {
@@ -725,17 +854,26 @@ const QuizzesSection = () => {
         emptyMessage="No quiz completions yet."
       />
 
-      {actionError && <p className="text-xs text-rose-200">{actionError}</p>}
+      {actionSuccess && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-200">
+          {actionSuccess}
+        </div>
+      )}
+      {actionError && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+          {actionError}
+        </div>
+      )}
 
       <Modal
         isOpen={isFormOpen}
         title={selectedQuiz ? "Edit quiz" : "Create quiz"}
-        onClose={() => setIsFormOpen(false)}
+        onClose={requestCloseQuizForm}
         footer={
           <>
             <button
               type="button"
-              onClick={() => setIsFormOpen(false)}
+              onClick={requestCloseQuizForm}
               className="btn-secondary"
             >
               Cancel
@@ -902,12 +1040,12 @@ const QuizzesSection = () => {
       <Modal
         isOpen={isScoreOpen}
         title={selectedScore ? "Edit quiz score" : "Add quiz score"}
-        onClose={() => setIsScoreOpen(false)}
+        onClose={requestCloseScoreForm}
         footer={
           <>
             <button
               type="button"
-              onClick={() => setIsScoreOpen(false)}
+              onClick={requestCloseScoreForm}
               className="btn-secondary"
             >
               Cancel
@@ -992,6 +1130,20 @@ const QuizzesSection = () => {
         </div>
         {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
       </Modal>
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirm action"}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Confirm"}
+        variant={confirmDialog?.variant ?? "default"}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };
