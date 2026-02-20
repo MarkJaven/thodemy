@@ -232,6 +232,23 @@ const LearningPathsSection = () => {
       return;
     }
 
+    // Duplicate name check (case-insensitive, excluding current path when editing)
+    const normalizedTitle = formState.title.trim().toLowerCase();
+    const duplicate = learningPaths.find(
+      (lp) =>
+        lp.title.toLowerCase() === normalizedTitle &&
+        lp.id !== selectedPath?.id
+    );
+    if (duplicate) {
+      setConfirmDialog({
+        title: "Duplicate Learning Path Name",
+        description: `The learning path "${duplicate.title}" already exists. Please choose a unique name to avoid duplicates.`,
+        variant: "danger",
+        onConfirm: () => {},
+      });
+      return;
+    }
+
     setSaving(true);
     setActionError(null);
     const payload = {
