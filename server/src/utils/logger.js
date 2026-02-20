@@ -39,8 +39,16 @@ const buildEntry = (level, message, context) => ({
  */
 const LOG_BASE_DIR = path.resolve(process.cwd());
 const resolveLogPath = () => {
-  const resolved = path.resolve(LOG_BASE_DIR, env.logFilePath);
-  if (!resolved.startsWith(LOG_BASE_DIR + path.sep) && resolved !== LOG_BASE_DIR) {
+  const logPath = env.logFilePath;
+  const segments = String(logPath).split(/[\\/]+/);
+
+  if (path.isAbsolute(logPath) || segments.includes("..")) {
+    throw new Error(`Invalid log file path: ${logPath}`);
+  }
+
+  const resolved = path.resolve(LOG_BASE_DIR, logPath);
+  const relative = path.relative(LOG_BASE_DIR, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`Log file path escapes base directory: ${env.logFilePath}`);
   }
   return resolved;
