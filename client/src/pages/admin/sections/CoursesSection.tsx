@@ -193,7 +193,7 @@ type ConfirmDialogState = {
 
 const MAX_COURSE_DESCRIPTION_LENGTH = 5000;
 
-const CoursesSection = () => {
+const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
@@ -879,13 +879,15 @@ const CoursesSection = () => {
                       >
                         View
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => openEdit(course)}
-                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10"
-                      >
-                        Edit
-                      </button>
+                      {editable && (
+                        <button
+                          type="button"
+                          onClick={() => openEdit(course)}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10"
+                        >
+                          Edit
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleArchiveToggle(course)}

@@ -958,7 +958,7 @@ const AdminDashboard = () => {
   const renderContent = () => {
     switch (activeNav) {
       case "courses":
-        return <CoursesSection />;
+        return <CoursesSection editable={false} />;
       case "learning-paths":
         return <LearningPathsSection />;
       case "topics":
@@ -966,7 +966,7 @@ const AdminDashboard = () => {
       case "users":
         return <UsersSection readOnly />;
       case "projects":
-        return <ActivitiesSection variant="projects" />;
+        return <ActivitiesSection variant="projects" editable={false} />;
       case "activity":
         return (
           <ActivitiesSection
@@ -974,6 +974,7 @@ const AdminDashboard = () => {
             focusSection={approvalFocus?.section ?? null}
             onFocusHandled={() => setApprovalFocus(null)}
             variant="approvals"
+            editable={false}
           />
         );
       case "quiz":
