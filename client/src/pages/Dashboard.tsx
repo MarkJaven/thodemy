@@ -166,6 +166,9 @@ const getTodayDateString = () => {
   return `${year}-${month}-${day}`;
 };
 
+const COMPANY_ID_REGEX = /^\d{1,7}$/;
+const sanitizeCompanyId = (value: string) => value.replace(/\D/g, "").slice(0, 7);
+
 const WORK_HOURS_PER_DAY = 8;
 const CURSOR_EPSILON = 1e-6;
 
@@ -1373,7 +1376,29 @@ const Dashboard = () => {
   };
 
   const handleProfileFieldChange = (field: string, value: string) => {
-    setProfileDraft((prev: any) => ({ ...(prev ?? {}), [field]: value }));
+    const nextValue =
+      field === "company_id_no" ? sanitizeCompanyId(value) : value;
+    setProfileDraft((prev: any) => ({ ...(prev ?? {}), [field]: nextValue }));
+  };
+
+  const isCompanyIdTaken = async (companyId: string, currentUserId: string) => {
+    if (!supabase) return false;
+    const { data: rpcData, error: rpcError } = await supabase.rpc("is_company_id_taken", {
+      p_company_id_no: companyId,
+      p_exclude_user_id: currentUserId,
+    });
+    if (!rpcError && typeof rpcData === "boolean") {
+      return rpcData;
+    }
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("company_id_no", companyId)
+      .neq("id", currentUserId)
+      .limit(1);
+    if (error) throw error;
+    return (data?.length ?? 0) > 0;
   };
 
   const startProfileEdit = () => {
@@ -1403,6 +1428,17 @@ const Dashboard = () => {
       setProfileUpdateError("Birthdate must not exceed today.");
       return;
     }
+    if (profileDraft?.company_id_no && !COMPANY_ID_REGEX.test(profileDraft.company_id_no)) {
+      setProfileUpdateError("Company ID must be numbers only and up to 7 digits.");
+      return;
+    }
+    if (profileDraft?.company_id_no) {
+      const companyIdTaken = await isCompanyIdTaken(profileDraft.company_id_no, user.id);
+      if (companyIdTaken) {
+        setProfileUpdateError("Company ID already exists. Please use a different Company ID.");
+        return;
+      }
+    }
     setProfileSaving(true);
     setProfileUpdateError(null);
     setProfileUpdateSuccess(null);
@@ -1426,6 +1462,10 @@ const Dashboard = () => {
       setProfileUpdateSuccess("Profile updated.");
       setTimeout(() => setProfileUpdateSuccess(null), 3000);
     } catch (err) {
+      if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "23505") {
+        setProfileUpdateError("Company ID already exists. Please use a different Company ID.");
+        return;
+      }
       setProfileUpdateError(
         err instanceof Error ? err.message : "Failed to update profile."
       );
@@ -3367,6 +3407,9 @@ const Dashboard = () => {
                 type="text"
                 value={profileView.company_id_no ?? ""}
                 onChange={(event) => handleProfileFieldChange("company_id_no", event.target.value)}
+                inputMode="numeric"
+                maxLength={7}
+                pattern="[0-9]{1,7}"
                 className={inputClass}
               />
             ) : (
