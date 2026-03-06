@@ -1157,6 +1157,11 @@ const populatePerformanceSheets = (workbook, scoreMap, performanceResults) => {
       PART1_TECHNICAL_TOTAL_CELL_BY_CATEGORY[config.category] || null;
     const part1Actual = getCellNumericValue(technicalSheet, technicalTotalCell) ?? 0;
 
+    // Ensure target weight column (D) always shows the correct category weight.
+    // Some template cells use formulas that can produce stale cached results.
+    overwriteCell(performanceSheet, `D${config.row}`, round(config.weight, 4));
+    overwriteCell(part1Sheet, `D${config.row}`, round(config.weight, 4));
+
     overwriteCellWithFormulaResult(performanceSheet, `E${config.row}`, round(contribution, 4));
     overwriteCellWithFormulaResult(part1Sheet, `E${config.row}`, round(part1Actual, 4));
 
