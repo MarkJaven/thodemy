@@ -27,6 +27,9 @@ const getTodayDateString = () => {
   return `${year}-${month}-${day}`;
 };
 
+const COMPANY_ID_REGEX = /^\d{1,7}$/;
+const sanitizeCompanyId = (value: string) => value.replace(/\D/g, '').slice(0, 7);
+
 const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
   const todayDate = getTodayDateString();
   const [step, setStep] = useState(0);
@@ -100,6 +103,26 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
     setStep(1);
   };
 
+  const isCompanyIdTaken = async (companyId: string, currentUserId: string) => {
+    if (!supabase) return false;
+    const { data: rpcData, error: rpcError } = await supabase.rpc('is_company_id_taken', {
+      p_company_id_no: companyId,
+      p_exclude_user_id: currentUserId,
+    });
+    if (!rpcError && typeof rpcData === 'boolean') {
+      return rpcData;
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('company_id_no', companyId)
+      .neq('id', currentUserId)
+      .limit(1);
+    if (error) throw error;
+    return (data?.length ?? 0) > 0;
+  };
+
   const handlePersonalInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!personalInfo.firstName || !personalInfo.lastName || !personalInfo.gender || !personalInfo.birthday) {
@@ -114,14 +137,35 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
     setStep(2);
   };
 
-  const handleProfessionalInfoSubmit = (e: React.FormEvent) => {
+  const handleProfessionalInfoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!personalInfo.address || !personalInfo.companyIdNo) {
       setError('Please fill in all required fields');
       return;
     }
-    setError(null);
-    setStep(3);
+    if (!COMPANY_ID_REGEX.test(personalInfo.companyIdNo)) {
+      setError('Company ID must be numbers only and up to 7 digits');
+      return;
+    }
+    if (!supabase) {
+      setError('Supabase not initialized');
+      return;
+    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const companyIdTaken = await isCompanyIdTaken(personalInfo.companyIdNo, user.id);
+      if (companyIdTaken) {
+        setError('Company ID already exists. Please use a different Company ID');
+        return;
+      }
+
+      setError(null);
+      setStep(3);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    }
   };
 
   const handleOnboardingSubmit = async (e: React.FormEvent) => {
@@ -140,7 +184,6 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
 
     if (!supabase) {
       setError('Supabase not initialized');
-      setLoading(false);
       return;
     }
 
@@ -153,6 +196,12 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
+
+      const companyIdTaken = await isCompanyIdTaken(personalInfo.companyIdNo, user.id);
+      if (companyIdTaken) {
+        setError('Company ID already exists. Please use a different Company ID');
+        return;
+      }
 
       const { error } = await supabase
         .from('profiles')
@@ -177,6 +226,10 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
         onComplete();
       }, 2000);
     } catch (err) {
+      if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === '23505') {
+        setError('Company ID already exists. Please use a different Company ID');
+        return;
+      }
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
@@ -346,9 +399,12 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                   <input
                     type="text"
                     value={personalInfo.companyIdNo}
-                    onChange={(e) => setPersonalInfo({ ...personalInfo, companyIdNo: e.target.value })}
+                    onChange={(e) => setPersonalInfo({ ...personalInfo, companyIdNo: sanitizeCompanyId(e.target.value) })}
+                    inputMode="numeric"
+                    maxLength={7}
+                    pattern="[0-9]{1,7}"
                     className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-accent-purple focus:border-transparent transition-all duration-200"
-                    placeholder="Enter your company ID"
+                    placeholder="Enter up to 7 digits"
                     required
                   />
                 </div>
