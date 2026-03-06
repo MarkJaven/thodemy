@@ -314,10 +314,10 @@ const AdminDashboard = () => {
       const updates = {
         first_name: profileDraft?.first_name ?? "",
         last_name: profileDraft?.last_name ?? "",
-        gender: profileDraft?.gender ?? "",
-        birthday: profileDraft?.birthday ?? "",
+        gender: profileDraft?.gender || null,
+        birthday: profileDraft?.birthday || null,
         address: profileDraft?.address ?? "",
-        company_id_no: profileDraft?.company_id_no ?? "",
+        company_id_no: profileDraft?.company_id_no || null,
       };
       const { error: updateError } = await supabase
         .from("profiles")
@@ -329,9 +329,9 @@ const AdminDashboard = () => {
       setIsProfileEditing(false);
       setProfileUpdateSuccess("Profile updated.");
       setTimeout(() => setProfileUpdateSuccess(null), 3000);
-    } catch (err) {
+    } catch (err: any) {
       setProfileUpdateError(
-        err instanceof Error ? err.message : "Failed to update profile."
+        err?.message || "Failed to update profile."
       );
     } finally {
       setProfileSaving(false);

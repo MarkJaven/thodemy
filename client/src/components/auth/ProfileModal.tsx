@@ -125,10 +125,10 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
         .update({
           first_name: profile.first_name,
           last_name: profile.last_name,
-          gender: profile.gender,
-          birthday: profile.birthday,
+          gender: profile.gender || null,
+          birthday: profile.birthday || null,
           address: profile.address,
-          company_id_no: profile.company_id_no,
+          company_id_no: profile.company_id_no || null,
         })
         .eq('id', user.id);
 
@@ -137,9 +137,9 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
       setSuccess(true);
       setIsEditMode(false);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating profile:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update profile');
+      setError(err?.message || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
