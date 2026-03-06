@@ -133,6 +133,41 @@ const PERFORMANCE_CATEGORY_WEIGHTS: Record<string, number> = {
   pe_f: 5,
 };
 
+const ENDORSEMENT_CATEGORIES: { category: string; label: string }[] = [
+  { category: "A", label: "EMPLOYEE ENGAGEMENT" },
+  { category: "B", label: "PRODUCTIVITY" },
+  { category: "C", label: "WORK QUALITY" },
+  { category: "D", label: "CUSTOMER SATISFACTION / SERVICE LEVEL COMMITMENT" },
+  { category: "E", label: "SELF IMPROVEMENT (TRAININGS)" },
+  { category: "F", label: "COMPLIANCE" },
+  { category: "G", label: "ETHICS AND VALUES" },
+];
+
+const ENDORSEMENT_WEIGHTS: Record<string, number> = {
+  A: 25, B: 20, C: 15, D: 15, E: 5, F: 5, G: 15,
+};
+
+/** Technical evaluation criteria grouped by endorsement category with their weights. */
+const TECHNICAL_CRITERIA_BY_CATEGORY: Record<string, { key: string; weight: number }[]> = {
+  A: [
+    { key: "te_technical_knowledge", weight: 0.10 },
+    { key: "te_code_quality", weight: 0.08 },
+    { key: "te_debugging", weight: 0.07 },
+  ],
+  B: [{ key: "te_system_design", weight: 0.20 }],
+  C: [{ key: "te_documentation", weight: 0.15 }],
+  D: [
+    { key: "te_testing", weight: 0.08 },
+    { key: "te_tools", weight: 0.07 },
+  ],
+  E: [{ key: "te_best_practices", weight: 0.05 }],
+  F: [
+    { key: "te_attendance", weight: 0.03 },
+    { key: "te_policy", weight: 0.02 },
+  ],
+  G: [{ key: "te_behavioral", weight: 0.15 }],
+};
+
 const PERFORMANCE_CATEGORY_ROWS = [
   {
     key: "pe_a",
@@ -2052,6 +2087,39 @@ const toWholeScoreOption = (
   }
 
   function renderEndorsementFeedback() {
+    const PRIMARY_CATEGORIES = new Set(["A", "B", "C", "D", "E"]);
+
+    let primaryTarget = 0;
+    let primaryActual = 0;
+    let secondaryTarget = 0;
+    let secondaryActual = 0;
+
+    const computeTechnicalCategoryActual = (category: string): number => {
+      const criteria = TECHNICAL_CRITERIA_BY_CATEGORY[category];
+      if (!criteria) return 0;
+      let sum = 0;
+      for (const item of criteria) {
+        const score = getScore("technical", item.key);
+        if (score != null) {
+          sum += (score / 5) * item.weight;
+        }
+      }
+      return sum * 100; // convert to percentage
+    };
+
+    const rows = ENDORSEMENT_CATEGORIES.map((entry) => {
+      const catWeight = ENDORSEMENT_WEIGHTS[entry.category] || 0;
+      const actualPercent = computeTechnicalCategoryActual(entry.category);
+      if (PRIMARY_CATEGORIES.has(entry.category)) {
+        primaryTarget += catWeight;
+        primaryActual += actualPercent;
+      } else {
+        secondaryTarget += catWeight;
+        secondaryActual += actualPercent;
+      }
+      return { ...entry, catWeight, actualPercent };
+    });
+
     return (
       <div className="space-y-6">
         <h3 className="text-lg font-semibold text-white">
@@ -2067,32 +2135,33 @@ const toWholeScoreOption = (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-left text-xs text-slate-400">
-                  <th className="px-2 py-2 font-medium w-20">Category</th>
-                  <th className="px-2 py-2 font-medium w-32">Computed</th>
+                  <th className="px-2 py-2 font-medium">Category</th>
+                  <th className="px-2 py-2 font-medium w-20 text-center">Target</th>
+                  <th className="px-2 py-2 font-medium w-20 text-center">Actual</th>
                   <th className="px-2 py-2 font-medium">Strength</th>
                   <th className="px-2 py-2 font-medium">For Improvements</th>
                 </tr>
               </thead>
               <tbody>
-                {BOOTCAMP_CRITERIA.map((group) => {
-                  const catScore = computeCategoryScore(group.category);
-                  const catWeight = CATEGORY_WEIGHTS[group.category] || 0;
-                  const computedPercent = (catScore / 5) * catWeight;
-                  const strengthKey = getBootcampStrengthKey(group.category);
+                {rows.map((row) => {
+                  const strengthKey = getBootcampStrengthKey(row.category);
                   const improvementKey = getBootcampImprovementKey(
-                    group.category,
+                    row.category,
                   );
 
                   return (
                     <tr
-                      key={`feedback-${group.category}`}
+                      key={`feedback-${row.category}`}
                       className="border-b border-white/5"
                     >
                       <td className="px-2 py-2 text-white">
-                        {group.category}. {group.label}
+                        {row.category}. {row.label}
                       </td>
-                      <td className="px-2 py-2 text-slate-300">
-                        {computedPercent.toFixed(1)}%
+                      <td className="px-2 py-2 text-center text-slate-400">
+                        {row.catWeight}%
+                      </td>
+                      <td className="px-2 py-2 text-center text-white">
+                        {row.actualPercent.toFixed(1)}%
                       </td>
                       <td className="px-2 py-2">
                         <textarea
@@ -2134,6 +2203,38 @@ const toWholeScoreOption = (
                   );
                 })}
               </tbody>
+              <tfoot>
+                <tr className="border-t border-white/20">
+                  <td className="px-2 py-2 font-semibold text-white">TOTAL (A–E)</td>
+                  <td className="px-2 py-2 text-center font-semibold text-white">
+                    {primaryTarget}%
+                  </td>
+                  <td className="px-2 py-2 text-center font-semibold text-purple-300">
+                    {primaryActual.toFixed(1)}%
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+                <tr className="border-t border-white/10">
+                  <td className="px-2 py-2 font-semibold text-white">TOTAL (F–G)</td>
+                  <td className="px-2 py-2 text-center font-semibold text-white">
+                    {secondaryTarget}%
+                  </td>
+                  <td className="px-2 py-2 text-center font-semibold text-purple-300">
+                    {secondaryActual.toFixed(1)}%
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+                <tr className="border-t border-white/20">
+                  <td className="px-2 py-2 font-bold text-white">OVERALL TOTAL</td>
+                  <td className="px-2 py-2 text-center font-bold text-white">
+                    {primaryTarget + secondaryTarget}%
+                  </td>
+                  <td className="px-2 py-2 text-center font-bold text-purple-300">
+                    {(primaryActual + secondaryActual).toFixed(1)}%
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
