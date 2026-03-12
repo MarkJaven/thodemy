@@ -19,6 +19,7 @@ const requireActiveUser = async (req, _res, next) => {
       .single();
 
     if (error) {
+      console.error("requireActiveUser query error:", JSON.stringify(error));
       throw new AuthError("Unable to verify account status");
     }
 
