@@ -1,5 +1,5 @@
 const { supabaseAdmin } = require("../config/supabase");
-const { ForbiddenError, ExternalServiceError } = require("../utils/errors");
+const { AuthError, ForbiddenError, ExternalServiceError } = require("../utils/errors");
 
 /**
  * Require the authenticated user to have an active account.
