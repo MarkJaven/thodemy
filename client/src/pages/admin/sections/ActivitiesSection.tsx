@@ -286,33 +286,6 @@ const ActivitiesSection = ({
     }
   };
 
-  const handleDelete = async (activityId: string) => {
-    setConfirmDialog({
-      title: "Delete project?",
-      description: "This removes the project and all related submissions.",
-      confirmLabel: "Delete",
-      variant: "danger",
-      onConfirm: async () => {
-        const previous = activities;
-        setActivities((prev) => prev.filter((activity) => activity.id !== activityId));
-        setSaving(true);
-        setActionError(null);
-        setActionSuccess(null);
-        try {
-          await superAdminService.deleteActivity(activityId);
-          setActionSuccess("Project deleted successfully.");
-        } catch (deleteError) {
-          setActionError(
-            deleteError instanceof Error ? deleteError.message : "Unable to delete project.",
-          );
-          setActivities(previous);
-        } finally {
-          setSaving(false);
-        }
-      },
-    });
-  };
-
   const handleDeleteSubmission = async (submissionId: string) => {
     setConfirmDialog({
       title: "Delete project submission?",
@@ -723,6 +696,7 @@ const ActivitiesSection = ({
           const statusConfig: Record<string, string> = {
             active: "badge-success",
             archived: "badge-warning",
+            inactive: "badge-default",
           };
           return (
             <span className={statusConfig[status] || "badge-default"}>
@@ -747,21 +721,11 @@ const ActivitiesSection = ({
               </svg>
               Edit
             </button>
-            <button
-              type="button"
-              onClick={() => handleDelete(activity.id)}
-              className="btn-danger flex items-center gap-1.5"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-              </svg>
-              Delete
-            </button>
           </div>
         ),
       },
     ],
-    []
+    [openEdit, users]
   );
 
   const submissionColumns = useMemo(
@@ -1665,6 +1629,7 @@ const ActivitiesSection = ({
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             >
               <option value="active">active</option>
+              <option value="inactive">inactive</option>
               <option value="archived">archived</option>
             </select>
           </label>
