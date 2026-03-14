@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useUser } from "../../hooks/useUser";
 import { useUserRole } from "../../hooks/useUserRole";
@@ -146,6 +147,7 @@ const getTodayDateString = () => {
 
 const COMPANY_ID_REGEX = /^\d{1,7}$/;
 const sanitizeCompanyId = (value: string) => value.replace(/\D/g, "").slice(0, 7);
+const sanitizeName = (value: string) => value.replace(/[^a-zA-ZÑñ\s'-]/g, "").slice(0, 50);
 
 type NavItem =
   | "overview"
@@ -156,6 +158,7 @@ type NavItem =
   | "projects"
   | "activity"
   | "quiz"
+  | "quiz-scores"
   | "forms"
   | "reports"
   | "evaluation"
@@ -199,6 +202,7 @@ interface ActivityItem {
   id: string;
   title: string;
   time: string;
+  rawLog: AuditLog;
 }
 
 interface TaskItem {
@@ -208,14 +212,25 @@ interface TaskItem {
 }
 
 const AdminDashboard = () => {
-  const [activeNav, setActiveNavRaw] = useState<NavItem>(
-    () => (sessionStorage.getItem("thodemy-admin-nav") as NavItem) || "overview"
-  );
+  const navigate = useNavigate();
+  const params = useParams();
+  const activeNav = (params["*"] as NavItem) || "overview";
   const setActiveNav = (nav: NavItem) => {
-    sessionStorage.setItem("thodemy-admin-nav", nav);
-    setActiveNavRaw(nav);
+    navigate(`/admin/${nav}`);
   };
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [quizNavOpen, setQuizNavOpen] = useState(activeNav === "quiz" || activeNav === "quiz-scores");
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const navScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleNavScroll = () => {
+    const el = navRef.current;
+    if (!el) return;
+    el.classList.add("is-scrolling");
+    if (navScrollTimer.current) clearTimeout(navScrollTimer.current);
+    navScrollTimer.current = setTimeout(() => el.classList.remove("is-scrolling"), 600);
+  };
   const [stats, setStats] = useState<DashboardStats>({
     activeCourses: 0,
     coursesThisMonth: 0,
@@ -236,6 +251,7 @@ const AdminDashboard = () => {
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [activityError, setActivityError] = useState<string | null>(null);
+  const [selectedActivityLog, setSelectedActivityLog] = useState<AuditLog | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -289,7 +305,9 @@ const AdminDashboard = () => {
 
   const handleProfileFieldChange = (field: string, value: string) => {
     const nextValue =
-      field === "company_id_no" ? sanitizeCompanyId(value) : value;
+      field === "company_id_no" ? sanitizeCompanyId(value)
+      : field === "first_name" || field === "last_name" ? sanitizeName(value)
+      : value;
     setProfileDraft((prev: any) => ({ ...(prev ?? {}), [field]: nextValue }));
   };
 
@@ -644,7 +662,6 @@ const AdminDashboard = () => {
         // Recent activity from audit logs
         try {
           const logs = await auditLogService.listAuditLogs({
-            actorId: user?.id ?? null,
             limit: 12,
           });
           setActivities(
@@ -652,6 +669,7 @@ const AdminDashboard = () => {
               id: log.id,
               title: buildActivityTitle(log),
               time: formatTimeAgo(log.timestamp ?? ""),
+              rawLog: log,
             }))
           );
           setActivityError(null);
@@ -690,6 +708,16 @@ const AdminDashboard = () => {
   const handleSignOut = async () => {
     await signOut({ redirectTo: "/" });
   };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -776,12 +804,30 @@ const AdminDashboard = () => {
     { key: "users", label: "Users", icon: <UsersIcon /> },
     { key: "projects", label: "Projects", icon: <ActivityIcon /> },
     { key: "activity", label: "Approvals", icon: <ApprovalsIcon /> },
-    { key: "quiz", label: "Quiz", icon: <QuizIcon /> },
+    { key: "quiz", label: "Quizzes", icon: <QuizIcon /> },
     { key: "forms", label: "Forms", icon: <FormsIcon /> },
     { key: "reports", label: "Reports", icon: <ReportsIcon /> },
     { key: "evaluation", label: "Evaluation", icon: <EvaluationIcon /> },
     { key: "profile", label: "Profile", icon: <ProfileIcon /> },
   ];
+
+  const sidebarDisplayName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+    user?.username ||
+    (user?.email ? user.email.split("@")[0] : "Admin");
+  const sidebarInitials = sidebarDisplayName
+    .split(" ")
+    .map((p: string) => p.charAt(0))
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "AD";
+  const sidebarRoleLabel = roleLoading
+    ? ""
+    : userRole === "superadmin"
+      ? "Super Admin"
+      : userRole === "admin"
+        ? "Admin"
+        : "User";
 
   const renderProfileSection = () => {
     if (profileLoading) {
@@ -1019,7 +1065,9 @@ const AdminDashboard = () => {
           />
         );
       case "quiz":
-        return <QuizzesSection />;
+        return <QuizzesSection view="quizzes" />;
+      case "quiz-scores":
+        return <QuizzesSection view="scores" />;
       case "forms":
         return <FormsSection />;
       case "reports":
@@ -1246,9 +1294,11 @@ const AdminDashboard = () => {
               <p className="text-sm text-rose-200">{activityError}</p>
             ) : activities.length > 0 ? (
               activities.slice(0, 5).map((activity, index) => (
-                <div
+                <button
                   key={activity.id}
-                  className="flex items-center gap-3 rounded-xl bg-ink-750/50 p-2"
+                  type="button"
+                  onClick={() => setSelectedActivityLog(activity.rawLog)}
+                  className="w-full flex items-center gap-3 rounded-xl bg-ink-750/50 p-2 hover:bg-ink-700/60 transition-colors text-left"
                 >
                   <div className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full border border-accent-purple/40 bg-ink-900/70 text-xs font-semibold text-accent-purple">
                     {String(index + 1).padStart(2, "0")}
@@ -1257,7 +1307,10 @@ const AdminDashboard = () => {
                     <p className="text-sm text-slate-200 truncate">{activity.title}</p>
                     <p className="text-[10px] text-slate-500">{activity.time}</p>
                   </div>
-                </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-slate-600">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </button>
               ))
             ) : (
               <p className="text-sm text-slate-500">No recent activity yet.</p>
@@ -1404,45 +1457,91 @@ const AdminDashboard = () => {
           </div>
 
           {/* Nav Items */}
-          <nav className="flex-1 px-4 pb-6 overflow-y-auto">
+          <nav ref={navRef} onScroll={handleNavScroll} className="flex-1 px-4 pb-6 overflow-y-auto scrollbar-autohide">
             <div className="flex flex-col gap-2">
-              {navItems.map(item => (
-                <button
-                  key={item.key}
-                  onClick={() => {
-                    setActiveNav(item.key);
-                    setSidebarOpen(false);
-                  }}
-                  className={`
-                    flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
-                    ${activeNav === item.key
-                      ? "bg-ink-700 text-white border border-accent-purple/30"
-                      : "text-slate-400 hover:text-white hover:bg-ink-800"
-                    }
-                  `}
-                >
-                  <span className={activeNav === item.key ? "text-accent-purple" : "text-slate-500"}>
-                    {item.icon}
-                  </span>
-                  {item.label}
-                </button>
-              ))}
+              {navItems.map(item => {
+                if (item.key === "quiz") {
+                  const isQuizActive = activeNav === "quiz" || activeNav === "quiz-scores";
+                  return (
+                    <div key="quiz-group">
+                      <button
+                        type="button"
+                        onClick={() => setQuizNavOpen(prev => !prev)}
+                        className={`
+                          w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                          ${isQuizActive ? "bg-ink-700 text-white border border-accent-purple/30" : "text-slate-400 hover:text-white hover:bg-ink-800"}
+                        `}
+                      >
+                        <span className={isQuizActive ? "text-accent-purple" : "text-slate-500"}>
+                          {item.icon}
+                        </span>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        <svg
+                          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                          className={`transition-transform duration-200 ${quizNavOpen ? "rotate-180" : ""}`}
+                        >
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                      {quizNavOpen && (
+                        <div className="mt-1 ml-4 flex flex-col gap-1 border-l border-white/10 pl-3">
+                          <button
+                            type="button"
+                            onClick={() => { setActiveNav("quiz"); setSidebarOpen(false); }}
+                            className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${activeNav === "quiz" ? "text-white" : "text-slate-400 hover:text-white"}`}
+                          >
+                            Quizzes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setActiveNav("quiz-scores"); setSidebarOpen(false); }}
+                            className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${activeNav === "quiz-scores" ? "text-white" : "text-slate-400 hover:text-white"}`}
+                          >
+                            Quiz Scores
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <a
+                    key={item.key}
+                    href={`/admin/${item.key}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setActiveNav(item.key);
+                      setSidebarOpen(false);
+                    }}
+                    className={`
+                      flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                      ${activeNav === item.key
+                        ? "bg-ink-700 text-white border border-accent-purple/30"
+                        : "text-slate-400 hover:text-white hover:bg-ink-800"
+                      }
+                    `}
+                  >
+                    <span className={activeNav === item.key ? "text-accent-purple" : "text-slate-500"}>
+                      {item.icon}
+                    </span>
+                    {item.label}
+                  </a>
+                );
+              })}
             </div>
           </nav>
 
           {/* User Section */}
           <div className="p-4 border-t border-white/5">
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-ink-800 transition-all duration-200"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              Sign out
-            </button>
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple">
+                {sidebarInitials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="truncate text-sm font-medium text-white">{sidebarDisplayName}</p>
+                <p className="truncate text-xs text-slate-500">{sidebarRoleLabel}</p>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -1466,7 +1565,7 @@ const AdminDashboard = () => {
                     Admin Workspace
                   </span>
                   <h1 className="text-lg sm:text-xl font-semibold text-white truncate">
-                    {activeNav === "overview" ? "Admin Dashboard Overview" : navItems.find(n => n.key === activeNav)?.label}
+                    {activeNav === "overview" ? "Admin Dashboard Overview" : activeNav === "quiz-scores" ? "Quiz Scores" : navItems.find(n => n.key === activeNav)?.label}
                   </h1>
                 </div>
               </div>
@@ -1485,21 +1584,46 @@ const AdminDashboard = () => {
                   <span className="hidden lg:inline">New Course</span>
                 </button>
 
-                {/* Avatar */}
-                <button
-                  type="button"
-                  onClick={() => setActiveNav("profile")}
-                  title="Profile"
-                  className="w-9 h-9 rounded-full bg-ink-700 border border-white/10 flex items-center justify-center text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors"
-                >
-                  {[profile?.first_name, profile?.last_name].filter(Boolean).length > 0
-                    ? [profile.first_name, profile.last_name]
-                        .filter(Boolean)
-                        .map((n: string) => n.charAt(0))
-                        .join("")
-                        .toUpperCase()
-                    : user?.email?.substring(0, 2).toUpperCase() || "AD"}
-                </button>
+                {/* Avatar with dropdown */}
+                <div className="relative" ref={profileDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setProfileDropdownOpen((prev) => !prev)}
+                    className="w-9 h-9 rounded-full bg-ink-700 border border-white/10 flex items-center justify-center text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors"
+                  >
+                    {sidebarInitials}
+                  </button>
+                  {profileDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-white/10 bg-ink-800 shadow-xl overflow-hidden z-50">
+                      <div className="px-4 py-3 border-b border-white/5">
+                        <p className="text-sm font-semibold text-white">Welcome {sidebarDisplayName}!</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setProfileDropdownOpen(false); setActiveNav("profile"); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-ink-700 transition-colors"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Profile
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setProfileDropdownOpen(false); handleSignOut(); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-rose-400 hover:text-rose-300 hover:bg-ink-700 transition-colors"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                          <polyline points="16 17 21 12 16 7" />
+                          <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                        Logout
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </header>
@@ -1510,6 +1634,109 @@ const AdminDashboard = () => {
           </div>
         </main>
       </div>
+
+      {/* Activity Detail Modal */}
+      {selectedActivityLog && (() => {
+        const log = selectedActivityLog;
+        const details = (log.details ?? {}) as Record<string, unknown>;
+        const actor = log.actor;
+        const actorName = actor
+          ? [actor.first_name, actor.last_name].filter(Boolean).join(" ") || actor.username || actor.email || log.actor_id
+          : log.actor_id ?? "Unknown";
+        const entityLabels: Record<string, string> = {
+          topic: "Topic", course: "Course", learning_path: "Learning Path",
+          user: "User", enrollment: "Enrollment", activity: "Project",
+          activity_submission: "Project Submission", topic_submission: "Topic Submission",
+          course_completion_request: "Course Completion Proof",
+        };
+        const entityLabel = entityLabels[log.entity_type] ?? log.entity_type.replace(/_/g, " ");
+        const actionLabel = log.action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const fullTimestamp = log.timestamp
+          ? new Date(log.timestamp).toLocaleString("en-US", { dateStyle: "long", timeStyle: "medium" })
+          : "--";
+        const detailEntries = Object.entries(details).filter(([, v]) => v !== null && v !== undefined && v !== "");
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setSelectedActivityLog(null)}>
+            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-purple/20">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent-purple">
+                      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-accent-purple">Activity Log</p>
+                    <h3 className="text-base font-semibold text-white">{actionLabel}</h3>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setSelectedActivityLog(null)} className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-ink-800 transition-colors">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              {/* Body */}
+              <div className="px-6 py-5 space-y-4">
+                {/* Who */}
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-700 text-slate-400">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500">Performed by</p>
+                    <p className="text-sm font-medium text-white mt-0.5">{actorName}</p>
+                    {actor?.email && actorName !== actor.email && (
+                      <p className="text-xs text-slate-500">{actor.email}</p>
+                    )}
+                  </div>
+                </div>
+                {/* What */}
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-700 text-slate-400">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500">Action</p>
+                    <p className="text-sm font-medium text-white mt-0.5">{actionLabel} — {entityLabel}</p>
+                    {(() => {
+                      const entityName = typeof details.title === "string" ? details.title
+                        : typeof details.username === "string" ? details.username
+                        : null;
+                      return entityName ? (
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">{entityName}</p>
+                      ) : log.entity_id ? (
+                        <p className="text-xs text-slate-500 font-mono mt-0.5 truncate">{log.entity_id}</p>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+                {/* When */}
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-700 text-slate-400">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500">When</p>
+                    <p className="text-sm font-medium text-white mt-0.5">{fullTimestamp}</p>
+                  </div>
+                </div>
+                {/* Details */}
+                {detailEntries.length > 0 && (
+                  <div className="rounded-xl border border-white/5 bg-ink-800/60 p-3 space-y-1.5">
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Details</p>
+                    {detailEntries.map(([key, val]) => (
+                      <div key={key} className="flex items-start justify-between gap-3">
+                        <span className="text-xs text-slate-500 shrink-0">{key.replace(/_/g, " ")}</span>
+                        <span className="text-xs text-slate-300 text-right break-all">{typeof val === "boolean" ? (val ? "Yes" : "No") : String(val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

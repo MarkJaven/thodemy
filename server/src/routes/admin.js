@@ -12,6 +12,7 @@ const { evaluationController } = require("../controllers/evaluationController");
 const {
   validateCreateUser,
   validateUpdateUser,
+  validateUpdateUserProfile,
   validateUserIdParam,
 } = require("../validators/adminValidator");
 const {
@@ -68,6 +69,17 @@ router.patch(
   validateUpdateUser,
   validateRequest,
   adminController.updateUser
+);
+
+router.patch(
+  "/users/:userId/profile",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  validateUserIdParam,
+  validateUpdateUserProfile,
+  validateRequest,
+  adminController.updateUserProfile
 );
 
 router.get(

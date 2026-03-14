@@ -82,18 +82,11 @@ export const superAdminService = {
   },
 
   async updateUserProfile(userId: string, payload: Partial<UserProfile>): Promise<void> {
-    const client = requireSupabase();
-    const { data: profile, error: profileError } = await client
-      .from("profiles")
-      .select("profile_setup_completed")
-      .eq("id", userId)
-      .maybeSingle();
-    if (profileError) throw new Error(profileError.message);
-    if (!profile?.profile_setup_completed) {
-      throw new Error("User must complete account setup before profile editing is allowed.");
+    try {
+      await apiClient.patch(`/api/admin/users/${userId}/profile`, payload);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
     }
-    const { error } = await client.from("profiles").update(payload).eq("id", userId);
-    if (error) throw new Error(error.message);
   },
 
   async createUser(payload: {
@@ -588,18 +581,16 @@ export const superAdminService = {
 
   async deleteActivity(activityId: string): Promise<void> {
     const client = requireSupabase();
-    const { error: submissionError } = await client
-      .from("activity_submissions")
-      .delete()
-      .eq("activity_id", activityId);
-    if (submissionError) throw new Error(submissionError.message);
-
-    const { error } = await client.from("activities").delete().eq("id", activityId);
+    const { error } = await client
+      .from("activities")
+      .update({ status: "inactive" })
+      .eq("id", activityId);
     if (error) throw new Error(error.message);
     await auditLogService.recordAuditLog({
       entityType: "activity",
       entityId: activityId,
-      action: "deleted",
+      action: "soft_deleted",
+      details: { status: "inactive" },
     });
   },
 
@@ -664,7 +655,7 @@ export const superAdminService = {
     const { data, error } = await client
       .from("quizzes")
       .select(
-        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
+        "id, title, description, course_id, assigned_user_id, assigned_user_ids, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
       )
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -692,6 +683,7 @@ export const superAdminService = {
       | "description"
       | "course_id"
       | "assigned_user_id"
+      | "assigned_user_ids"
       | "status"
       | "link_url"
       | "start_at"
@@ -706,7 +698,7 @@ export const superAdminService = {
       .from("quizzes")
       .insert(payload.quiz)
       .select(
-        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
+        "id, title, description, course_id, assigned_user_id, assigned_user_ids, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
       )
       .single();
     if (error) throw new Error(error.message);
