@@ -286,6 +286,10 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       setActionError("Email is required.");
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState.email.trim())) {
+      setActionError("Enter a valid email address.");
+      return;
+    }
     if (!formState.username.trim()) {
       setActionError("Username is required.");
       return;
@@ -316,6 +320,10 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     if (!selectedUser) return;
     if (!formState.username.trim()) {
       setActionError("Username is required.");
+      return;
+    }
+    if (formState.password && formState.password.length < 8) {
+      setActionError("Password must be at least 8 characters.");
       return;
     }
     setSaving(true);
@@ -701,7 +709,6 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   <div className="space-y-2">
                     <label className="label">
                       Email Address
-                      <span className="ml-2 text-2xs font-normal normal-case text-slate-500">(read-only)</span>
                     </label>
                     <div className="rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-slate-300">
                       {profileForm.email || "Not set"}
@@ -923,7 +930,6 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               <div className="space-y-2">
                 <label className="label">
                   Email Address
-                  <span className="ml-2 text-2xs font-normal normal-case text-slate-500">(read-only)</span>
                 </label>
                 <input
                   type="email"
