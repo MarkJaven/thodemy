@@ -325,6 +325,7 @@ export type AuditLog = {
   actor_id?: string | null;
   timestamp?: string | null;
   details?: Record<string, unknown> | null;
+  actor?: { username?: string | null; first_name?: string | null; last_name?: string | null; email?: string | null } | null;
 };
 
 export type AdminTask = {

@@ -201,6 +201,7 @@ interface ActivityItem {
   id: string;
   title: string;
   time: string;
+  rawLog: AuditLog;
 }
 
 interface TaskItem {
@@ -239,6 +240,7 @@ const AdminDashboard = () => {
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [activityError, setActivityError] = useState<string | null>(null);
+  const [selectedActivityLog, setSelectedActivityLog] = useState<AuditLog | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -649,7 +651,6 @@ const AdminDashboard = () => {
         // Recent activity from audit logs
         try {
           const logs = await auditLogService.listAuditLogs({
-            actorId: user?.id ?? null,
             limit: 12,
           });
           setActivities(
@@ -657,6 +658,7 @@ const AdminDashboard = () => {
               id: log.id,
               title: buildActivityTitle(log),
               time: formatTimeAgo(log.timestamp ?? ""),
+              rawLog: log,
             }))
           );
           setActivityError(null);
@@ -1279,9 +1281,11 @@ const AdminDashboard = () => {
               <p className="text-sm text-rose-200">{activityError}</p>
             ) : activities.length > 0 ? (
               activities.slice(0, 5).map((activity, index) => (
-                <div
+                <button
                   key={activity.id}
-                  className="flex items-center gap-3 rounded-xl bg-ink-750/50 p-2"
+                  type="button"
+                  onClick={() => setSelectedActivityLog(activity.rawLog)}
+                  className="w-full flex items-center gap-3 rounded-xl bg-ink-750/50 p-2 hover:bg-ink-700/60 transition-colors text-left"
                 >
                   <div className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full border border-accent-purple/40 bg-ink-900/70 text-xs font-semibold text-accent-purple">
                     {String(index + 1).padStart(2, "0")}
@@ -1290,7 +1294,10 @@ const AdminDashboard = () => {
                     <p className="text-sm text-slate-200 truncate">{activity.title}</p>
                     <p className="text-[10px] text-slate-500">{activity.time}</p>
                   </div>
-                </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-slate-600">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </button>
               ))
             ) : (
               <p className="text-sm text-slate-500">No recent activity yet.</p>
@@ -1568,6 +1575,109 @@ const AdminDashboard = () => {
           </div>
         </main>
       </div>
+
+      {/* Activity Detail Modal */}
+      {selectedActivityLog && (() => {
+        const log = selectedActivityLog;
+        const details = (log.details ?? {}) as Record<string, unknown>;
+        const actor = log.actor;
+        const actorName = actor
+          ? [actor.first_name, actor.last_name].filter(Boolean).join(" ") || actor.username || actor.email || log.actor_id
+          : log.actor_id ?? "Unknown";
+        const entityLabels: Record<string, string> = {
+          topic: "Topic", course: "Course", learning_path: "Learning Path",
+          user: "User", enrollment: "Enrollment", activity: "Project",
+          activity_submission: "Project Submission", topic_submission: "Topic Submission",
+          course_completion_request: "Course Completion Proof",
+        };
+        const entityLabel = entityLabels[log.entity_type] ?? log.entity_type.replace(/_/g, " ");
+        const actionLabel = log.action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const fullTimestamp = log.timestamp
+          ? new Date(log.timestamp).toLocaleString("en-US", { dateStyle: "long", timeStyle: "medium" })
+          : "--";
+        const detailEntries = Object.entries(details).filter(([, v]) => v !== null && v !== undefined && v !== "");
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setSelectedActivityLog(null)}>
+            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-purple/20">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent-purple">
+                      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-accent-purple">Activity Log</p>
+                    <h3 className="text-base font-semibold text-white">{actionLabel}</h3>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setSelectedActivityLog(null)} className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-ink-800 transition-colors">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              {/* Body */}
+              <div className="px-6 py-5 space-y-4">
+                {/* Who */}
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-700 text-slate-400">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500">Performed by</p>
+                    <p className="text-sm font-medium text-white mt-0.5">{actorName}</p>
+                    {actor?.email && actorName !== actor.email && (
+                      <p className="text-xs text-slate-500">{actor.email}</p>
+                    )}
+                  </div>
+                </div>
+                {/* What */}
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-700 text-slate-400">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500">Action</p>
+                    <p className="text-sm font-medium text-white mt-0.5">{actionLabel} — {entityLabel}</p>
+                    {(() => {
+                      const entityName = typeof details.title === "string" ? details.title
+                        : typeof details.username === "string" ? details.username
+                        : null;
+                      return entityName ? (
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">{entityName}</p>
+                      ) : log.entity_id ? (
+                        <p className="text-xs text-slate-500 font-mono mt-0.5 truncate">{log.entity_id}</p>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+                {/* When */}
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-700 text-slate-400">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500">When</p>
+                    <p className="text-sm font-medium text-white mt-0.5">{fullTimestamp}</p>
+                  </div>
+                </div>
+                {/* Details */}
+                {detailEntries.length > 0 && (
+                  <div className="rounded-xl border border-white/5 bg-ink-800/60 p-3 space-y-1.5">
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Details</p>
+                    {detailEntries.map(([key, val]) => (
+                      <div key={key} className="flex items-start justify-between gap-3">
+                        <span className="text-xs text-slate-500 shrink-0">{key.replace(/_/g, " ")}</span>
+                        <span className="text-xs text-slate-300 text-right break-all">{typeof val === "boolean" ? (val ? "Yes" : "No") : String(val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
