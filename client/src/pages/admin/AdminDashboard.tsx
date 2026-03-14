@@ -144,6 +144,9 @@ const getTodayDateString = () => {
   return `${year}-${month}-${day}`;
 };
 
+const COMPANY_ID_REGEX = /^\d{1,7}$/;
+const sanitizeCompanyId = (value: string) => value.replace(/\D/g, "").slice(0, 7);
+
 type NavItem =
   | "overview"
   | "courses"
@@ -285,7 +288,29 @@ const AdminDashboard = () => {
   }, [user]);
 
   const handleProfileFieldChange = (field: string, value: string) => {
-    setProfileDraft((prev: any) => ({ ...(prev ?? {}), [field]: value }));
+    const nextValue =
+      field === "company_id_no" ? sanitizeCompanyId(value) : value;
+    setProfileDraft((prev: any) => ({ ...(prev ?? {}), [field]: nextValue }));
+  };
+
+  const isCompanyIdTaken = async (companyId: string, currentUserId: string) => {
+    if (!supabase) return false;
+    const { data: rpcData, error: rpcError } = await supabase.rpc("is_company_id_taken", {
+      p_company_id_no: companyId,
+      p_exclude_user_id: currentUserId,
+    });
+    if (!rpcError && typeof rpcData === "boolean") {
+      return rpcData;
+    }
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("company_id_no", companyId)
+      .neq("id", currentUserId)
+      .limit(1);
+    if (error) throw error;
+    return (data?.length ?? 0) > 0;
   };
 
   const startProfileEdit = () => {
@@ -307,6 +332,17 @@ const AdminDashboard = () => {
       setProfileUpdateError("Birthdate must not exceed today.");
       return;
     }
+    if (profileDraft?.company_id_no && !COMPANY_ID_REGEX.test(profileDraft.company_id_no)) {
+      setProfileUpdateError("Company ID must be numbers only and up to 7 digits.");
+      return;
+    }
+    if (profileDraft?.company_id_no) {
+      const companyIdTaken = await isCompanyIdTaken(profileDraft.company_id_no, user.id);
+      if (companyIdTaken) {
+        setProfileUpdateError("Company ID already exists. Please use a different Company ID.");
+        return;
+      }
+    }
     setProfileSaving(true);
     setProfileUpdateError(null);
     setProfileUpdateSuccess(null);
@@ -314,10 +350,10 @@ const AdminDashboard = () => {
       const updates = {
         first_name: profileDraft?.first_name ?? "",
         last_name: profileDraft?.last_name ?? "",
-        gender: profileDraft?.gender ?? "",
-        birthday: profileDraft?.birthday ?? "",
+        gender: profileDraft?.gender || null,
+        birthday: profileDraft?.birthday || null,
         address: profileDraft?.address ?? "",
-        company_id_no: profileDraft?.company_id_no ?? "",
+        company_id_no: profileDraft?.company_id_no || null,
       };
       const { error: updateError } = await supabase
         .from("profiles")
@@ -329,10 +365,12 @@ const AdminDashboard = () => {
       setIsProfileEditing(false);
       setProfileUpdateSuccess("Profile updated.");
       setTimeout(() => setProfileUpdateSuccess(null), 3000);
-    } catch (err) {
-      setProfileUpdateError(
-        err instanceof Error ? err.message : "Failed to update profile."
-      );
+    } catch (err: any) {
+      if (err?.code === "23505") {
+        setProfileUpdateError("Company ID already exists. Please use a different Company ID.");
+      } else {
+        setProfileUpdateError(err?.message || "Failed to update profile.");
+      }
     } finally {
       setProfileSaving(false);
     }
@@ -909,6 +947,9 @@ const AdminDashboard = () => {
                 type="text"
                 value={profileView.company_id_no ?? ""}
                 onChange={(event) => handleProfileFieldChange("company_id_no", event.target.value)}
+                inputMode="numeric"
+                maxLength={7}
+                pattern="[0-9]{1,7}"
                 className={inputClass}
               />
             ) : (
@@ -958,7 +999,7 @@ const AdminDashboard = () => {
   const renderContent = () => {
     switch (activeNav) {
       case "courses":
-        return <CoursesSection />;
+        return <CoursesSection editable={false} />;
       case "learning-paths":
         return <LearningPathsSection />;
       case "topics":
@@ -966,7 +1007,7 @@ const AdminDashboard = () => {
       case "users":
         return <UsersSection readOnly />;
       case "projects":
-        return <ActivitiesSection variant="projects" />;
+        return <ActivitiesSection variant="projects" editable={false} />;
       case "activity":
         return (
           <ActivitiesSection
@@ -974,6 +1015,7 @@ const AdminDashboard = () => {
             focusSection={approvalFocus?.section ?? null}
             onFocusHandled={() => setApprovalFocus(null)}
             variant="approvals"
+            editable={false}
           />
         );
       case "quiz":

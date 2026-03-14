@@ -1,5 +1,5 @@
 const { supabaseAdmin } = require("../config/supabase");
-const { ForbiddenError, ExternalServiceError } = require("../utils/errors");
+const { AuthError, ForbiddenError, ExternalServiceError } = require("../utils/errors");
 
 /**
  * Require the authenticated user to have an active account.
@@ -19,6 +19,7 @@ const requireActiveUser = async (req, _res, next) => {
       .single();
 
     if (error) {
+      console.error("requireActiveUser query error:", JSON.stringify(error));
       throw new AuthError("Unable to verify account status");
     }
 
