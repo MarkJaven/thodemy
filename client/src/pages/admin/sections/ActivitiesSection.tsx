@@ -41,6 +41,7 @@ type ActivitiesSectionProps = {
     | null;
   onFocusHandled?: () => void;
   variant?: "full" | "approvals" | "projects";
+  editable?: boolean;
 };
 
 type ConfirmDialogState = {
@@ -64,6 +65,7 @@ const ActivitiesSection = ({
   focusSection = null,
   onFocusHandled,
   variant = "full",
+  editable = true,
 }: ActivitiesSectionProps) => {
   const showApprovals = variant === "full" || variant === "approvals";
   const showProjects = variant === "full" || variant === "projects";
@@ -284,6 +286,33 @@ const ActivitiesSection = ({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDelete = async (activityId: string) => {
+    setConfirmDialog({
+      title: "Delete project?",
+      description: "This removes the project and all related submissions.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        const previous = activities;
+        setActivities((prev) => prev.filter((activity) => activity.id !== activityId));
+        setSaving(true);
+        setActionError(null);
+        setActionSuccess(null);
+        try {
+          await superAdminService.deleteActivity(activityId);
+          setActionSuccess("Project deleted successfully.");
+        } catch (deleteError) {
+          setActionError(
+            deleteError instanceof Error ? deleteError.message : "Unable to delete project.",
+          );
+          setActivities(previous);
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const handleDeleteSubmission = async (submissionId: string) => {
@@ -710,16 +739,28 @@ const ActivitiesSection = ({
         header: "Actions",
         render: (activity: Activity) => (
           <div className="flex flex-wrap items-center gap-2">
+            {editable && (
+              <button
+                type="button"
+                onClick={() => openEdit(activity)}
+                className="btn-secondary flex items-center gap-1.5"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                Edit
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => openEdit(activity)}
-              className="btn-secondary flex items-center gap-1.5"
+              onClick={() => handleDelete(activity.id)}
+              className="btn-danger flex items-center gap-1.5"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
-              Edit
+              Delete
             </button>
           </div>
         ),

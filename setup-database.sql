@@ -285,6 +285,47 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS target_regularization_date 
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS training_starting_date date;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS profile_setup_completed boolean DEFAULT false;
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'profiles_company_id_no_format_chk'
+      AND conrelid = 'public.profiles'::regclass
+  ) THEN
+    ALTER TABLE public.profiles
+      ADD CONSTRAINT profiles_company_id_no_format_chk
+      CHECK (
+        company_id_no IS NULL
+        OR company_id_no ~ '^[0-9]{1,7}$'
+      );
+  END IF;
+END;
+$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_company_id_no_unique_idx
+  ON public.profiles (company_id_no)
+  WHERE company_id_no IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.is_company_id_taken(
+  p_company_id_no text,
+  p_exclude_user_id uuid DEFAULT auth.uid()
+)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.profiles
+    WHERE company_id_no = p_company_id_no
+      AND (p_exclude_user_id IS NULL OR id <> p_exclude_user_id)
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_company_id_taken(text, uuid) TO authenticated;
+
 -- Create holidays table
 CREATE TABLE IF NOT EXISTS public.holidays (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
