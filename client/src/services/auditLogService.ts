@@ -23,7 +23,7 @@ export const auditLogService = {
     const client = requireSupabase();
     let query = client
       .from("audit_logs")
-      .select("id, entity_type, entity_id, action, actor_id, timestamp, details")
+      .select("id, entity_type, entity_id, action, actor_id, timestamp, details, actor:profiles!actor_id(username, first_name, last_name, email)")
       .order("timestamp", { ascending: false });
 
     if (params?.actorId) {
