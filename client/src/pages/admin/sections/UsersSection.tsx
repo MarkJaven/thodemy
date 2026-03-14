@@ -353,6 +353,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
 
   const handleDelete = async () => {
     if (!selectedUser) return;
+    if (selectedUser.role === "superadmin") return;
     setSaving(true);
     setActionError(null);
     try {
@@ -453,9 +454,10 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => openDelete(user)}
-                  className={`p-2 ${user.is_active === false ? "btn-secondary" : "btn-danger"}`}
-                  title={user.is_active === false ? "Activate" : "Deactivate"}
+                  onClick={() => user.role !== "superadmin" && openDelete(user)}
+                  disabled={user.role === "superadmin"}
+                  className={`p-2 ${user.role === "superadmin" ? "btn-secondary opacity-30 cursor-not-allowed" : user.is_active === false ? "btn-secondary" : "btn-danger"}`}
+                  title={user.role === "superadmin" ? "Cannot deactivate superadmin" : user.is_active === false ? "Activate" : "Deactivate"}
                 >
                   {user.is_active === false ? (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
