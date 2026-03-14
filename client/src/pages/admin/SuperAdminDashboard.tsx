@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useUser } from "../../hooks/useUser";
 import { useUserRole } from "../../hooks/useUserRole";
@@ -204,12 +205,11 @@ interface TaskItem {
 }
 
 const SuperAdminDashboard = () => {
-  const [activeNav, setActiveNavRaw] = useState<NavItem>(
-    () => (sessionStorage.getItem("thodemy-superadmin-nav") as NavItem) || "overview"
-  );
+  const navigate = useNavigate();
+  const params = useParams();
+  const activeNav = (params["*"] as NavItem) || "overview";
   const setActiveNav = (nav: NavItem) => {
-    sessionStorage.setItem("thodemy-superadmin-nav", nav);
-    setActiveNavRaw(nav);
+    navigate(`/super-admin/${nav}`);
   };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
