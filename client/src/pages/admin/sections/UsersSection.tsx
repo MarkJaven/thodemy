@@ -66,8 +66,10 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     role: "user" as Role,
   });
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
@@ -131,6 +133,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   const resetForm = () => {
     setFormState({ ...defaultFormState });
     setActionError(null);
+    setActionSuccess(null);
   };
 
   const openCreate = () => {
@@ -147,6 +150,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       role: user.role,
     });
     setActionError(null);
+    setActionSuccess(null);
     setIsEditOpen(true);
   };
 
@@ -185,14 +189,14 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       variant: "danger",
       onConfirm: () => {
         setIsCreateOpen(false);
-        setActionError(null);
+        resetForm();
       },
     });
   };
 
   const requestCloseEditModal = () => {
     if (saving) return;
-    if (!hasEditFormChanges) {
+    if (!hasEditFormChanges || actionSuccess) {
       setIsEditOpen(false);
       return;
     }
@@ -263,6 +267,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
 
     setProfileSaving(true);
     setProfileError(null);
+    setProfileSuccess(null);
     try {
       if (Object.keys(profileUpdates).length > 0) {
         await superAdminService.updateUserProfile(selectedUser.id, profileUpdates);
@@ -271,6 +276,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
         await superAdminService.updateUserAccount(selectedUser.id, { role: profileForm.role });
       }
       setIsProfileEditing(false);
+      setProfileSuccess("Profile updated successfully.");
       await loadUsers();
     } catch (profileSaveError) {
       setProfileError(
@@ -328,6 +334,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     }
     setSaving(true);
     setActionError(null);
+    setActionSuccess(null);
 
     try {
       await superAdminService.updateUserAccount(selectedUser.id, {
@@ -335,7 +342,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
         password: formState.password || undefined,
         role: formState.role !== selectedUser.role ? formState.role : undefined,
       });
-      setIsEditOpen(false);
+      setActionSuccess("User updated successfully.");
       await loadUsers();
     } catch (updateError) {
       setActionError(updateError instanceof Error ? updateError.message : "Unable to update user.");
@@ -605,7 +612,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               </button>
               <button
                 type="button"
-                onClick={() => setIsProfileEditing(true)}
+                onClick={() => { setIsProfileEditing(true); setProfileSuccess(null); setProfileError(null); }}
                 disabled={!canEditSelectedProfile}
                 className="btn-primary"
               >
@@ -780,6 +787,15 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               {profileError}
             </div>
           )}
+          {profileSuccess && (
+            <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              {profileSuccess}
+            </div>
+          )}
           {!canEditSelectedProfile && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
@@ -840,6 +856,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   value={formState.email}
                   onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))}
                   placeholder="user@example.com"
+                  autoComplete="off"
                   className="input"
                 />
               </div>
@@ -864,6 +881,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   value={formState.username}
                   onChange={(e) => setFormState((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                   placeholder="johndoe"
+                  autoComplete="off"
                   className="input"
                 />
               </div>
@@ -873,6 +891,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   type="password"
                   value={formState.password}
                   onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))}
+                  autoComplete="new-password"
                   placeholder="Min. 8 characters"
                   className="input"
                 />
@@ -970,6 +989,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   type="password"
                   value={formState.password}
                   onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))}
+                  autoComplete="new-password"
                   placeholder="Leave blank to keep current"
                   className="input"
                 />
@@ -982,6 +1002,15 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   <path d="M12 8v4M12 16h.01" />
                 </svg>
                 {actionError}
+              </div>
+            )}
+            {actionSuccess && (
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+                {actionSuccess}
               </div>
             )}
           </Modal>
