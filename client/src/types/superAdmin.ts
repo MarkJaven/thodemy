@@ -205,6 +205,7 @@ export type Quiz = {
   description?: string | null;
   course_id?: string | null;
   assigned_user_id?: string | null;
+  assigned_user_ids?: string[] | null;
   status?: string | null;
   link_url?: string | null;
   start_at?: string | null;

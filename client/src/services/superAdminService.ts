@@ -655,7 +655,7 @@ export const superAdminService = {
     const { data, error } = await client
       .from("quizzes")
       .select(
-        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
+        "id, title, description, course_id, assigned_user_id, assigned_user_ids, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
       )
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -683,6 +683,7 @@ export const superAdminService = {
       | "description"
       | "course_id"
       | "assigned_user_id"
+      | "assigned_user_ids"
       | "status"
       | "link_url"
       | "start_at"
@@ -697,7 +698,7 @@ export const superAdminService = {
       .from("quizzes")
       .insert(payload.quiz)
       .select(
-        "id, title, description, course_id, assigned_user_id, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
+        "id, title, description, course_id, assigned_user_id, assigned_user_ids, status, link_url, start_at, end_at, show_score, max_score, created_at, updated_at"
       )
       .single();
     if (error) throw new Error(error.message);
