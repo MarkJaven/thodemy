@@ -593,6 +593,12 @@ export const dashboardApi = {
       file_url: submission.storage_path ?? null,
       created_at: submission.created_at ?? null,
     }));
+    const visibleProjectAssignments = activities.filter((activity) => {
+      const normalizedStatus = String(activity.status ?? "active")
+        .trim()
+        .toLowerCase();
+      return !["inactive", "archived", "deleted", "removed"].includes(normalizedStatus);
+    });
 
     return {
       courses,
@@ -604,7 +610,7 @@ export const dashboardApi = {
       learningPaths,
       learningPathEnrollments,
       courseCompletionRequests,
-      activities: [...submissionActivities, ...activities],
+      activities: [...submissionActivities, ...visibleProjectAssignments],
       quizzes,
       quizScores,
       quizAttempts,

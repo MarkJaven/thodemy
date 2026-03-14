@@ -588,18 +588,16 @@ export const superAdminService = {
 
   async deleteActivity(activityId: string): Promise<void> {
     const client = requireSupabase();
-    const { error: submissionError } = await client
-      .from("activity_submissions")
-      .delete()
-      .eq("activity_id", activityId);
-    if (submissionError) throw new Error(submissionError.message);
-
-    const { error } = await client.from("activities").delete().eq("id", activityId);
+    const { error } = await client
+      .from("activities")
+      .update({ status: "inactive" })
+      .eq("id", activityId);
     if (error) throw new Error(error.message);
     await auditLogService.recordAuditLog({
       entityType: "activity",
       entityId: activityId,
-      action: "deleted",
+      action: "soft_deleted",
+      details: { status: "inactive" },
     });
   },
 
