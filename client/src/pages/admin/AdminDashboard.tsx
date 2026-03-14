@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useUser } from "../../hooks/useUser";
@@ -217,6 +217,8 @@ const AdminDashboard = () => {
     navigate(`/admin/${nav}`);
   };
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
   const [stats, setStats] = useState<DashboardStats>({
     activeCourses: 0,
     coursesThisMonth: 0,
@@ -694,6 +696,16 @@ const AdminDashboard = () => {
     await signOut({ redirectTo: "/" });
   };
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "high":
@@ -785,6 +797,24 @@ const AdminDashboard = () => {
     { key: "evaluation", label: "Evaluation", icon: <EvaluationIcon /> },
     { key: "profile", label: "Profile", icon: <ProfileIcon /> },
   ];
+
+  const sidebarDisplayName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+    user?.username ||
+    (user?.email ? user.email.split("@")[0] : "Admin");
+  const sidebarInitials = sidebarDisplayName
+    .split(" ")
+    .map((p: string) => p.charAt(0))
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "AD";
+  const sidebarRoleLabel = roleLoading
+    ? ""
+    : userRole === "superadmin"
+      ? "Super Admin"
+      : userRole === "admin"
+        ? "Admin"
+        : "User";
 
   const renderProfileSection = () => {
     if (profileLoading) {
@@ -1437,17 +1467,15 @@ const AdminDashboard = () => {
 
           {/* User Section */}
           <div className="p-4 border-t border-white/5">
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-ink-800 transition-all duration-200"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              Sign out
-            </button>
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple">
+                {sidebarInitials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="truncate text-sm font-medium text-white">{sidebarDisplayName}</p>
+                <p className="truncate text-xs text-slate-500">{sidebarRoleLabel}</p>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -1490,21 +1518,46 @@ const AdminDashboard = () => {
                   <span className="hidden lg:inline">New Course</span>
                 </button>
 
-                {/* Avatar */}
-                <button
-                  type="button"
-                  onClick={() => setActiveNav("profile")}
-                  title="Profile"
-                  className="w-9 h-9 rounded-full bg-ink-700 border border-white/10 flex items-center justify-center text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors"
-                >
-                  {[profile?.first_name, profile?.last_name].filter(Boolean).length > 0
-                    ? [profile.first_name, profile.last_name]
-                        .filter(Boolean)
-                        .map((n: string) => n.charAt(0))
-                        .join("")
-                        .toUpperCase()
-                    : user?.email?.substring(0, 2).toUpperCase() || "AD"}
-                </button>
+                {/* Avatar with dropdown */}
+                <div className="relative" ref={profileDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setProfileDropdownOpen((prev) => !prev)}
+                    className="w-9 h-9 rounded-full bg-ink-700 border border-white/10 flex items-center justify-center text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors"
+                  >
+                    {sidebarInitials}
+                  </button>
+                  {profileDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-white/10 bg-ink-800 shadow-xl overflow-hidden z-50">
+                      <div className="px-4 py-3 border-b border-white/5">
+                        <p className="text-sm font-semibold text-white">Welcome {sidebarDisplayName}!</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setProfileDropdownOpen(false); setActiveNav("profile"); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-ink-700 transition-colors"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Profile
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setProfileDropdownOpen(false); handleSignOut(); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-rose-400 hover:text-rose-300 hover:bg-ink-700 transition-colors"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                          <polyline points="16 17 21 12 16 7" />
+                          <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                        Logout
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </header>
