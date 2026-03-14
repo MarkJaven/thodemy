@@ -28,6 +28,9 @@ const getTodayDateString = () => {
   return `${year}-${month}-${day}`;
 };
 
+const COMPANY_ID_REGEX = /^\d{1,7}$/;
+const sanitizeCompanyId = (value: string) => value.replace(/\D/g, '').slice(0, 7);
+
 const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
   const todayDate = getTodayDateString();
   const [profile, setProfile] = useState<ProfileData>({
@@ -104,11 +107,35 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
     }
   };
 
+  const isCompanyIdTaken = async (companyId: string, currentUserId: string) => {
+    if (!supabase) return false;
+    const { data: rpcData, error: rpcError } = await supabase.rpc('is_company_id_taken', {
+      p_company_id_no: companyId,
+      p_exclude_user_id: currentUserId,
+    });
+    if (!rpcError && typeof rpcData === 'boolean') {
+      return rpcData;
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('company_id_no', companyId)
+      .neq('id', currentUserId)
+      .limit(1);
+    if (error) throw error;
+    return (data?.length ?? 0) > 0;
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
     if (profile.birthday && profile.birthday > todayDate) {
       setError('Birthdate must not exceed today');
+      return;
+    }
+    if (profile.company_id_no && !COMPANY_ID_REGEX.test(profile.company_id_no)) {
+      setError('Company ID must be numbers only and up to 7 digits');
       return;
     }
 
@@ -120,15 +147,23 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
+      if (profile.company_id_no) {
+        const companyIdTaken = await isCompanyIdTaken(profile.company_id_no, user.id);
+        if (companyIdTaken) {
+          setError('Company ID already exists. Please use a different Company ID');
+          return;
+        }
+      }
+
       const { error } = await supabase
         .from('profiles')
         .update({
           first_name: profile.first_name,
           last_name: profile.last_name,
-          gender: profile.gender,
-          birthday: profile.birthday,
+          gender: profile.gender || null,
+          birthday: profile.birthday || null,
           address: profile.address,
-          company_id_no: profile.company_id_no,
+          company_id_no: profile.company_id_no || null,
         })
         .eq('id', user.id);
 
@@ -137,16 +172,22 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
       setSuccess(true);
       setIsEditMode(false);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating profile:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update profile');
+      if (err?.code === '23505') {
+        setError('Company ID already exists. Please use a different Company ID');
+      } else {
+        setError(err?.message || 'Failed to update profile');
+      }
     } finally {
       setSaving(false);
     }
   };
 
   const handleInputChange = (field: keyof ProfileData, value: string) => {
-    setProfile(prev => ({ ...prev, [field]: value }));
+    const nextValue =
+      field === 'company_id_no' ? sanitizeCompanyId(value) : value;
+    setProfile(prev => ({ ...prev, [field]: nextValue }));
   };
 
   const formatDate = (dateString: string) => {
@@ -334,6 +375,9 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                           type="text"
                           value={profile.company_id_no}
                           onChange={(e) => handleInputChange('company_id_no', e.target.value)}
+                          inputMode="numeric"
+                          maxLength={7}
+                          pattern="[0-9]{1,7}"
                           className={inputClass}
                         />
                       ) : (
