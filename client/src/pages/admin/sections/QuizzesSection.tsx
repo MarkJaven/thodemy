@@ -3,7 +3,7 @@ import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
 import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import { superAdminService } from "../../../services/superAdminService";
-import type { AdminUser, Course, Quiz, QuizAttempt, QuizScore } from "../../../types/superAdmin";
+import type { AdminUser, Course, Quiz, QuizScore } from "../../../types/superAdmin";
 
 type ConfirmDialogState = {
   title: string;
@@ -18,7 +18,7 @@ const EMPTY_QUIZ_FORM_STATE = {
   description: "",
   status: "active",
   course_id: "",
-  assigned_user_id: "",
+  assigned_user_ids: [] as string[],
   link_url: "",
   start_at: "",
   end_at: "",
@@ -32,10 +32,9 @@ const EMPTY_SCORE_STATE = {
   score: "",
 };
 
-const QuizzesSection = () => {
+const QuizzesSection = ({ view }: { view?: "quizzes" | "scores" }) => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [scores, setScores] = useState<QuizScore[]>([]);
-  const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +47,7 @@ const QuizzesSection = () => {
     description: "",
     status: "active",
     course_id: "",
-    assigned_user_id: "",
+    assigned_user_ids: [] as string[],
     link_url: "",
     start_at: "",
     end_at: "",
@@ -64,6 +63,21 @@ const QuizzesSection = () => {
     score: "",
   });
 
+  const [userSearch, setUserSearch] = useState("");
+
+  // Quizzes search / filter / pagination
+  const [quizSearch, setQuizSearch] = useState("");
+  const [quizFilterStatus, setQuizFilterStatus] = useState("all");
+  const [quizFilterCourse, setQuizFilterCourse] = useState("all");
+  const [quizPage, setQuizPage] = useState(1);
+  const QUIZ_PAGE_SIZE = 10;
+
+  // Scores search / filter / pagination
+  const [scoreSearch, setScoreSearch] = useState("");
+  const [scoreFilterQuiz, setScoreFilterQuiz] = useState("all");
+  const [scorePage, setScorePage] = useState(1);
+  const SCORE_PAGE_SIZE = 10;
+
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -73,16 +87,14 @@ const QuizzesSection = () => {
     setLoading(true);
     setError(null);
     try {
-      const [quizData, scoreData, attemptData, courseData, userData] = await Promise.all([
+      const [quizData, scoreData, courseData, userData] = await Promise.all([
         superAdminService.listQuizzes(),
         superAdminService.listQuizScores(),
-        superAdminService.listQuizAttempts(),
         superAdminService.listCourses(),
         superAdminService.listUsers(),
       ]);
       setQuizzes(quizData);
       setScores(scoreData);
-      setAttempts(attemptData);
       setCourses(courseData);
       setUsers(userData);
     } catch (loadError) {
@@ -111,7 +123,7 @@ const QuizzesSection = () => {
       description: quiz.description ?? "",
       status: quiz.status ?? "active",
       course_id: quiz.course_id ?? "",
-      assigned_user_id: quiz.assigned_user_id ?? "",
+      assigned_user_ids: quiz.assigned_user_ids ?? [],
       link_url: quiz.link_url ?? "",
       start_at: quiz.start_at ? quiz.start_at.slice(0, 16) : "",
       end_at: quiz.end_at ? quiz.end_at.slice(0, 16) : "",
@@ -131,7 +143,7 @@ const QuizzesSection = () => {
           description: selectedQuiz.description ?? "",
           status: selectedQuiz.status ?? "active",
           course_id: selectedQuiz.course_id ?? "",
-          assigned_user_id: selectedQuiz.assigned_user_id ?? "",
+          assigned_user_ids: selectedQuiz.assigned_user_ids ?? [],
           link_url: selectedQuiz.link_url ?? "",
           start_at: selectedQuiz.start_at ? selectedQuiz.start_at.slice(0, 16) : "",
           end_at: selectedQuiz.end_at ? selectedQuiz.end_at.slice(0, 16) : "",
@@ -194,7 +206,7 @@ const QuizzesSection = () => {
             description: formState.description,
             status: formState.status,
             course_id: formState.course_id || null,
-            assigned_user_id: formState.assigned_user_id || null,
+            assigned_user_ids: formState.assigned_user_ids.length > 0 ? formState.assigned_user_ids : null,
             link_url: formState.link_url || null,
             start_at: formState.start_at ? new Date(formState.start_at).toISOString() : null,
             end_at: formState.end_at ? new Date(formState.end_at).toISOString() : null,
@@ -210,7 +222,7 @@ const QuizzesSection = () => {
             description: formState.description,
             status: formState.status,
             course_id: formState.course_id || null,
-            assigned_user_id: formState.assigned_user_id || null,
+            assigned_user_ids: formState.assigned_user_ids.length > 0 ? formState.assigned_user_ids : null,
             link_url: formState.link_url || null,
             start_at: formState.start_at ? new Date(formState.start_at).toISOString() : null,
             end_at: formState.end_at ? new Date(formState.end_at).toISOString() : null,
@@ -323,6 +335,10 @@ const QuizzesSection = () => {
       setActionError("Score must be zero or greater.");
       return;
     }
+    if (numericScore > 100) {
+      setActionError("Score cannot exceed 100.");
+      return;
+    }
     const selectedQuizMeta = quizzes.find((quiz) => quiz.id === scoreState.quiz_id);
     if (
       selectedQuizMeta?.max_score !== null &&
@@ -385,22 +401,6 @@ const QuizzesSection = () => {
     });
   };
 
-  const handleViewProof = async (attempt: QuizAttempt) => {
-    setActionError(null);
-    try {
-      const url = await superAdminService.getQuizProofUrl(attempt.proof_url ?? null);
-      if (!url) {
-        setActionError("No proof file available for this attempt.");
-        return;
-      }
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (loadError) {
-      setActionError(
-        loadError instanceof Error ? loadError.message : "Unable to open proof file."
-      );
-    }
-  };
-
   const scoreLookup = useMemo(() => {
     const map = new Map<string, QuizScore>();
     scores.forEach((score) => {
@@ -423,8 +423,6 @@ const QuizzesSection = () => {
     const now = new Date();
     const activeStatuses = ["active", "open", "published"];
     let activeCount = 0;
-    let completionCount = 0;
-    let pendingScoreCount = 0;
 
     quizzes.forEach((quiz) => {
       const status = (quiz.status ?? "active").toLowerCase();
@@ -438,35 +436,38 @@ const QuizzesSection = () => {
       if (isOpen) activeCount += 1;
     });
 
-    attempts.forEach((attempt) => {
-      if (!attempt.submitted_at) return;
-      completionCount += 1;
-      const scoreKey = `${attempt.quiz_id}:${attempt.user_id}`;
-      if (attempt.proof_url && !scoreLookup.get(scoreKey)) {
-        pendingScoreCount += 1;
-      }
-    });
-
     return {
       total: quizzes.length,
       activeCount,
-      completionCount,
-      pendingScoreCount,
     };
-  }, [attempts, quizzes, scoreLookup]);
+  }, [quizzes]);
 
-  const openScoreFromAttempt = (attempt: QuizAttempt) => {
-    const key = `${attempt.quiz_id}:${attempt.user_id}`;
-    const existingScore = scoreLookup.get(key) ?? null;
-    setSelectedScore(existingScore);
-    setScoreState({
-      quiz_id: attempt.quiz_id,
-      user_id: attempt.user_id,
-      score: existingScore ? String(existingScore.score) : "",
+  const filteredQuizzes = useMemo(() => {
+    return quizzes.filter((quiz) => {
+      const matchSearch = quiz.title.toLowerCase().includes(quizSearch.toLowerCase());
+      const matchStatus = quizFilterStatus === "all" || (quiz.status ?? "active") === quizFilterStatus;
+      const matchCourse = quizFilterCourse === "all" || quiz.course_id === quizFilterCourse;
+      return matchSearch && matchStatus && matchCourse;
     });
-    setActionError(null);
-    setIsScoreOpen(true);
-  };
+  }, [quizzes, quizSearch, quizFilterStatus, quizFilterCourse]);
+
+  const quizPageCount = Math.max(1, Math.ceil(filteredQuizzes.length / QUIZ_PAGE_SIZE));
+  const pagedQuizzes = filteredQuizzes.slice((quizPage - 1) * QUIZ_PAGE_SIZE, quizPage * QUIZ_PAGE_SIZE);
+
+  const filteredScores = useMemo(() => {
+    return scores.filter((score) => {
+      const quizTitle = quizzes.find((q) => q.id === score.quiz_id)?.title ?? "";
+      const userEmail = users.find((u) => u.id === score.user_id)?.email ?? "";
+      const matchSearch =
+        quizTitle.toLowerCase().includes(scoreSearch.toLowerCase()) ||
+        userEmail.toLowerCase().includes(scoreSearch.toLowerCase());
+      const matchQuiz = scoreFilterQuiz === "all" || score.quiz_id === scoreFilterQuiz;
+      return matchSearch && matchQuiz;
+    });
+  }, [scores, scoreSearch, scoreFilterQuiz, quizzes, users]);
+
+  const scorePageCount = Math.max(1, Math.ceil(filteredScores.length / SCORE_PAGE_SIZE));
+  const pagedScores = filteredScores.slice((scorePage - 1) * SCORE_PAGE_SIZE, scorePage * SCORE_PAGE_SIZE);
 
   const selectedScoreQuiz = useMemo(
     () => quizzes.find((quiz) => quiz.id === scoreState.quiz_id) ?? null,
@@ -501,8 +502,13 @@ const QuizzesSection = () => {
                   href={quiz.link_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-slate-300 underline decoration-white/20 underline-offset-4 hover:text-white"
+                  className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
                 >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
                   Open link
                 </a>
               ) : (
@@ -519,17 +525,18 @@ const QuizzesSection = () => {
         header: "Assignment",
         render: (quiz: Quiz) => {
           const courseName = courses.find((course) => course.id === quiz.course_id)?.title;
-          const userEmail = users.find((user) => user.id === quiz.assigned_user_id)?.email;
+          const assignedCount = quiz.assigned_user_ids?.length ?? 0;
           return (
-            <span className="text-xs text-slate-400">
-              {courseName
-                ? userEmail
-                  ? `Course: ${courseName} · User: ${userEmail}`
-                  : `Course: ${courseName} · All enrolled`
-                : userEmail
-                  ? `User: ${userEmail}`
-                  : "All enrolled (any course)"}
-            </span>
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400">
+                {courseName ? `Course: ${courseName}` : "All courses"}
+              </span>
+              {assignedCount > 0 ? (
+                <p className="text-xs text-slate-500">{assignedCount} user{assignedCount > 1 ? "s" : ""} assigned</p>
+              ) : (
+                <p className="text-xs text-slate-500">All enrolled</p>
+              )}
+            </div>
           );
         },
       },
@@ -659,106 +666,6 @@ const QuizzesSection = () => {
     [quizzes, users]
   );
 
-  const attemptColumns = useMemo(
-    () => [
-      {
-        key: "quiz",
-        header: "Quiz",
-        render: (attempt: QuizAttempt) => (
-          <span className="text-xs text-slate-300">
-            {quizzes.find((quiz) => quiz.id === attempt.quiz_id)?.title ?? attempt.quiz_id}
-          </span>
-        ),
-      },
-      {
-        key: "user",
-        header: "User",
-        render: (attempt: QuizAttempt) => (
-          <span className="text-xs text-slate-300">
-            {users.find((user) => user.id === attempt.user_id)?.email ?? attempt.user_id}
-          </span>
-        ),
-      },
-      {
-        key: "status",
-        header: "Status",
-        render: (attempt: QuizAttempt) => {
-          const status = attempt.submitted_at ? "completed" : "pending";
-          return (
-            <span className={status === "completed" ? "badge-success" : "badge-warning"}>
-              {status}
-            </span>
-          );
-        },
-      },
-      {
-        key: "score",
-        header: "Score",
-        render: (attempt: QuizAttempt) => {
-          const score = scoreLookup.get(`${attempt.quiz_id}:${attempt.user_id}`);
-          if (!score) {
-            return <span className="badge-warning">Needs score</span>;
-          }
-          const maxScore = quizzes.find((quiz) => quiz.id === attempt.quiz_id)?.max_score;
-          return (
-            <span className="text-xs text-slate-300">
-              {maxScore ? `${score.score} / ${maxScore}` : score.score}
-            </span>
-          );
-        },
-      },
-      {
-        key: "submitted",
-        header: "Submitted",
-        render: (attempt: QuizAttempt) => (
-          <span className="text-xs text-slate-300">
-            {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : "--"}
-          </span>
-        ),
-      },
-      {
-        key: "proof",
-        header: "Proof",
-        render: (attempt: QuizAttempt) =>
-          attempt.proof_url ? (
-            <button
-              type="button"
-              onClick={() => handleViewProof(attempt)}
-              className="btn-secondary flex items-center gap-1.5"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-              View proof
-            </button>
-          ) : (
-            <span className="badge-warning">Missing</span>
-          ),
-      },
-      {
-        key: "actions",
-        header: "Actions",
-        render: (attempt: QuizAttempt) => {
-          const score = scoreLookup.get(`${attempt.quiz_id}:${attempt.user_id}`);
-          return (
-            <button
-              type="button"
-              onClick={() => openScoreFromAttempt(attempt)}
-              className="btn-secondary flex items-center gap-1.5"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-              {score ? "Edit score" : "Record score"}
-            </button>
-          );
-        },
-      },
-    ],
-    [quizzes, users, scoreLookup, handleViewProof]
-  );
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading quizzes...</p>;
@@ -770,89 +677,201 @@ const QuizzesSection = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-display text-2xl text-white">Quizzes</h2>
-          <p className="text-sm text-slate-300">
-            Create external quizzes, assign learners, and record scores.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="btn-primary flex items-center gap-2"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          New Quiz
-        </button>
-      </div>
+      {view !== "scores" && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-2xl text-white">Quizzes</h2>
+              <p className="text-sm text-slate-300">
+                Create external quizzes, assign learners, and record scores.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openCreate}
+              className="btn-primary flex items-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New Quiz
+            </button>
+          </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 text-sm text-slate-300">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Total quizzes</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{quizSummary.total}</p>
-          <p className="mt-1 text-xs text-slate-500">All quiz records in the system.</p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 text-sm text-slate-300">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Open now</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{quizSummary.activeCount}</p>
-          <p className="mt-1 text-xs text-slate-500">Active quizzes within their window.</p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 text-sm text-slate-300">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Completions</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{quizSummary.completionCount}</p>
-          <p className="mt-1 text-xs text-slate-500">Learner submissions received.</p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 text-sm text-slate-300">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Scores pending</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{quizSummary.pendingScoreCount}</p>
-          <p className="mt-1 text-xs text-slate-500">Completions awaiting grading.</p>
-        </div>
-      </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 text-sm text-slate-300">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Total quizzes</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{quizSummary.total}</p>
+              <p className="mt-1 text-xs text-slate-500">All quiz records in the system.</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-4 text-sm text-slate-300">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Open now</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{quizSummary.activeCount}</p>
+              <p className="mt-1 text-xs text-slate-500">Active quizzes within their window.</p>
+            </div>
+          </div>
 
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-        <p className="text-sm font-semibold text-white">External quiz flow</p>
-        <p className="mt-2 text-xs text-slate-400">
-          1. Add the quiz link, window, and assignment. 2. Learners open the link and mark
-          completion. 3. Record scores to publish results.
-        </p>
-      </div>
+          {/* Search + Filter bar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2">
+              <svg className="h-3.5 w-3.5 shrink-0 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search quizzes..."
+                value={quizSearch}
+                onChange={(e) => { setQuizSearch(e.target.value); setQuizPage(1); }}
+                className="w-full border-0 bg-transparent text-xs text-white placeholder-slate-500 outline-none focus:outline-none focus:ring-0"
+              />
+            </div>
+            <select
+              value={quizFilterStatus}
+              onChange={(e) => { setQuizFilterStatus(e.target.value); setQuizPage(1); }}
+              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-slate-300 focus:border-white/30 focus:outline-none"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="archived">Archived</option>
+            </select>
+            <select
+              value={quizFilterCourse}
+              onChange={(e) => { setQuizFilterCourse(e.target.value); setQuizPage(1); }}
+              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-slate-300 focus:border-white/30 focus:outline-none"
+            >
+              <option value="all">All courses</option>
+              {courses.map((c) => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </select>
+          </div>
 
-      <DataTable columns={quizColumns} data={quizzes} emptyMessage="No quizzes created yet." />
+          <DataTable columns={quizColumns} data={pagedQuizzes} emptyMessage="No quizzes found." />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="font-display text-xl text-white">Quiz scores</h3>
-          <p className="text-sm text-slate-400">Add scores from the external quiz.</p>
-        </div>
-        <button
-          type="button"
-          onClick={openScoreCreate}
-          className="btn-secondary flex items-center gap-2"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Add Score
-        </button>
-      </div>
+          {/* Pagination */}
+          {quizPageCount > 1 && (
+            <div className="flex items-center justify-between border-t border-white/10 pt-3">
+              <p className="text-xs text-slate-500">
+                Showing {(quizPage - 1) * QUIZ_PAGE_SIZE + 1}–{Math.min(quizPage * QUIZ_PAGE_SIZE, filteredQuizzes.length)} of {filteredQuizzes.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={quizPage === 1}
+                  onClick={() => setQuizPage((p) => p - 1)}
+                  className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ← Prev
+                </button>
+                {Array.from({ length: quizPageCount }, (_, i) => i + 1).map((pg) => (
+                  <button
+                    key={pg}
+                    type="button"
+                    onClick={() => setQuizPage(pg)}
+                    className={`rounded-lg border px-2.5 py-1.5 text-xs ${pg === quizPage ? "border-accent-purple/50 bg-accent-purple/20 text-white" : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"}`}
+                  >
+                    {pg}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={quizPage === quizPageCount}
+                  onClick={() => setQuizPage((p) => p + 1)}
+                  className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
-      <DataTable columns={scoreColumns} data={scores} emptyMessage="No scores recorded yet." />
+      {view !== "quizzes" && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-2xl text-white">Quiz scores</h2>
+              <p className="text-sm text-slate-400">Add scores from the external quiz.</p>
+            </div>
+            <button
+              type="button"
+              onClick={openScoreCreate}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Add Score
+            </button>
+          </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="font-display text-xl text-white">Quiz completions</h3>
-          <p className="text-sm text-slate-400">Learner completion confirmations and proof uploads.</p>
-        </div>
-      </div>
+          {/* Search + Filter bar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2">
+              <svg className="h-3.5 w-3.5 shrink-0 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search by quiz or user..."
+                value={scoreSearch}
+                onChange={(e) => { setScoreSearch(e.target.value); setScorePage(1); }}
+                className="w-full border-0 bg-transparent text-xs text-white placeholder-slate-500 outline-none focus:outline-none focus:ring-0"
+              />
+            </div>
+            <select
+              value={scoreFilterQuiz}
+              onChange={(e) => { setScoreFilterQuiz(e.target.value); setScorePage(1); }}
+              className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-slate-300 focus:border-white/30 focus:outline-none"
+            >
+              <option value="all">All quizzes</option>
+              {quizzes.map((q) => (
+                <option key={q.id} value={q.id}>{q.title}</option>
+              ))}
+            </select>
+          </div>
 
-      <DataTable
-        columns={attemptColumns}
-        data={attempts}
-        emptyMessage="No quiz completions yet."
-      />
+          <DataTable columns={scoreColumns} data={pagedScores} emptyMessage="No scores found." />
+
+          {/* Pagination */}
+          {scorePageCount > 1 && (
+            <div className="flex items-center justify-between border-t border-white/10 pt-3">
+              <p className="text-xs text-slate-500">
+                Showing {(scorePage - 1) * SCORE_PAGE_SIZE + 1}–{Math.min(scorePage * SCORE_PAGE_SIZE, filteredScores.length)} of {filteredScores.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={scorePage === 1}
+                  onClick={() => setScorePage((p) => p - 1)}
+                  className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ← Prev
+                </button>
+                {Array.from({ length: scorePageCount }, (_, i) => i + 1).map((pg) => (
+                  <button
+                    key={pg}
+                    type="button"
+                    onClick={() => setScorePage(pg)}
+                    className={`rounded-lg border px-2.5 py-1.5 text-xs ${pg === scorePage ? "border-accent-purple/50 bg-accent-purple/20 text-white" : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"}`}
+                  >
+                    {pg}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={scorePage === scorePageCount}
+                  onClick={() => setScorePage((p) => p + 1)}
+                  className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {actionSuccess && (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-200">
@@ -934,26 +953,49 @@ const QuizzesSection = () => {
                 <option value="archived">archived</option>
               </select>
             </label>
-            <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
-              Assigned user (optional)
-              <select
-                value={formState.assigned_user_id}
-                onChange={(event) =>
-                  setFormState((prev) => ({ ...prev, assigned_user_id: event.target.value }))
-                }
-                className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
-              >
-                <option value="">All enrolled</option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.email}
-                  </option>
+            <div className="md:col-span-2">
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400 mb-2">
+                Assigned users (optional)
+              </p>
+              <div className="mb-1.5 flex items-center gap-2 rounded-xl border border-white/10 bg-ink-800/60 px-3 py-1.5">
+                <svg className="h-3.5 w-3.5 shrink-0 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="w-full border-0 bg-transparent text-xs text-white placeholder-slate-500 outline-none focus:outline-none focus:ring-0"
+                />
+              </div>
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-ink-800/60 p-2 space-y-1">
+                {users.filter((u) => u.email.toLowerCase().includes(userSearch.toLowerCase())).map((user) => (
+                  <label key={user.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formState.assigned_user_ids.includes(user.id)}
+                      onChange={(e) => {
+                        setFormState((prev) => ({
+                          ...prev,
+                          assigned_user_ids: e.target.checked
+                            ? [...prev.assigned_user_ids, user.id]
+                            : prev.assigned_user_ids.filter((id) => id !== user.id),
+                        }));
+                      }}
+                      className="h-3.5 w-3.5 rounded border-white/20 bg-transparent text-accent-purple focus:ring-0"
+                    />
+                    <span className="text-xs text-slate-300">{user.email}</span>
+                  </label>
                 ))}
-              </select>
-              <span className="mt-2 block text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                Leave blank to assign to all enrolled users (in selected course, or any course if none selected).
+                {users.filter((u) => u.email.toLowerCase().includes(userSearch.toLowerCase())).length === 0 && (
+                  <p className="text-xs text-slate-500 px-2 py-1">{userSearch ? "No matching users." : "No users found."}</p>
+                )}
+              </div>
+              <span className="mt-1.5 block text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                Leave blank to assign to all enrolled users.
               </span>
-            </label>
+            </div>
             <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
               Quiz link
               <input
@@ -1110,6 +1152,8 @@ const QuizzesSection = () => {
             Score
             <input
               type="number"
+              min={0}
+              max={100}
               value={scoreState.score}
               onChange={(event) =>
                 setScoreState((prev) => ({ ...prev, score: event.target.value }))

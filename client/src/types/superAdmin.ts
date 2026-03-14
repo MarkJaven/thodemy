@@ -205,6 +205,7 @@ export type Quiz = {
   description?: string | null;
   course_id?: string | null;
   assigned_user_id?: string | null;
+  assigned_user_ids?: string[] | null;
   status?: string | null;
   link_url?: string | null;
   start_at?: string | null;
@@ -325,6 +326,7 @@ export type AuditLog = {
   actor_id?: string | null;
   timestamp?: string | null;
   details?: Record<string, unknown> | null;
+  actor?: { username?: string | null; first_name?: string | null; last_name?: string | null; email?: string | null } | null;
 };
 
 export type AdminTask = {
