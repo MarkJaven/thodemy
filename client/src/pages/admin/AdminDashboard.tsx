@@ -1410,9 +1410,11 @@ const AdminDashboard = () => {
           <nav className="flex-1 px-4 pb-6 overflow-y-auto">
             <div className="flex flex-col gap-2">
               {navItems.map(item => (
-                <button
+                <a
                   key={item.key}
-                  onClick={() => {
+                  href={`/admin/${item.key}`}
+                  onClick={(e) => {
+                    e.preventDefault();
                     setActiveNav(item.key);
                     setSidebarOpen(false);
                   }}
@@ -1428,7 +1430,7 @@ const AdminDashboard = () => {
                     {item.icon}
                   </span>
                   {item.label}
-                </button>
+                </a>
               ))}
             </div>
           </nav>
