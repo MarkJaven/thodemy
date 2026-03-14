@@ -475,9 +475,12 @@ const AuthPage = () => {
 
               <p className="text-center text-xs text-slate-400 sm:text-sm">
                 Need access?{" "}
-                <a href="mailto:admin@thodemy.com" className="text-accent-purple transition-colors hover:text-white">
+                <button
+                  onClick={() => { window.location.href = `mailto:${"vsescobar"}@${"sscgi.com"}`; }}
+                  className="text-accent-purple transition-colors hover:text-white"
+                >
                   Contact your administrator
-                </a>
+                </button>
               </p>
             </section>
           </div>
