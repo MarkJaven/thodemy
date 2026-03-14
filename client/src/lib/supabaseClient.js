@@ -6,13 +6,6 @@ const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
 const hasEnv = Boolean(supabaseUrl && supabaseAnonKey);
 
-// Remove any stale Supabase auth tokens left in localStorage from before the sessionStorage migration
-if (typeof window !== "undefined") {
-  Object.keys(window.localStorage)
-    .filter((key) => key.startsWith("sb-") && key.endsWith("-auth-token"))
-    .forEach((key) => window.localStorage.removeItem(key));
-}
-
 if (!hasEnv) {
   console.warn("Supabase env vars missing. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
 }
@@ -23,7 +16,7 @@ export const supabase = hasEnv
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storage: typeof window !== "undefined" ? window.sessionStorage : undefined,
+        storage: typeof window !== "undefined" ? window.localStorage : undefined,
       },
     })
   : null;
