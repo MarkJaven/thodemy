@@ -440,3 +440,22 @@ a:focus-visible {
 .delay-300 { animation-delay: 300ms; }
 .delay-400 { animation-delay: 400ms; }
 .delay-500 { animation-delay: 500ms; }
+
+/* Auto-hide sidebar scrollbar — visible only while hovering */
+.scrollbar-autohide::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-autohide::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-autohide::-webkit-scrollbar-button {
+  display: none;
+}
+.scrollbar-autohide::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  transition: background 0.4s ease;
+}
+.scrollbar-autohide.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}

@@ -154,6 +154,7 @@ type NavItem =
   | "users"
   | "projects"
   | "quiz"
+  | "quiz-scores"
   | "approvals"
   | "reports"
   | "evaluation"
@@ -214,8 +215,18 @@ const SuperAdminDashboard = () => {
     navigate(`/super-admin/${nav}`);
   };
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [quizNavOpen, setQuizNavOpen] = useState(activeNav === "quiz" || activeNav === "quiz-scores");
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const navScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleNavScroll = () => {
+    const el = navRef.current;
+    if (!el) return;
+    el.classList.add("is-scrolling");
+    if (navScrollTimer.current) clearTimeout(navScrollTimer.current);
+    navScrollTimer.current = setTimeout(() => el.classList.remove("is-scrolling"), 600);
+  };
   const [stats, setStats] = useState<DashboardStats>({
     activeCourses: 0,
     coursesThisMonth: 0,
@@ -789,7 +800,7 @@ const SuperAdminDashboard = () => {
     { key: "topics", label: "Topics", icon: <TopicsIcon /> },
     { key: "users", label: "Users", icon: <UsersIcon /> },
     { key: "projects", label: "Projects", icon: <ActivityIcon /> },
-    { key: "quiz", label: "Quiz", icon: <QuizIcon /> },
+    { key: "quiz", label: "Quizzes", icon: <QuizIcon /> },
     { key: "approvals", label: "Approvals", icon: <ApprovalsIcon /> },
     { key: "reports", label: "Reports", icon: <ReportsIcon /> },
     { key: "evaluation", label: "Evaluation", icon: <EvaluationIcon /> },
@@ -1040,7 +1051,9 @@ const SuperAdminDashboard = () => {
       case "projects":
         return <ActivitiesSection variant="projects" />;
       case "quiz":
-        return <QuizzesSection />;
+        return <QuizzesSection view="quizzes" />;
+      case "quiz-scores":
+        return <QuizzesSection view="scores" />;
       case "approvals":
         return (
           <ActivitiesSection
@@ -1434,31 +1447,77 @@ const SuperAdminDashboard = () => {
           </div>
 
           {/* Nav Items */}
-          <nav className="flex-1 px-4 pb-6 overflow-y-auto">
+          <nav ref={navRef} onScroll={handleNavScroll} className="flex-1 px-4 pb-6 overflow-y-auto scrollbar-autohide">
             <div className="flex flex-col gap-2">
-              {navItems.map(item => (
-                <a
-                  key={item.key}
-                  href={`/super-admin/${item.key}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setActiveNav(item.key);
-                    setSidebarOpen(false);
-                  }}
-                  className={`
-                    flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
-                    ${activeNav === item.key
-                      ? "bg-ink-700 text-white border border-accent-purple/30"
-                      : "text-slate-400 hover:text-white hover:bg-ink-800"
-                    }
-                  `}
-                >
-                  <span className={activeNav === item.key ? "text-accent-purple" : "text-slate-500"}>
-                    {item.icon}
-                  </span>
-                  {item.label}
-                </a>
-              ))}
+              {navItems.map(item => {
+                if (item.key === "quiz") {
+                  const isQuizActive = activeNav === "quiz" || activeNav === "quiz-scores";
+                  return (
+                    <div key="quiz-group">
+                      <button
+                        type="button"
+                        onClick={() => setQuizNavOpen(prev => !prev)}
+                        className={`
+                          w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                          ${isQuizActive ? "bg-ink-700 text-white border border-accent-purple/30" : "text-slate-400 hover:text-white hover:bg-ink-800"}
+                        `}
+                      >
+                        <span className={isQuizActive ? "text-accent-purple" : "text-slate-500"}>
+                          {item.icon}
+                        </span>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        <svg
+                          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                          className={`transition-transform duration-200 ${quizNavOpen ? "rotate-180" : ""}`}
+                        >
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                      {quizNavOpen && (
+                        <div className="mt-1 ml-4 flex flex-col gap-1 border-l border-white/10 pl-3">
+                          <button
+                            type="button"
+                            onClick={() => { setActiveNav("quiz"); setSidebarOpen(false); }}
+                            className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${activeNav === "quiz" ? "text-white" : "text-slate-400 hover:text-white"}`}
+                          >
+                            Quizzes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setActiveNav("quiz-scores"); setSidebarOpen(false); }}
+                            className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${activeNav === "quiz-scores" ? "text-white" : "text-slate-400 hover:text-white"}`}
+                          >
+                            Quiz Scores
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <a
+                    key={item.key}
+                    href={`/super-admin/${item.key}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setActiveNav(item.key);
+                      setSidebarOpen(false);
+                    }}
+                    className={`
+                      flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                      ${activeNav === item.key
+                        ? "bg-ink-700 text-white border border-accent-purple/30"
+                        : "text-slate-400 hover:text-white hover:bg-ink-800"
+                      }
+                    `}
+                  >
+                    <span className={activeNav === item.key ? "text-accent-purple" : "text-slate-500"}>
+                      {item.icon}
+                    </span>
+                    {item.label}
+                  </a>
+                );
+              })}
             </div>
           </nav>
 
@@ -1496,7 +1555,7 @@ const SuperAdminDashboard = () => {
                     Superadmin Workspace
                   </span>
                   <h1 className="text-lg sm:text-xl font-semibold text-white truncate">
-                    {activeNav === "overview" ? "Learning Management Overview" : navItems.find(n => n.key === activeNav)?.label}
+                    {activeNav === "overview" ? "Learning Management Overview" : activeNav === "quiz-scores" ? "Quiz Scores" : navItems.find(n => n.key === activeNav)?.label}
                   </h1>
                 </div>
               </div>
