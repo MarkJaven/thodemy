@@ -436,13 +436,20 @@ const LandingPage = () => {
     <div id="home" className="min-h-screen bg-[#0B0D14] text-slate-100">
       <header className="sticky top-0 z-50 border-b border-white/5 bg-[#0B0D14]/95 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4 lg:max-w-7xl lg:px-16 xl:px-24">
-          <div className="flex shrink-0 items-center">
+          <a
+            href="#home"
+            className="flex shrink-0 items-center"
+            onClick={(e) => {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          >
             <img
               src={logoThodemy}
               alt="Thodemy"
               className="h-8 w-auto origin-left scale-[2.3] sm:h-9 sm:scale-[2.4] md:h-9 md:scale-[2.0] lg:h-10 lg:scale-[2.1] xl:h-11 xl:scale-[2.4]"
             />
-          </div>
+          </a>
 
           {/* Desktop & Tablet Landscape Navigation */}
           <nav className="hidden flex-1 items-center justify-start gap-4 pl-10 md:flex md:pl-12 lg:justify-center lg:gap-6 lg:pl-0 xl:gap-7">
