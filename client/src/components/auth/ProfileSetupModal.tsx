@@ -29,6 +29,7 @@ const getTodayDateString = () => {
 
 const COMPANY_ID_REGEX = /^\d{1,7}$/;
 const sanitizeCompanyId = (value: string) => value.replace(/\D/g, '').slice(0, 7);
+const sanitizeName = (value: string) => value.replace(/[^a-zA-ZÑñ\s'-]/g, '').slice(0, 50);
 
 const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
   const todayDate = getTodayDateString();
@@ -314,7 +315,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                     <input
                       type="text"
                       value={personalInfo.firstName}
-                      onChange={(e) => setPersonalInfo({ ...personalInfo, firstName: e.target.value })}
+                      onChange={(e) => setPersonalInfo({ ...personalInfo, firstName: sanitizeName(e.target.value) })}
                       className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-accent-purple focus:border-transparent transition-all duration-200"
                       placeholder="Enter your first name"
                       required
@@ -325,7 +326,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                     <input
                       type="text"
                       value={personalInfo.lastName}
-                      onChange={(e) => setPersonalInfo({ ...personalInfo, lastName: e.target.value })}
+                      onChange={(e) => setPersonalInfo({ ...personalInfo, lastName: sanitizeName(e.target.value) })}
                       className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-accent-purple focus:border-transparent transition-all duration-200"
                       placeholder="Enter your last name"
                       required

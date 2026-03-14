@@ -168,6 +168,7 @@ const getTodayDateString = () => {
 
 const COMPANY_ID_REGEX = /^\d{1,7}$/;
 const sanitizeCompanyId = (value: string) => value.replace(/\D/g, "").slice(0, 7);
+const sanitizeName = (value: string) => value.replace(/[^a-zA-ZÑñ\s'-]/g, "").slice(0, 50);
 
 const WORK_HOURS_PER_DAY = 8;
 const CURSOR_EPSILON = 1e-6;
@@ -694,6 +695,8 @@ const Dashboard = () => {
     setActiveNavRaw(nav);
   };
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
   const [selectedLearningPathId, setSelectedLearningPathId] = useState("all");
   const [selectedCourseId, setSelectedCourseId] = useState("all");
   const [selectedTopicId, setSelectedTopicId] = useState("all");
@@ -1362,6 +1365,16 @@ const Dashboard = () => {
     await signOut({ redirectTo: "/" });
   };
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleOpenSignOut = () => {
     setIsSignOutOpen(true);
   };
@@ -1377,7 +1390,9 @@ const Dashboard = () => {
 
   const handleProfileFieldChange = (field: string, value: string) => {
     const nextValue =
-      field === "company_id_no" ? sanitizeCompanyId(value) : value;
+      field === "company_id_no" ? sanitizeCompanyId(value)
+      : field === "first_name" || field === "last_name" ? sanitizeName(value)
+      : value;
     setProfileDraft((prev: any) => ({ ...(prev ?? {}), [field]: nextValue }));
   };
 
@@ -3611,17 +3626,15 @@ const Dashboard = () => {
           </nav>
 
           <div className="p-4 border-t border-white/5">
-            <button
-              onClick={handleOpenSignOut}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-ink-800 transition-all duration-200"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              Sign out
-            </button>
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple">
+                {userInitials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="truncate text-sm font-medium text-white">{welcomeName}</p>
+                <p className="truncate text-xs text-slate-500">Learner</p>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -3661,14 +3674,46 @@ const Dashboard = () => {
                     {user?.email ?? "Learner"}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveNav("profile")}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-slate-300 hover:text-white"
-                  title="Profile"
-                >
-                  <ProfileIcon />
-                </button>
+                {/* Avatar with dropdown */}
+                <div className="relative" ref={profileDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setProfileDropdownOpen((prev) => !prev)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors"
+                  >
+                    {userInitials}
+                  </button>
+                  {profileDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-white/10 bg-ink-800 shadow-xl overflow-hidden z-50">
+                      <div className="px-4 py-3 border-b border-white/5">
+                        <p className="text-sm font-semibold text-white">Welcome {welcomeName}!</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setProfileDropdownOpen(false); setActiveNav("profile"); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-ink-700 transition-colors"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Profile
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setProfileDropdownOpen(false); handleOpenSignOut(); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-rose-400 hover:text-rose-300 hover:bg-ink-700 transition-colors"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                          <polyline points="16 17 21 12 16 7" />
+                          <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                        Logout
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </header>

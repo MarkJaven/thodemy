@@ -91,6 +91,39 @@ const updateUser = async (req, res, next) => {
 };
 
 /**
+ * Update user profile fields (admin and superadmin).
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ * @returns {Promise<void>}
+ */
+const updateUserProfile = async (req, res, next) => {
+  try {
+    const { first_name, last_name, username } = req.body;
+    await adminUserService.updateUserProfile({
+      userId: req.params.userId,
+      first_name,
+      last_name,
+      username,
+    });
+    await auditLogService.recordAuditLog({
+      entityType: "user",
+      entityId: req.params.userId,
+      action: "profile_updated",
+      actorId: req.auth?.sub ?? null,
+      details: {
+        first_name: first_name ?? null,
+        last_name: last_name ?? null,
+        username: username ?? null,
+      },
+    });
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * List users (admin sees users only, superadmin sees all).
  * @param {import("express").Request} req
  * @param {import("express").Response} res
@@ -154,6 +187,7 @@ module.exports = {
   adminController: {
     createUser,
     updateUser,
+    updateUserProfile,
     deleteUser,
     listUsers,
     downloadUserChecklistReport,

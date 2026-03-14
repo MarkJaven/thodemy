@@ -7,6 +7,9 @@ import type { AdminUser, Role, UserProfile } from "../../../types/superAdmin";
 
 const roleOptions: Role[] = ["user", "admin"];
 
+const sanitizeName = (value: string) => value.replace(/[^a-zA-ZÑñ\s'-]/g, "").slice(0, 50);
+const sanitizeUsername = (value: string) => value.replace(/[^a-zA-Z_-]/g, "").slice(0, 30);
+
 const roleConfig: Record<Role, { color: string; bgColor: string; borderColor: string }> = {
   user: {
     color: "text-slate-300",
@@ -63,8 +66,10 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
     role: "user" as Role,
   });
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
@@ -128,6 +133,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   const resetForm = () => {
     setFormState({ ...defaultFormState });
     setActionError(null);
+    setActionSuccess(null);
   };
 
   const openCreate = () => {
@@ -144,6 +150,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       role: user.role,
     });
     setActionError(null);
+    setActionSuccess(null);
     setIsEditOpen(true);
   };
 
@@ -182,14 +189,14 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       variant: "danger",
       onConfirm: () => {
         setIsCreateOpen(false);
-        setActionError(null);
+        resetForm();
       },
     });
   };
 
   const requestCloseEditModal = () => {
     if (saving) return;
-    if (!hasEditFormChanges) {
+    if (!hasEditFormChanges || actionSuccess) {
       setIsEditOpen(false);
       return;
     }
@@ -260,6 +267,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
 
     setProfileSaving(true);
     setProfileError(null);
+    setProfileSuccess(null);
     try {
       if (Object.keys(profileUpdates).length > 0) {
         await superAdminService.updateUserProfile(selectedUser.id, profileUpdates);
@@ -268,6 +276,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
         await superAdminService.updateUserAccount(selectedUser.id, { role: profileForm.role });
       }
       setIsProfileEditing(false);
+      setProfileSuccess("Profile updated successfully.");
       await loadUsers();
     } catch (profileSaveError) {
       setProfileError(
@@ -281,6 +290,10 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   const handleCreate = async () => {
     if (!formState.email.trim()) {
       setActionError("Email is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState.email.trim())) {
+      setActionError("Enter a valid email address.");
       return;
     }
     if (!formState.username.trim()) {
@@ -315,8 +328,13 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
       setActionError("Username is required.");
       return;
     }
+    if (formState.password && formState.password.length < 8) {
+      setActionError("Password must be at least 8 characters.");
+      return;
+    }
     setSaving(true);
     setActionError(null);
+    setActionSuccess(null);
 
     try {
       await superAdminService.updateUserAccount(selectedUser.id, {
@@ -324,7 +342,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
         password: formState.password || undefined,
         role: formState.role !== selectedUser.role ? formState.role : undefined,
       });
-      setIsEditOpen(false);
+      setActionSuccess("User updated successfully.");
       await loadUsers();
     } catch (updateError) {
       setActionError(updateError instanceof Error ? updateError.message : "Unable to update user.");
@@ -335,6 +353,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
 
   const handleDelete = async () => {
     if (!selectedUser) return;
+    if (selectedUser.role === "superadmin") return;
     setSaving(true);
     setActionError(null);
     try {
@@ -435,9 +454,10 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => openDelete(user)}
-                  className={`p-2 ${user.is_active === false ? "btn-secondary" : "btn-danger"}`}
-                  title={user.is_active === false ? "Activate" : "Deactivate"}
+                  onClick={() => user.role !== "superadmin" && openDelete(user)}
+                  disabled={user.role === "superadmin"}
+                  className={`p-2 ${user.role === "superadmin" ? "btn-secondary opacity-30 cursor-not-allowed" : user.is_active === false ? "btn-secondary" : "btn-danger"}`}
+                  title={user.role === "superadmin" ? "Cannot deactivate superadmin" : user.is_active === false ? "Activate" : "Deactivate"}
                 >
                   {user.is_active === false ? (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -594,7 +614,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               </button>
               <button
                 type="button"
-                onClick={() => setIsProfileEditing(true)}
+                onClick={() => { setIsProfileEditing(true); setProfileSuccess(null); setProfileError(null); }}
                 disabled={!canEditSelectedProfile}
                 className="btn-primary"
               >
@@ -647,7 +667,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.firstName}
-                        onChange={(e) => setProfileForm((prev) => ({ ...prev, firstName: e.target.value }))}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, firstName: sanitizeName(e.target.value) }))}
                         placeholder="First name"
                         className="input"
                       />
@@ -663,7 +683,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.lastName}
-                        onChange={(e) => setProfileForm((prev) => ({ ...prev, lastName: e.target.value }))}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, lastName: sanitizeName(e.target.value) }))}
                         placeholder="Last name"
                         className="input"
                       />
@@ -685,7 +705,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.username}
-                        onChange={(e) => setProfileForm((prev) => ({ ...prev, username: e.target.value }))}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                         placeholder="Username"
                         className="input"
                       />
@@ -698,7 +718,6 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   <div className="space-y-2">
                     <label className="label">
                       Email Address
-                      <span className="ml-2 text-2xs font-normal normal-case text-slate-500">(read-only)</span>
                     </label>
                     <div className="rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-slate-300">
                       {profileForm.email || "Not set"}
@@ -770,6 +789,15 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               {profileError}
             </div>
           )}
+          {profileSuccess && (
+            <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              {profileSuccess}
+            </div>
+          )}
           {!canEditSelectedProfile && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
@@ -830,6 +858,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   value={formState.email}
                   onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))}
                   placeholder="user@example.com"
+                  autoComplete="off"
                   className="input"
                 />
               </div>
@@ -852,8 +881,9 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="text"
                   value={formState.username}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, username: e.target.value }))}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                   placeholder="johndoe"
+                  autoComplete="off"
                   className="input"
                 />
               </div>
@@ -863,6 +893,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   type="password"
                   value={formState.password}
                   onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))}
+                  autoComplete="new-password"
                   placeholder="Min. 8 characters"
                   className="input"
                 />
@@ -920,7 +951,6 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               <div className="space-y-2">
                 <label className="label">
                   Email Address
-                  <span className="ml-2 text-2xs font-normal normal-case text-slate-500">(read-only)</span>
                 </label>
                 <input
                   type="email"
@@ -948,7 +978,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="text"
                   value={formState.username}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, username: e.target.value }))}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                   className="input"
                 />
               </div>
@@ -961,6 +991,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   type="password"
                   value={formState.password}
                   onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))}
+                  autoComplete="new-password"
                   placeholder="Leave blank to keep current"
                   className="input"
                 />
@@ -973,6 +1004,15 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                   <path d="M12 8v4M12 16h.01" />
                 </svg>
                 {actionError}
+              </div>
+            )}
+            {actionSuccess && (
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+                {actionSuccess}
               </div>
             )}
           </Modal>
