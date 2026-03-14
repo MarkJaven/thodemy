@@ -7,6 +7,9 @@ import type { AdminUser, Role, UserProfile } from "../../../types/superAdmin";
 
 const roleOptions: Role[] = ["user", "admin"];
 
+const sanitizeName = (value: string) => value.replace(/[^a-zA-ZÑñ\s'-]/g, "").slice(0, 50);
+const sanitizeUsername = (value: string) => value.replace(/[^a-zA-Z_-]/g, "").slice(0, 30);
+
 const roleConfig: Record<Role, { color: string; bgColor: string; borderColor: string }> = {
   user: {
     color: "text-slate-300",
@@ -647,7 +650,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.firstName}
-                        onChange={(e) => setProfileForm((prev) => ({ ...prev, firstName: e.target.value }))}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, firstName: sanitizeName(e.target.value) }))}
                         placeholder="First name"
                         className="input"
                       />
@@ -663,7 +666,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.lastName}
-                        onChange={(e) => setProfileForm((prev) => ({ ...prev, lastName: e.target.value }))}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, lastName: sanitizeName(e.target.value) }))}
                         placeholder="Last name"
                         className="input"
                       />
@@ -685,7 +688,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.username}
-                        onChange={(e) => setProfileForm((prev) => ({ ...prev, username: e.target.value }))}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                         placeholder="Username"
                         className="input"
                       />
@@ -852,7 +855,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="text"
                   value={formState.username}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, username: e.target.value }))}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                   placeholder="johndoe"
                   className="input"
                 />
@@ -948,7 +951,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="text"
                   value={formState.username}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, username: e.target.value }))}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                   className="input"
                 />
               </div>

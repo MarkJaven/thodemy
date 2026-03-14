@@ -147,6 +147,7 @@ const getTodayDateString = () => {
 
 const COMPANY_ID_REGEX = /^\d{1,7}$/;
 const sanitizeCompanyId = (value: string) => value.replace(/\D/g, "").slice(0, 7);
+const sanitizeName = (value: string) => value.replace(/[^a-zA-ZÑñ\s'-]/g, "").slice(0, 50);
 
 type NavItem =
   | "overview"
@@ -289,7 +290,9 @@ const AdminDashboard = () => {
 
   const handleProfileFieldChange = (field: string, value: string) => {
     const nextValue =
-      field === "company_id_no" ? sanitizeCompanyId(value) : value;
+      field === "company_id_no" ? sanitizeCompanyId(value)
+      : field === "first_name" || field === "last_name" ? sanitizeName(value)
+      : value;
     setProfileDraft((prev: any) => ({ ...(prev ?? {}), [field]: nextValue }));
   };
 

@@ -225,6 +225,31 @@ const updateUser = async ({ userId, username, password, role, is_active, updated
 };
 
 /**
+ * Update user profile fields (first_name, last_name, username). Accessible by admins and superadmins.
+ * @param {{userId: string, first_name?: string|null, last_name?: string|null, username?: string|null}} payload
+ * @returns {Promise<void>}
+ */
+const updateUserProfile = async ({ userId, first_name, last_name, username }) => {
+  const updates = {};
+  if (first_name !== undefined) updates.first_name = first_name;
+  if (last_name !== undefined) updates.last_name = last_name;
+  if (username !== undefined) updates.username = username;
+
+  if (Object.keys(updates).length === 0) return;
+
+  const { error } = await supabaseAdmin.from("profiles").update(updates).eq("id", userId);
+  if (error) {
+    if (error.code === "23505") {
+      throw new ConflictError("Username already exists.");
+    }
+    throw new DatabaseError("Unable to update user profile", {
+      code: error.code,
+      details: error.message,
+    });
+  }
+};
+
+/**
  * Deactivate a user (soft delete).
  * @param {string} userId
  * @returns {Promise<void>}
@@ -294,4 +319,4 @@ const listUsers = async ({ roleFilter } = {}) => {
   return users;
 };
 
-module.exports = { adminUserService: { createUser, updateUser, deleteUser, listUsers } };
+module.exports = { adminUserService: { createUser, updateUser, updateUserProfile, deleteUser, listUsers } };
