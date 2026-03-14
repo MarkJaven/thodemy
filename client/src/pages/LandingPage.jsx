@@ -10,13 +10,21 @@ import faceFour from "../assets/images/orbit4.jpg";
 import faceFive from "../assets/images/orbit5.jpg";
 
 const navItems = [
-  { label: "Home", href: "#home" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Core Features", href: "#core-features" },
-  { label: "Governance", href: "#governance" },
-  { label: "Testimonials", href: "#testimonials" },
-  { label: "FAQ", href: "#faq" },
+  { label: "Home", sectionId: "home" },
+  { label: "How It Works", sectionId: "how-it-works" },
+  { label: "Core Features", sectionId: "core-features" },
+  { label: "Governance", sectionId: "governance" },
+  { label: "Testimonials", sectionId: "testimonials" },
+  { label: "FAQ", sectionId: "faq" },
 ];
+
+const scrollTo = (sectionId) => {
+  if (sectionId === "home") {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } else {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
+  }
+};
 
 const orbitAvatars = [
   { src: faceOne, alt: "AM", size: "440px", delay: "0s" },
@@ -436,20 +444,28 @@ const LandingPage = () => {
     <div id="home" className="min-h-screen bg-[#0B0D14] text-slate-100">
       <header className="sticky top-0 z-50 border-b border-white/5 bg-[#0B0D14]/95 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4 lg:max-w-7xl lg:px-16 xl:px-24">
-          <div className="flex shrink-0 items-center">
+          <a
+            href="/"
+            className="flex shrink-0 items-center"
+            onClick={(e) => {
+              e.preventDefault();
+              scrollTo("home");
+            }}
+          >
             <img
               src={logoThodemy}
               alt="Thodemy"
               className="h-8 w-auto origin-left scale-[2.3] sm:h-9 sm:scale-[2.4] md:h-9 md:scale-[2.0] lg:h-10 lg:scale-[2.1] xl:h-11 xl:scale-[2.4]"
             />
-          </div>
+          </a>
 
           {/* Desktop & Tablet Landscape Navigation */}
           <nav className="hidden flex-1 items-center justify-start gap-4 pl-10 md:flex md:pl-12 lg:justify-center lg:gap-6 lg:pl-0 xl:gap-7">
             {navItems.map((item) => (
               <a
                 key={item.label}
-                href={item.href}
+                href="/"
+                onClick={(e) => { e.preventDefault(); scrollTo(item.sectionId); }}
                 className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.1em] text-slate-400 transition-all duration-200 hover:text-white lg:text-xs lg:tracking-[0.15em]"
               >
                 {item.label}
@@ -510,8 +526,8 @@ const LandingPage = () => {
             {navItems.map((item, index) => (
               <a
                 key={item.label}
-                href={item.href}
-                onClick={() => setMobileMenuOpen(false)}
+                href="/"
+                onClick={(e) => { e.preventDefault(); scrollTo(item.sectionId); setMobileMenuOpen(false); }}
                 className="border-b border-white/5 py-3 text-sm font-medium uppercase tracking-[0.15em] text-slate-300 transition-colors duration-200 hover:text-white"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
@@ -569,7 +585,8 @@ const LandingPage = () => {
                 Watch a Demo
               </a>
               <a
-                href="#core-features"
+                href="/"
+                onClick={(e) => { e.preventDefault(); scrollTo("core-features"); }}
                 className="w-full rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold uppercase tracking-[0.15em] text-slate-200 transition-all duration-200 hover:bg-white/10 sm:w-auto sm:py-3.5"
               >
                 View Core Features
@@ -1139,7 +1156,8 @@ const LandingPage = () => {
                     Try It Now
                   </a>
                   <a
-                    href="#how-it-works"
+                    href="/"
+                    onClick={(e) => { e.preventDefault(); scrollTo("how-it-works"); }}
                     className="inline-flex w-full justify-center rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition-colors duration-200 hover:border-white/30 hover:text-white sm:w-fit sm:px-8 sm:py-4"
                   >
                     See the Flow
@@ -1211,28 +1229,22 @@ const LandingPage = () => {
             Internal LMS for onboarding and employee regularization.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-300 sm:gap-6 sm:text-base">
-            <a href="#home" className="transition-colors hover:text-white">
+            <a href="/" onClick={(e) => { e.preventDefault(); scrollTo("home"); }} className="transition-colors hover:text-white">
               Home
             </a>
-            <a
-              href="#core-features"
-              className="transition-colors hover:text-white"
-            >
+            <a href="/" onClick={(e) => { e.preventDefault(); scrollTo("core-features"); }} className="transition-colors hover:text-white">
               Features
             </a>
-            <a
-              href="#testimonials"
-              className="transition-colors hover:text-white"
-            >
+            <a href="/" onClick={(e) => { e.preventDefault(); scrollTo("testimonials"); }} className="transition-colors hover:text-white">
               Testimonials
             </a>
-            <a href="#faq" className="transition-colors hover:text-white">
+            <a href="/" onClick={(e) => { e.preventDefault(); scrollTo("faq"); }} className="transition-colors hover:text-white">
               FAQ
             </a>
           </div>
           <div className="h-px w-full max-w-xs bg-gradient-to-r from-transparent via-white/10 to-transparent" />
           <p className="text-xs text-slate-400 sm:text-sm">
-            © 2026 Thodemy. All rights reserved.
+            © {new Date().getFullYear()} Thodemy. All rights reserved.
           </p>
         </div>
       </footer>

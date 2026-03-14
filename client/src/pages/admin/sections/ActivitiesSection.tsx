@@ -23,7 +23,11 @@ const formatDate = (value?: string | null) => {
   if (!value) return "--";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--";
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 };
 
 const normalizeUrl = (value: string) =>
@@ -81,7 +85,9 @@ const ActivitiesSection = ({
   >([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicProgress, setTopicProgress] = useState<TopicProgress[]>([]);
-  const [topicSubmissions, setTopicSubmissions] = useState<TopicSubmission[]>([]);
+  const [topicSubmissions, setTopicSubmissions] = useState<TopicSubmission[]>(
+    [],
+  );
   const [courseCompletionRequests, setCourseCompletionRequests] = useState<
     CourseCompletionRequest[]
   >([]);
@@ -89,7 +95,9 @@ const ActivitiesSection = ({
   const [error, setError] = useState<string | null>(null);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
+    null,
+  );
   const [formState, setFormState] = useState({
     title: "",
     description: "",
@@ -99,18 +107,26 @@ const ActivitiesSection = ({
   });
   const [saving, setSaving] = useState(false);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
-  const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<string | null>(null);
-  const [updatingLPEnrollmentId, setUpdatingLPEnrollmentId] = useState<string | null>(null);
+  const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<
+    string | null
+  >(null);
+  const [updatingLPEnrollmentId, setUpdatingLPEnrollmentId] = useState<
+    string | null
+  >(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(
+    null,
+  );
   const [viewError, setViewError] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
-  const [selectedSubmission, setSelectedSubmission] = useState<TopicSubmission | null>(null);
+  const [selectedSubmission, setSelectedSubmission] =
+    useState<TopicSubmission | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
   const [selectedProjectSubmission, setSelectedProjectSubmission] =
     useState<ActivitySubmission | null>(null);
-  const [viewingSubmission, setViewingSubmission] = useState<ActivitySubmission | null>(null);
+  const [viewingSubmission, setViewingSubmission] =
+    useState<ActivitySubmission | null>(null);
   const [projectStatus, setProjectStatus] = useState("pending");
   const [projectScore, setProjectScore] = useState("");
   const [projectReviewNotes, setProjectReviewNotes] = useState("");
@@ -166,7 +182,11 @@ const ActivitiesSection = ({
       setTopicProgress(topicProgressData);
       setCourseCompletionRequests(courseCompletionData);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load projects.");
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load projects.",
+      );
     } finally {
       setLoading(false);
     }
@@ -186,7 +206,9 @@ const ActivitiesSection = ({
       setTopicSubmissions(data);
     } catch (loadError) {
       setSubmissionError(
-        loadError instanceof Error ? loadError.message : "Unable to load submissions."
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load submissions.",
       );
     } finally {
       setSubmissionsLoading(false);
@@ -245,7 +267,8 @@ const ActivitiesSection = ({
     }
     setConfirmDialog({
       title: "Discard project changes?",
-      description: "You have unsaved project changes. Leaving now will discard them.",
+      description:
+        "You have unsaved project changes. Leaving now will discard them.",
       confirmLabel: "Discard",
       variant: "danger",
       onConfirm: () => {
@@ -278,11 +301,17 @@ const ActivitiesSection = ({
       }
       setIsFormOpen(false);
       setActionSuccess(
-        selectedActivity ? "Project updated successfully." : "Project created successfully.",
+        selectedActivity
+          ? "Project updated successfully."
+          : "Project created successfully.",
       );
       await loadData();
     } catch (saveError) {
-      setActionError(saveError instanceof Error ? saveError.message : "Unable to save project.");
+      setActionError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to save project.",
+      );
     } finally {
       setSaving(false);
     }
@@ -296,7 +325,9 @@ const ActivitiesSection = ({
       variant: "danger",
       onConfirm: async () => {
         const previous = activities;
-        setActivities((prev) => prev.filter((activity) => activity.id !== activityId));
+        setActivities((prev) =>
+          prev.filter((activity) => activity.id !== activityId),
+        );
         setSaving(true);
         setActionError(null);
         setActionSuccess(null);
@@ -305,7 +336,9 @@ const ActivitiesSection = ({
           setActionSuccess("Project deleted successfully.");
         } catch (deleteError) {
           setActionError(
-            deleteError instanceof Error ? deleteError.message : "Unable to delete project.",
+            deleteError instanceof Error
+              ? deleteError.message
+              : "Unable to delete project.",
           );
           setActivities(previous);
         } finally {
@@ -323,7 +356,9 @@ const ActivitiesSection = ({
       variant: "danger",
       onConfirm: async () => {
         const previous = submissions;
-        setSubmissions((prev) => prev.filter((submission) => submission.id !== submissionId));
+        setSubmissions((prev) =>
+          prev.filter((submission) => submission.id !== submissionId),
+        );
         setSaving(true);
         setActionError(null);
         setActionSuccess(null);
@@ -332,7 +367,9 @@ const ActivitiesSection = ({
           setActionSuccess("Submission deleted successfully.");
         } catch (deleteError) {
           setActionError(
-            deleteError instanceof Error ? deleteError.message : "Unable to delete submission.",
+            deleteError instanceof Error
+              ? deleteError.message
+              : "Unable to delete submission.",
           );
           setSubmissions(previous);
         } finally {
@@ -346,7 +383,9 @@ const ActivitiesSection = ({
     setSelectedProjectSubmission(submission);
     setProjectStatus(submission.status ?? "pending");
     setProjectScore(
-      submission.score !== null && submission.score !== undefined ? String(submission.score) : ""
+      submission.score !== null && submission.score !== undefined
+        ? String(submission.score)
+        : "",
     );
     setProjectReviewNotes(submission.review_notes ?? "");
     setActionError(null);
@@ -365,18 +404,24 @@ const ActivitiesSection = ({
     }
     const now = new Date().toISOString();
     try {
-      await superAdminService.updateActivitySubmission(selectedProjectSubmission.id, {
-        status: projectStatus,
-        score: scoreValue,
-        review_notes: projectReviewNotes.trim() || null,
-        reviewed_by: user?.id ?? null,
-        reviewed_at: projectStatus !== "pending" || scoreValue !== null ? now : null,
-      });
+      await superAdminService.updateActivitySubmission(
+        selectedProjectSubmission.id,
+        {
+          status: projectStatus,
+          score: scoreValue,
+          review_notes: projectReviewNotes.trim() || null,
+          reviewed_by: user?.id ?? null,
+          reviewed_at:
+            projectStatus !== "pending" || scoreValue !== null ? now : null,
+        },
+      );
       setSelectedProjectSubmission(null);
       await loadData();
     } catch (reviewError) {
       setActionError(
-        reviewError instanceof Error ? reviewError.message : "Unable to update project."
+        reviewError instanceof Error
+          ? reviewError.message
+          : "Unable to update project.",
       );
     } finally {
       setSaving(false);
@@ -386,7 +431,9 @@ const ActivitiesSection = ({
   const handleViewSubmission = async (submission: ActivitySubmission) => {
     setViewError(null);
     try {
-      const url = await superAdminService.getActivitySubmissionUrl(submission.storage_path);
+      const url = await superAdminService.getActivitySubmissionUrl(
+        submission.storage_path,
+      );
       if (!url) {
         setViewError("No file available for this submission.");
         return;
@@ -394,7 +441,9 @@ const ActivitiesSection = ({
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (loadError) {
       setViewError(
-        loadError instanceof Error ? loadError.message : "Unable to open submission file."
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to open submission file.",
       );
     }
   };
@@ -402,21 +451,29 @@ const ActivitiesSection = ({
   const handleViewCourseProof = async (request: CourseCompletionRequest) => {
     setViewError(null);
     try {
-      const url = await superAdminService.getCourseProofUrl(request.storage_path);
+      const url = await superAdminService.getCourseProofUrl(
+        request.storage_path,
+      );
       if (!url) {
         setViewError("No file available for this proof.");
         return;
       }
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (loadError) {
-      setViewError(loadError instanceof Error ? loadError.message : "Unable to open proof file.");
+      setViewError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to open proof file.",
+      );
     }
   };
 
   const handleViewTopicSubmission = async (submission: TopicSubmission) => {
     setViewError(null);
     try {
-      const url = await topicSubmissionService.getSubmissionFileUrl(submission.id);
+      const url = await topicSubmissionService.getSubmissionFileUrl(
+        submission.id,
+      );
       if (!url) {
         setViewError("No file available for this submission.");
         return;
@@ -424,7 +481,9 @@ const ActivitiesSection = ({
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (loadError) {
       setViewError(
-        loadError instanceof Error ? loadError.message : "Unable to open submission file."
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to open submission file.",
       );
     }
   };
@@ -441,12 +500,12 @@ const ActivitiesSection = ({
       focusSection === "topic_submissions"
         ? topicSubmissionsRef.current
         : focusSection === "course_completion"
-        ? courseProofsRef.current
-        : focusSection === "learning_path_enrollments"
-        ? learningPathEnrollmentsRef.current
-        : focusSection === "course_enrollments"
-        ? courseEnrollmentsRef.current
-        : null;
+          ? courseProofsRef.current
+          : focusSection === "learning_path_enrollments"
+            ? learningPathEnrollmentsRef.current
+            : focusSection === "course_enrollments"
+              ? courseEnrollmentsRef.current
+              : null;
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -457,11 +516,16 @@ const ActivitiesSection = ({
 
   useEffect(() => {
     if (!focusSubmissionId || submissionsLoading) return;
-    const match = topicSubmissions.find((submission) => submission.id === focusSubmissionId);
+    const match = topicSubmissions.find(
+      (submission) => submission.id === focusSubmissionId,
+    );
     if (!match) return;
     openSubmissionReview(match);
     if (topicSubmissionsRef.current) {
-      topicSubmissionsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      topicSubmissionsRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     }
     if (onFocusHandled) {
       onFocusHandled();
@@ -469,29 +533,36 @@ const ActivitiesSection = ({
   }, [focusSubmissionId, submissionsLoading, topicSubmissions, onFocusHandled]);
 
   const handleSubmissionAction = async (
-    status: "completed" | "rejected" | "in_progress"
+    status: "completed" | "rejected" | "in_progress",
   ) => {
     if (!selectedSubmission) return;
     setReviewingSubmission(true);
     setActionError(null);
     try {
-      await topicSubmissionService.updateSubmissionStatus(selectedSubmission.id, {
-        status,
-        review_notes: reviewNotes.trim() || undefined,
-      });
+      await topicSubmissionService.updateSubmissionStatus(
+        selectedSubmission.id,
+        {
+          status,
+          review_notes: reviewNotes.trim() || undefined,
+        },
+      );
       setSelectedSubmission(null);
       setReviewNotes("");
       await loadTopicSubmissions();
     } catch (updateError) {
       setActionError(
-        updateError instanceof Error ? updateError.message : "Unable to update submission."
+        updateError instanceof Error
+          ? updateError.message
+          : "Unable to update submission.",
       );
     } finally {
       setReviewingSubmission(false);
     }
   };
 
-  const handleApproveCourseRequest = async (request: CourseCompletionRequest) => {
+  const handleApproveCourseRequest = async (
+    request: CourseCompletionRequest,
+  ) => {
     setSaving(true);
     setActionError(null);
     try {
@@ -503,14 +574,18 @@ const ActivitiesSection = ({
       await loadData();
     } catch (approveError) {
       setActionError(
-        approveError instanceof Error ? approveError.message : "Unable to approve proof."
+        approveError instanceof Error
+          ? approveError.message
+          : "Unable to approve proof.",
       );
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRejectCourseRequest = async (request: CourseCompletionRequest) => {
+  const handleRejectCourseRequest = async (
+    request: CourseCompletionRequest,
+  ) => {
     setSaving(true);
     setActionError(null);
     try {
@@ -522,26 +597,33 @@ const ActivitiesSection = ({
       await loadData();
     } catch (rejectError) {
       setActionError(
-        rejectError instanceof Error ? rejectError.message : "Unable to reject proof."
+        rejectError instanceof Error
+          ? rejectError.message
+          : "Unable to reject proof.",
       );
     } finally {
       setSaving(false);
     }
   };
 
-  const handleEnrollmentAction = async (enrollmentId: string, status: string) => {
+  const handleEnrollmentAction = async (
+    enrollmentId: string,
+    status: string,
+  ) => {
     setUpdatingEnrollmentId(enrollmentId);
     setActionError(null);
     try {
       await superAdminService.updateEnrollmentStatus(enrollmentId, { status });
       setEnrollments((prev) =>
         prev.map((entry) =>
-          entry.id === enrollmentId ? { ...entry, status } : entry
-        )
+          entry.id === enrollmentId ? { ...entry, status } : entry,
+        ),
       );
     } catch (updateError) {
       setActionError(
-        updateError instanceof Error ? updateError.message : "Unable to update enrollment."
+        updateError instanceof Error
+          ? updateError.message
+          : "Unable to update enrollment.",
       );
     } finally {
       setUpdatingEnrollmentId(null);
@@ -550,20 +632,25 @@ const ActivitiesSection = ({
 
   const handleLearningPathEnrollmentAction = async (
     enrollmentId: string,
-    status: string
+    status: string,
   ) => {
     setUpdatingLPEnrollmentId(enrollmentId);
     setActionError(null);
     try {
-      await superAdminService.updateLearningPathEnrollmentStatus(enrollmentId, status);
+      await superAdminService.updateLearningPathEnrollmentStatus(
+        enrollmentId,
+        status,
+      );
       setLearningPathEnrollments((prev) =>
         prev.map((entry) =>
-          entry.id === enrollmentId ? { ...entry, status } : entry
-        )
+          entry.id === enrollmentId ? { ...entry, status } : entry,
+        ),
       );
     } catch (updateError) {
       setActionError(
-        updateError instanceof Error ? updateError.message : "Unable to update enrollment."
+        updateError instanceof Error
+          ? updateError.message
+          : "Unable to update enrollment.",
       );
     } finally {
       setUpdatingLPEnrollmentId(null);
@@ -576,10 +663,10 @@ const ActivitiesSection = ({
         enrollment,
         user: users.find((entry) => entry.id === enrollment.user_id),
         learningPath: learningPaths.find(
-          (entry) => entry.id === enrollment.learning_path_id
+          (entry) => entry.id === enrollment.learning_path_id,
         ),
       })),
-    [learningPathEnrollments, users, learningPaths]
+    [learningPathEnrollments, users, learningPaths],
   );
 
   const learningPathEnrollmentColumns = useMemo(
@@ -627,7 +714,9 @@ const ActivitiesSection = ({
         header: "Enrolled",
         render: (row: (typeof learningPathEnrollmentRows)[number]) => (
           <span className="text-xs text-slate-400">
-            {formatDate(row.enrollment.enrolled_at ?? row.enrollment.created_at)}
+            {formatDate(
+              row.enrollment.enrolled_at ?? row.enrollment.created_at,
+            )}
           </span>
         ),
       },
@@ -647,7 +736,10 @@ const ActivitiesSection = ({
                   <button
                     type="button"
                     onClick={() =>
-                      handleLearningPathEnrollmentAction(row.enrollment.id, "approved")
+                      handleLearningPathEnrollmentAction(
+                        row.enrollment.id,
+                        "approved",
+                      )
                     }
                     disabled={isUpdating}
                     className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50"
@@ -657,7 +749,10 @@ const ActivitiesSection = ({
                   <button
                     type="button"
                     onClick={() =>
-                      handleLearningPathEnrollmentAction(row.enrollment.id, "rejected")
+                      handleLearningPathEnrollmentAction(
+                        row.enrollment.id,
+                        "rejected",
+                      )
                     }
                     disabled={isUpdating}
                     className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
@@ -670,7 +765,10 @@ const ActivitiesSection = ({
                 <button
                   type="button"
                   onClick={() =>
-                    handleLearningPathEnrollmentAction(row.enrollment.id, "removed")
+                    handleLearningPathEnrollmentAction(
+                      row.enrollment.id,
+                      "removed",
+                    )
                   }
                   disabled={isUpdating}
                   className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
@@ -683,7 +781,11 @@ const ActivitiesSection = ({
         },
       },
     ],
-    [learningPathEnrollmentRows, updatingLPEnrollmentId, handleLearningPathEnrollmentAction]
+    [
+      learningPathEnrollmentRows,
+      updatingLPEnrollmentId,
+      handleLearningPathEnrollmentAction,
+    ],
   );
 
   const activityColumns = useMemo(
@@ -702,7 +804,11 @@ const ActivitiesSection = ({
         key: "course",
         header: "Course",
         render: (activity: Activity) => (
-          <span className="text-xs text-slate-400">{activity.course_id ?? "Unassigned"}</span>
+          <span className="text-xs text-slate-400">
+            {activity.course_id
+              ? (courses.find((c) => c.id === activity.course_id)?.title ?? "Unassigned")
+              : "Unassigned"}
+          </span>
         ),
       },
       {
@@ -725,6 +831,7 @@ const ActivitiesSection = ({
           const statusConfig: Record<string, string> = {
             active: "badge-success",
             archived: "badge-warning",
+            inactive: "badge-default",
           };
           return (
             <span className={statusConfig[status] || "badge-default"}>
@@ -744,7 +851,14 @@ const ActivitiesSection = ({
                 onClick={() => openEdit(activity)}
                 className="btn-secondary flex items-center gap-1.5"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
@@ -756,7 +870,14 @@ const ActivitiesSection = ({
               onClick={() => handleDelete(activity.id)}
               className="btn-danger flex items-center gap-1.5"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
               Delete
@@ -765,7 +886,7 @@ const ActivitiesSection = ({
         ),
       },
     ],
-    []
+    [openEdit, users],
   );
 
   const submissionColumns = useMemo(
@@ -781,7 +902,9 @@ const ActivitiesSection = ({
         key: "user",
         header: "User",
         render: (submission: ActivitySubmission) => {
-          const submitter = users.find((entry) => entry.id === submission.user_id);
+          const submitter = users.find(
+            (entry) => entry.id === submission.user_id,
+          );
           return (
             <span className="text-xs text-slate-300">
               {submitter?.email ?? submission.user_id}
@@ -801,7 +924,11 @@ const ActivitiesSection = ({
             resubmit: "badge-warning",
             rejected: "badge-error",
           };
-          return <span className={statusStyles[status] || "badge-default"}>{status}</span>;
+          return (
+            <span className={statusStyles[status] || "badge-default"}>
+              {status}
+            </span>
+          );
         },
       },
       {
@@ -832,7 +959,14 @@ const ActivitiesSection = ({
               onClick={() => setViewingSubmission(submission)}
               className="btn-ghost flex items-center gap-1.5"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                 <circle cx="12" cy="12" r="3" />
               </svg>
@@ -843,7 +977,14 @@ const ActivitiesSection = ({
               onClick={() => openProjectReview(submission)}
               className="btn-secondary flex items-center gap-1.5"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M12 20h9" />
                 <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
               </svg>
@@ -854,7 +995,14 @@ const ActivitiesSection = ({
               onClick={() => handleDeleteSubmission(submission.id)}
               className="btn-danger flex items-center gap-1.5"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
               Delete
@@ -863,12 +1011,12 @@ const ActivitiesSection = ({
         ),
       },
     ],
-    [handleViewSubmission, openProjectReview]
+    [handleViewSubmission, openProjectReview],
   );
 
   const progressRows = useMemo(() => {
     const activeEnrollments = enrollments.filter(
-      (entry) => !["removed", "rejected"].includes(entry.status ?? "")
+      (entry) => !["removed", "rejected"].includes(entry.status ?? ""),
     );
     return activeEnrollments.map((enrollment) => {
       const course = courses.find((item) => item.id === enrollment.course_id);
@@ -878,8 +1026,10 @@ const ActivitiesSection = ({
       const completed = courseTopics.filter(
         (topic) =>
           topicProgress.find(
-            (entry) => entry.user_id === enrollment.user_id && entry.topic_id === topic.id
-          )?.status === "completed"
+            (entry) =>
+              entry.user_id === enrollment.user_id &&
+              entry.topic_id === topic.id,
+          )?.status === "completed",
       ).length;
       const total = courseTopics.length;
       const completion = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -900,7 +1050,9 @@ const ActivitiesSection = ({
         key: "user",
         header: "User",
         render: (row: (typeof progressRows)[number]) => {
-          const profile = users.find((entry) => entry.id === row.enrollment.user_id);
+          const profile = users.find(
+            (entry) => entry.id === row.enrollment.user_id,
+          );
           return (
             <span className="text-xs text-slate-300">
               {profile?.email ?? row.enrollment.user_id}
@@ -912,7 +1064,9 @@ const ActivitiesSection = ({
         key: "course",
         header: "Course",
         render: (row: (typeof progressRows)[number]) => (
-          <span className="text-xs text-slate-300">{row.course?.title ?? "Unknown course"}</span>
+          <span className="text-xs text-slate-300">
+            {row.course?.title ?? "Unknown course"}
+          </span>
         ),
       },
       {
@@ -959,7 +1113,9 @@ const ActivitiesSection = ({
                 <>
                   <button
                     type="button"
-                    onClick={() => handleEnrollmentAction(row.enrollment.id, "approved")}
+                    onClick={() =>
+                      handleEnrollmentAction(row.enrollment.id, "approved")
+                    }
                     disabled={isUpdating}
                     className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50"
                   >
@@ -967,7 +1123,9 @@ const ActivitiesSection = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleEnrollmentAction(row.enrollment.id, "rejected")}
+                    onClick={() =>
+                      handleEnrollmentAction(row.enrollment.id, "rejected")
+                    }
                     disabled={isUpdating}
                     className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
                   >
@@ -978,7 +1136,9 @@ const ActivitiesSection = ({
               {isActive && (
                 <button
                   type="button"
-                  onClick={() => handleEnrollmentAction(row.enrollment.id, "removed")}
+                  onClick={() =>
+                    handleEnrollmentAction(row.enrollment.id, "removed")
+                  }
                   disabled={isUpdating}
                   className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
                 >
@@ -990,7 +1150,7 @@ const ActivitiesSection = ({
         },
       },
     ],
-    [progressRows, users, updatingEnrollmentId]
+    [progressRows, users, updatingEnrollmentId],
   );
 
   const topicSubmissionRows = useMemo(
@@ -1000,7 +1160,7 @@ const ActivitiesSection = ({
         topic: topics.find((entry) => entry.id === submission.topic_id),
         user: users.find((entry) => entry.id === submission.user_id),
       })),
-    [topicSubmissions, topics, users]
+    [topicSubmissions, topics, users],
   );
 
   const topicSubmissionColumns = useMemo(
@@ -1051,7 +1211,9 @@ const ActivitiesSection = ({
         header: "Submitted",
         render: (row: (typeof topicSubmissionRows)[number]) => (
           <span className="text-xs text-slate-400">
-            {formatDate(row.submission.submitted_at ?? row.submission.created_at)}
+            {formatDate(
+              row.submission.submitted_at ?? row.submission.created_at,
+            )}
           </span>
         ),
       },
@@ -1078,12 +1240,15 @@ const ActivitiesSection = ({
         ),
       },
     ],
-    [topicSubmissionRows]
+    [topicSubmissionRows],
   );
 
   const pendingCourseCompletionRequests = useMemo(
-    () => courseCompletionRequests.filter((request) => request.status === "pending"),
-    [courseCompletionRequests]
+    () =>
+      courseCompletionRequests.filter(
+        (request) => request.status === "pending",
+      ),
+    [courseCompletionRequests],
   );
 
   const courseCompletionColumns = useMemo(
@@ -1093,7 +1258,8 @@ const ActivitiesSection = ({
         header: "User",
         render: (request: CourseCompletionRequest) => (
           <span className="text-xs text-slate-300">
-            {users.find((entry) => entry.id === request.user_id)?.email ?? request.user_id}
+            {users.find((entry) => entry.id === request.user_id)?.email ??
+              request.user_id}
           </span>
         ),
       },
@@ -1102,8 +1268,8 @@ const ActivitiesSection = ({
         header: "Learning Path",
         render: (request: CourseCompletionRequest) => (
           <span className="text-xs text-slate-300">
-            {learningPaths.find((path) => path.id === request.learning_path_id)?.title ??
-              request.learning_path_id}
+            {learningPaths.find((path) => path.id === request.learning_path_id)
+              ?.title ?? request.learning_path_id}
           </span>
         ),
       },
@@ -1112,7 +1278,8 @@ const ActivitiesSection = ({
         header: "Course",
         render: (request: CourseCompletionRequest) => (
           <span className="text-xs text-slate-300">
-            {courses.find((course) => course.id === request.course_id)?.title ?? request.course_id}
+            {courses.find((course) => course.id === request.course_id)?.title ??
+              request.course_id}
           </span>
         ),
       },
@@ -1157,7 +1324,7 @@ const ActivitiesSection = ({
         ),
       },
     ],
-    [users, courses, learningPaths, saving]
+    [users, courses, learningPaths, saving],
   );
 
   if (loading) {
@@ -1174,7 +1341,9 @@ const ActivitiesSection = ({
         <>
           <div ref={learningPathEnrollmentsRef} className="space-y-4">
             <div>
-              <h2 className="font-display text-2xl text-white">Learning path enrollments</h2>
+              <h2 className="font-display text-2xl text-white">
+                Learning path enrollments
+              </h2>
               <p className="text-sm text-slate-300">
                 Review users who requested access via learning path code.
               </p>
@@ -1188,8 +1357,12 @@ const ActivitiesSection = ({
 
           <div ref={courseEnrollmentsRef} className="space-y-4">
             <div>
-              <h2 className="font-display text-2xl text-white">Course progress</h2>
-              <p className="text-sm text-slate-300">Track enrollment progress by user.</p>
+              <h2 className="font-display text-2xl text-white">
+                Course progress
+              </h2>
+              <p className="text-sm text-slate-300">
+                Track enrollment progress by user.
+              </p>
             </div>
             <DataTable
               columns={progressColumns}
@@ -1214,18 +1387,33 @@ const ActivitiesSection = ({
               onClick={openCreate}
               className="btn-primary flex items-center gap-2"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M12 5v14M5 12h14" />
               </svg>
               New Project
             </button>
           </div>
 
-          <DataTable columns={activityColumns} data={activities} emptyMessage="No projects yet." />
+          <DataTable
+            columns={activityColumns}
+            data={activities}
+            emptyMessage="No projects yet."
+          />
 
           <div>
-            <h3 className="font-display text-xl text-white">Project submissions</h3>
-            <p className="text-sm text-slate-400">Review files uploaded by learners.</p>
+            <h3 className="font-display text-xl text-white">
+              Project submissions
+            </h3>
+            <p className="text-sm text-slate-400">
+              Review files uploaded by learners.
+            </p>
             <div className="mt-4">
               <DataTable
                 columns={submissionColumns}
@@ -1241,7 +1429,9 @@ const ActivitiesSection = ({
         <>
           <div ref={topicSubmissionsRef} className="space-y-3">
             <div>
-              <h3 className="font-display text-xl text-white">Topic submissions</h3>
+              <h3 className="font-display text-xl text-white">
+                Topic submissions
+              </h3>
               <p className="text-sm text-slate-400">
                 Review learner-uploaded certificates and mark completion status.
               </p>
@@ -1252,7 +1442,10 @@ const ActivitiesSection = ({
                 <select
                   value={submissionFilters.status}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({ ...prev, status: event.target.value }))
+                    setSubmissionFilters((prev) => ({
+                      ...prev,
+                      status: event.target.value,
+                    }))
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 >
@@ -1268,7 +1461,10 @@ const ActivitiesSection = ({
                 <select
                   value={submissionFilters.topicId}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({ ...prev, topicId: event.target.value }))
+                    setSubmissionFilters((prev) => ({
+                      ...prev,
+                      topicId: event.target.value,
+                    }))
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 >
@@ -1285,7 +1481,10 @@ const ActivitiesSection = ({
                 <select
                   value={submissionFilters.userId}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({ ...prev, userId: event.target.value }))
+                    setSubmissionFilters((prev) => ({
+                      ...prev,
+                      userId: event.target.value,
+                    }))
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 >
@@ -1303,7 +1502,10 @@ const ActivitiesSection = ({
                   type="date"
                   value={submissionFilters.from}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({ ...prev, from: event.target.value }))
+                    setSubmissionFilters((prev) => ({
+                      ...prev,
+                      from: event.target.value,
+                    }))
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 />
@@ -1314,7 +1516,10 @@ const ActivitiesSection = ({
                   type="date"
                   value={submissionFilters.to}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({ ...prev, to: event.target.value }))
+                    setSubmissionFilters((prev) => ({
+                      ...prev,
+                      to: event.target.value,
+                    }))
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 />
@@ -1329,12 +1534,16 @@ const ActivitiesSection = ({
                 emptyMessage="No topic submissions yet."
               />
             )}
-            {submissionError && <p className="text-xs text-rose-200">{submissionError}</p>}
+            {submissionError && (
+              <p className="text-xs text-rose-200">{submissionError}</p>
+            )}
           </div>
 
           <div ref={courseProofsRef} className="space-y-3">
             <div>
-              <h3 className="font-display text-xl text-white">Course completion proofs</h3>
+              <h3 className="font-display text-xl text-white">
+                Course completion proofs
+              </h3>
               <p className="text-sm text-slate-400">
                 Review uploaded course proofs before unlocking the next course.
               </p>
@@ -1388,12 +1597,18 @@ const ActivitiesSection = ({
         {selectedProjectSubmission && (
           <div className="space-y-4 text-sm text-slate-300">
             <div>
-              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Project</p>
-              <p className="font-semibold text-white">{selectedProjectSubmission.title}</p>
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                Project
+              </p>
+              <p className="font-semibold text-white">
+                {selectedProjectSubmission.title}
+              </p>
             </div>
             {selectedProjectSubmission.github_url && (
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">GitHub</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  GitHub
+                </p>
                 <a
                   href={normalizeUrl(selectedProjectSubmission.github_url)}
                   target="_blank"
@@ -1406,7 +1621,9 @@ const ActivitiesSection = ({
             )}
             {selectedProjectSubmission.description && (
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Description</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Description
+                </p>
                 <p>{selectedProjectSubmission.description}</p>
               </div>
             )}
@@ -1476,25 +1693,35 @@ const ActivitiesSection = ({
         {viewingSubmission && (
           <div className="space-y-4 text-sm text-slate-300">
             <div>
-              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Project</p>
-              <p className="font-semibold text-white">{viewingSubmission.title}</p>
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                Project
+              </p>
+              <p className="font-semibold text-white">
+                {viewingSubmission.title}
+              </p>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Submitted by</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Submitted by
+                </p>
                 <p className="text-white">
-                  {users.find((entry) => entry.id === viewingSubmission.user_id)?.email ??
-                    viewingSubmission.user_id}
+                  {users.find((entry) => entry.id === viewingSubmission.user_id)
+                    ?.email ?? viewingSubmission.user_id}
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Date</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Date
+                </p>
                 <p>{formatDate(viewingSubmission.created_at)}</p>
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Status</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Status
+                </p>
                 <span
                   className={`mt-1 inline-block ${
                     {
@@ -1509,29 +1736,45 @@ const ActivitiesSection = ({
                   {viewingSubmission.status ?? "pending"}
                 </span>
               </div>
-              {(viewingSubmission.score !== null && viewingSubmission.score !== undefined) && (
-                <div>
-                  <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Score</p>
-                  <p className="text-white">{viewingSubmission.score}</p>
-                </div>
-              )}
+              {viewingSubmission.score !== null &&
+                viewingSubmission.score !== undefined && (
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                      Score
+                    </p>
+                    <p className="text-white">{viewingSubmission.score}</p>
+                  </div>
+                )}
             </div>
             {viewingSubmission.description && (
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Description</p>
-                <p className="mt-1 whitespace-pre-wrap">{viewingSubmission.description}</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Description
+                </p>
+                <p className="mt-1 whitespace-pre-wrap">
+                  {viewingSubmission.description}
+                </p>
               </div>
             )}
             {viewingSubmission.github_url && (
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">GitHub link</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  GitHub link
+                </p>
                 <a
                   href={normalizeUrl(viewingSubmission.github_url)}
                   target="_blank"
                   rel="noreferrer"
                   className="mt-1 inline-flex items-center gap-1.5 text-accent-purple hover:underline"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
                     <path d="M15 3h6v6" />
                     <path d="M10 14L21 3" />
@@ -1542,7 +1785,9 @@ const ActivitiesSection = ({
             )}
             {viewingSubmission.file_name && (
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Uploaded file</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Uploaded file
+                </p>
                 <div className="mt-2 flex items-center gap-3">
                   <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300">
                     {viewingSubmission.file_name}
@@ -1553,7 +1798,14 @@ const ActivitiesSection = ({
                       onClick={() => handleViewSubmission(viewingSubmission)}
                       className="btn-ghost flex items-center gap-1.5"
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
                         <path d="M15 3h6v6" />
                         <path d="M10 14L21 3" />
@@ -1566,8 +1818,12 @@ const ActivitiesSection = ({
             )}
             {viewingSubmission.review_notes && (
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Admin feedback</p>
-                <p className="mt-1 whitespace-pre-wrap">{viewingSubmission.review_notes}</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Admin feedback
+                </p>
+                <p className="mt-1 whitespace-pre-wrap">
+                  {viewingSubmission.review_notes}
+                </p>
               </div>
             )}
           </div>
@@ -1595,9 +1851,24 @@ const ActivitiesSection = ({
             >
               {saving ? (
                 <>
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
                   </svg>
                   Saving...
                 </>
@@ -1614,7 +1885,9 @@ const ActivitiesSection = ({
             <input
               type="text"
               value={formState.title}
-              onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
+              onChange={(event) =>
+                setFormState((prev) => ({ ...prev, title: event.target.value }))
+              }
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             />
           </label>
@@ -1623,7 +1896,10 @@ const ActivitiesSection = ({
             <textarea
               value={formState.description}
               onChange={(event) =>
-                setFormState((prev) => ({ ...prev, description: event.target.value }))
+                setFormState((prev) => ({
+                  ...prev,
+                  description: event.target.value,
+                }))
               }
               rows={3}
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
@@ -1633,7 +1909,12 @@ const ActivitiesSection = ({
             Course
             <select
               value={formState.course_id}
-              onChange={(event) => setFormState((prev) => ({ ...prev, course_id: event.target.value }))}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  course_id: event.target.value,
+                }))
+              }
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             >
               <option value="">Unassigned</option>
@@ -1649,7 +1930,10 @@ const ActivitiesSection = ({
             <select
               value={formState.user_id}
               onChange={(event) =>
-                setFormState((prev) => ({ ...prev, user_id: event.target.value }))
+                setFormState((prev) => ({
+                  ...prev,
+                  user_id: event.target.value,
+                }))
               }
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             >
@@ -1665,22 +1949,32 @@ const ActivitiesSection = ({
             Status
             <select
               value={formState.status}
-              onChange={(event) => setFormState((prev) => ({ ...prev, status: event.target.value }))}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  status: event.target.value,
+                }))
+              }
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             >
               <option value="active">active</option>
+              <option value="inactive">inactive</option>
               <option value="archived">archived</option>
             </select>
           </label>
         </div>
-        {actionError && <p className="mt-4 text-xs text-rose-200">{actionError}</p>}
+        {actionError && (
+          <p className="mt-4 text-xs text-rose-200">{actionError}</p>
+        )}
       </Modal>
 
       <Modal
         isOpen={Boolean(selectedSubmission)}
         title="Review topic submission"
         description="Verify the learner's proof and update their completion status."
-        onClose={() => (reviewingSubmission ? null : setSelectedSubmission(null))}
+        onClose={() =>
+          reviewingSubmission ? null : setSelectedSubmission(null)
+        }
         footer={
           <>
             <button
@@ -1721,10 +2015,12 @@ const ActivitiesSection = ({
           <div className="space-y-4 text-sm text-slate-300">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Topic</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Topic
+                </p>
                 <p className="font-semibold text-white">
-                  {topics.find((t) => t.id === selectedSubmission.topic_id)?.title ??
-                    selectedSubmission.topic_id}
+                  {topics.find((t) => t.id === selectedSubmission.topic_id)
+                    ?.title ?? selectedSubmission.topic_id}
                 </p>
               </div>
               <button
@@ -1737,20 +2033,31 @@ const ActivitiesSection = ({
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">User</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  User
+                </p>
                 <p>
-                  {users.find((u) => u.id === selectedSubmission.user_id)?.email ??
-                    selectedSubmission.user_id}
+                  {users.find((u) => u.id === selectedSubmission.user_id)
+                    ?.email ?? selectedSubmission.user_id}
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Submitted</p>
-                <p>{formatDate(selectedSubmission.submitted_at ?? selectedSubmission.created_at)}</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Submitted
+                </p>
+                <p>
+                  {formatDate(
+                    selectedSubmission.submitted_at ??
+                      selectedSubmission.created_at,
+                  )}
+                </p>
               </div>
             </div>
             {selectedSubmission.message && (
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Message</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  Message
+                </p>
                 <p>{selectedSubmission.message}</p>
               </div>
             )}
