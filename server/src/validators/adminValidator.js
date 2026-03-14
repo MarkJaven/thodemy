@@ -40,8 +40,44 @@ const validateUpdateUser = [
   }),
 ];
 
+const validateUpdateUserProfile = [
+  body("first_name")
+    .optional({ nullable: true })
+    .custom((val) => val === null || typeof val === "string")
+    .withMessage("first_name must be a string or null.")
+    .bail()
+    .if((val) => val !== null)
+    .trim()
+    .isLength({ max: 50 })
+    .withMessage("First name must be at most 50 characters."),
+  body("last_name")
+    .optional({ nullable: true })
+    .custom((val) => val === null || typeof val === "string")
+    .withMessage("last_name must be a string or null.")
+    .bail()
+    .if((val) => val !== null)
+    .trim()
+    .isLength({ max: 50 })
+    .withMessage("Last name must be at most 50 characters."),
+  body("username")
+    .optional({ nullable: true })
+    .custom((val) => val === null || typeof val === "string")
+    .withMessage("username must be a string or null.")
+    .bail()
+    .if((val) => val !== null)
+    .trim()
+    .isLength({ min: 1, max: 30 })
+    .withMessage("Username must be between 1 and 30 characters."),
+  body().custom((value) => {
+    if (!value || (value.first_name === undefined && value.last_name === undefined && value.username === undefined)) {
+      throw new Error("Provide at least one field to update.");
+    }
+    return true;
+  }),
+];
+
 const validateUserIdParam = [
   param("userId").isUUID().withMessage("User id must be a valid UUID."),
 ];
 
-module.exports = { validateCreateUser, validateUpdateUser, validateUserIdParam };
+module.exports = { validateCreateUser, validateUpdateUser, validateUpdateUserProfile, validateUserIdParam };

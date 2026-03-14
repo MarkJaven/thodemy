@@ -36,7 +36,8 @@
       "Bash(npm run dev:*)",
       "Bash(git checkout:*)",
       "Bash(xxd:*)",
-      "Bash(python3 -c:*)"
+      "Bash(python3 -c:*)",
+      "Read(//c/Users/ANDREW/OneDrive - Systems and Software Consulting Group, Inc/Documents/ThodemyProject/thodemy/server/src/**)"
     ]
   }
 }
