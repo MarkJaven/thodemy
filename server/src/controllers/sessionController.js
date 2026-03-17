@@ -108,7 +108,7 @@ const requestDeviceApproval = async (req, res, next) => {
     const userId = req.auth.sub;
     const { data: activeSession, error: sessionError } = await supabaseAdmin
       .from("user_sessions")
-      .select("session_token, device_info, is_active")
+      .select("session_token, device_info, is_active, last_activity_at")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -118,7 +118,12 @@ const requestDeviceApproval = async (req, res, next) => {
       });
     }
 
-    if (!activeSession || activeSession.is_active === false || activeSession.session_token === deviceId) {
+    const STALE_SESSION_MS = 20 * 60 * 1000; // 20 minutes
+    const isStale = activeSession?.last_activity_at
+      ? Date.now() - new Date(activeSession.last_activity_at).getTime() > STALE_SESSION_MS
+      : false;
+
+    if (!activeSession || activeSession.is_active === false || activeSession.session_token === deviceId || isStale) {
       return sendSuccess(res, {
         data: { status: "approved", requestId: null },
       });
