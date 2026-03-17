@@ -40,15 +40,23 @@ const deactivateCurrentSession = async (req, res, next) => {
       throw new BadRequestError("deviceId is required");
     }
 
-    const { error } = await supabaseAdmin
+    // deactivateBefore: only deactivate if last_activity_at <= this timestamp.
+    // This prevents a race condition where createSession on the new page has already
+    // refreshed last_activity_at to a newer time (e.g. F5 refresh), making the
+    // beforeunload deactivation a no-op.
+    const deactivateBefore = req.body?.deactivateBefore;
+
+    let query = supabaseAdmin
       .from("user_sessions")
-      .update({
-        is_active: false,
-        last_activity_at: new Date().toISOString(),
-      })
+      .update({ is_active: false, last_activity_at: new Date().toISOString() })
       .eq("user_id", req.auth.sub)
       .eq("session_token", deviceId);
 
+    if (deactivateBefore) {
+      query = query.lte("last_activity_at", deactivateBefore);
+    }
+
+    const { error } = await query;
     if (error) {
       throw new ExternalServiceError("Unable to deactivate current session", {
         details: error.message,
@@ -118,7 +126,7 @@ const requestDeviceApproval = async (req, res, next) => {
       });
     }
 
-    const STALE_SESSION_MS = 20 * 60 * 1000; // 20 minutes
+    const STALE_SESSION_MS = 3 * 60 * 1000; // 3 minutes
     const isStale = activeSession?.last_activity_at
       ? Date.now() - new Date(activeSession.last_activity_at).getTime() > STALE_SESSION_MS
       : false;
@@ -247,7 +255,7 @@ const resolveDeviceApproval = async (req, res, next) => {
  */
 const getDeviceApprovalStatus = async (req, res, next) => {
   try {
-    const requestId = req.params.requestId;
+    const { requestId } = req.params;
     if (!requestId) {
       throw new BadRequestError("requestId is required");
     }

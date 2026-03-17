@@ -155,8 +155,6 @@ const AuthPage = () => {
       setRoleCheckStatus("idle");
       setLoadingTarget(null);
 
-      // Flag so beforeunload knows this is an in-app navigation, not a tab close
-      sessionStorage.setItem("thodemy_app_nav", "1");
       if (role === "superadmin") {
         window.location.replace("/super-admin");
       } else if (role === "admin") {
