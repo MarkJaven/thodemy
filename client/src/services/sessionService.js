@@ -223,7 +223,7 @@ export const sessionService = {
   },
 
   async isCurrentSessionActive(userId) {
-    if (!supabase || !userId) return false;
+    if (!supabase || !userId) return true;
     const deviceToken = getDeviceId();
     try {
       const { data, error } = await supabase
@@ -231,11 +231,12 @@ export const sessionService = {
         .select("session_token, is_active")
         .eq("user_id", userId)
         .maybeSingle();
-      if (error || !data) return false;
+      if (error) return true; // can't verify, allow
+      if (!data) return true; // no record = no conflict = allow
       return data.is_active !== false && data.session_token === deviceToken;
     } catch (error) {
       console.error("Error checking current session:", error);
-      return false;
+      return true;
     }
   },
 
