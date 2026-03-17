@@ -222,18 +222,25 @@ export const sessionService = {
     }
   },
 
-  async isCurrentSessionActive(userId) {
+  // checkStaleness=true: also reject if heartbeat hasn't run for >3 min (fresh browser open after close)
+  async isCurrentSessionActive(userId, checkStaleness = false) {
     if (!supabase || !userId) return true;
     const deviceToken = getDeviceId();
     try {
       const { data, error } = await supabase
         .from("user_sessions")
-        .select("session_token, is_active")
+        .select("session_token, is_active, last_activity_at")
         .eq("user_id", userId)
         .maybeSingle();
       if (error) return true; // can't verify, allow
       if (!data) return true; // no record = no conflict = allow
-      return data.is_active !== false && data.session_token === deviceToken;
+      if (data.is_active === false || data.session_token !== deviceToken) return false;
+      if (checkStaleness) {
+        const STALE_MS = 3 * 60 * 1000; // must match server
+        const lastActivity = new Date(data.last_activity_at).getTime();
+        if (Date.now() - lastActivity > STALE_MS) return false;
+      }
+      return true;
     } catch (error) {
       console.error("Error checking current session:", error);
       return true;

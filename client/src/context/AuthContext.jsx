@@ -219,11 +219,11 @@ export const AuthProvider = ({ children }) => {
         const authUser = currentSession?.user ?? null;
         if (authUser) {
           if (wasRefresh) {
-            // Page was refreshed — beforeunload deactivated the session, recreate it
+            // Page was refreshed or navigated — keep session alive
             await sessionService.createSession(authUser.id).catch(() => {});
           } else {
-            // New tab open or returning after tab close — verify session is still active
-            const sessionActive = await sessionService.isCurrentSessionActive(authUser.id);
+            // New tab open or returning after tab close — verify session is still active + not stale
+            const sessionActive = await sessionService.isCurrentSessionActive(authUser.id, true);
             if (!isMounted) return;
             if (!sessionActive) {
               clearLocalAuthSession();
