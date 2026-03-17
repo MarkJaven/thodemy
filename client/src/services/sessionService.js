@@ -238,6 +238,20 @@ export const sessionService = {
       return false;
     }
   },
+
+  async heartbeat(userId) {
+    if (!supabase || !userId) return;
+    const deviceToken = getDeviceId();
+    try {
+      await supabase
+        .from("user_sessions")
+        .update({ last_activity_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .eq("session_token", deviceToken);
+    } catch {
+      // ignore heartbeat failures
+    }
+  },
 };
 
 export { DEVICE_ID_KEY };

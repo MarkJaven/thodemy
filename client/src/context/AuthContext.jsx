@@ -8,6 +8,10 @@ import { getPusher } from "../lib/pusherClient";
 const AuthContext = createContext(null);
 
 const VERIFY_COOLDOWN_MS = 15000;
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  `${window.location.protocol}//${window.location.hostname}:5000`;
 const SESSION_DEACTIVATE_TIMEOUT_MS = 2500;
 const forcedSignOutLock = { value: false };
 
@@ -88,6 +92,8 @@ export const AuthProvider = ({ children }) => {
   const pusherChannelRef = useRef(null);
   const pollingStopRef = useRef(false);
   const pollingIntervalRef = useRef(null);
+  const heartbeatIntervalRef = useRef(null);
+  const currentTokenRef = useRef(null);
 
   const clearForcedSignOut = () => {
     forcedSignOutRef.current = false;
@@ -100,6 +106,21 @@ export const AuthProvider = ({ children }) => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
+    }
+  };
+
+  const startHeartbeat = (userId) => {
+    if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+    // Beat every 5 minutes to keep last_activity_at fresh
+    heartbeatIntervalRef.current = setInterval(() => {
+      sessionService.heartbeat(userId);
+    }, 5 * 60 * 1000);
+  };
+
+  const stopHeartbeat = () => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
     }
   };
 
@@ -178,30 +199,73 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // On beforeunload: mark as refresh/nav so init() can skip session check.
+  // Only deactivate session on real tab/browser close (not in-app navigations or F5).
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const isAppNav = sessionStorage.getItem("thodemy_app_nav") === "1";
+      sessionStorage.removeItem("thodemy_app_nav");
+      sessionStorage.setItem("thodemy_refreshing", "1");
+
+      // Real close (not in-app nav, not F5) → deactivate so next visit requires login
+      if (!isAppNav) {
+        const token = currentTokenRef.current;
+        if (token) {
+          fetch(`${API_BASE_URL}/api/session/deactivate/current`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ deviceId: getDeviceId() }),
+            keepalive: true,
+          }).catch(() => {});
+        }
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
     const init = async () => {
+      // Detect refresh vs fresh open / tab-close
+      const wasRefresh = sessionStorage.getItem("thodemy_refreshing") === "1";
+      sessionStorage.removeItem("thodemy_refreshing");
+
       try {
         const currentSession = await authService.getSession();
         if (!isMounted) return;
+        currentTokenRef.current = currentSession?.access_token ?? null;
         setSession(currentSession);
         const authUser = currentSession?.user ?? null;
         if (authUser) {
+          if (wasRefresh) {
+            // Page was refreshed — beforeunload deactivated the session, recreate it
+            await sessionService.createSession(authUser.id).catch(() => {});
+          } else {
+            // New tab open or returning after tab close — verify session is still active
+            const sessionActive = await sessionService.isCurrentSessionActive(authUser.id);
+            if (!isMounted) return;
+            if (!sessionActive) {
+              clearLocalAuthSession();
+              setUser(null);
+              setVerified(true);
+              return;
+            }
+          }
           clearForcedSignOut();
           const username = await fetchUsername(authUser.id);
           if (!isMounted) return;
           setUser({ ...authUser, username });
-          // Allow access immediately; verify account status in the background.
           if (isMounted) {
             setVerified(true);
           }
           verifyAccountActive(lastVerifyRef, verifyInFlightRef).catch(() => {});
-        subscribeToPusher(authUser.id);
+          subscribeToPusher(authUser.id);
+          startHeartbeat(authUser.id);
       } else {
         setUser(null);
         setVerified(true);
-        clearDeviceApproval();
       }
     } catch (error) {
       if (!isMounted) return;
@@ -215,6 +279,7 @@ export const AuthProvider = ({ children }) => {
 
     const handleAuthChange = async (_event, nextSession) => {
       if (!isMounted) return;
+      currentTokenRef.current = nextSession?.access_token ?? null;
       setSession(nextSession);
       const authUser = nextSession?.user ?? null;
       if (authUser) {
@@ -228,6 +293,7 @@ export const AuthProvider = ({ children }) => {
         });
         verifyAccountActive(lastVerifyRef, verifyInFlightRef).catch(() => {});
         subscribeToPusher(authUser.id);
+        startHeartbeat(authUser.id);
       } else {
         setUser(null);
         setVerified(true);
@@ -252,6 +318,7 @@ export const AuthProvider = ({ children }) => {
       isMounted = false;
       subscription?.unsubscribe?.();
       stopSessionPolling();
+      stopHeartbeat();
       if (pusherChannelRef.current) {
         const p = getPusher();
         pusherChannelRef.current.unbind_all();
@@ -261,6 +328,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const signOut = async ({ redirectTo = "/", skipServerDeactivation = false } = {}) => {
+    currentTokenRef.current = null;
     setAuthError(null);
     if (!skipServerDeactivation) {
       setForcedSignOutOpen(false);
@@ -269,6 +337,7 @@ export const AuthProvider = ({ children }) => {
     }
     const currentUserId = user?.id;
 
+    stopHeartbeat();
     // unsubscribe from realtime channel first
     if (pusherChannelRef.current) {
       const p = getPusher();
