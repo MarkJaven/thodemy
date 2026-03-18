@@ -883,7 +883,7 @@ const Dashboard = () => {
     () =>
       new Set(
         learningPathEnrollmentEntries
-          .filter((entry) => Boolean(entry.actual_start_date ?? entry.start_date))
+          .filter((entry) => Boolean(entry.actual_start_date))
           .map((entry) => entry.learning_path_id)
       ),
     [learningPathEnrollmentEntries]
@@ -916,6 +916,8 @@ const Dashboard = () => {
   }, [enrollmentEntries, activeLearningPathCourseIds]);
 
   const hasActiveEnrollment = activeEnrollmentCourseIds.size > 0;
+  const hasStartedLearningPath = startedLearningPathIds.size > 0;
+  const moduleCtaLabel = hasStartedLearningPath ? "Resume Module" : "Start Module";
 
   const completedTopicCount = useMemo(
     () =>
@@ -1712,7 +1714,7 @@ const Dashboard = () => {
         ) : (
           filteredLearningPaths.map((path) => {
             const enrollment = learningPathEnrollmentLookup.get(path.id);
-            const hasStarted = Boolean(enrollment?.actual_start_date ?? enrollment?.start_date);
+            const hasStarted = Boolean(enrollment?.actual_start_date);
             const canStart =
               Boolean(enrollment?.id) &&
               !enrollment?.actual_start_date &&
@@ -1820,7 +1822,7 @@ const Dashboard = () => {
                         </span>
                         <span className="rounded-full border border-white/10 px-3 py-1">
                           Actual start:{" "}
-                          {formatDate(enrollment?.actual_start_date ?? enrollment?.start_date)}
+                          {formatDate(enrollment?.actual_start_date)}
                         </span>
                         <span className="rounded-full border border-white/10 px-3 py-1">
                           Actual end: {formatDate(enrollment?.actual_end_date)}
@@ -2433,7 +2435,11 @@ const Dashboard = () => {
     const visibleCourses = activeCourses.slice(0, 3);
 
     const nextSteps = [
-      hasActiveEnrollment ? "Resume your active course" : "Enroll in a learning path to start",
+      hasStartedLearningPath
+        ? "Resume your active course"
+        : hasActiveEnrollment
+          ? "Start your enrolled course"
+          : "Enroll in a learning path to start",
       pendingSubmissionCount > 0
         ? "Track certificate review status"
         : "Submit required certificates for completed topics",
@@ -2657,6 +2663,7 @@ const Dashboard = () => {
     const primaryEnrollment = primaryPath
       ? learningPathEnrollmentLookup.get(primaryPath.id)
       : null;
+    const primaryPathStarted = Boolean(primaryEnrollment?.actual_start_date);
     const primaryCourses = primaryPath
       ? ((primaryPath.course_ids ?? [])
           .map((courseId) => courseLookup.get(courseId))
@@ -2709,7 +2716,7 @@ const Dashboard = () => {
 
     const nextUp = (() => {
       if (!primaryPath || primaryCourses.length === 0) return null;
-      const hasStarted = Boolean(primaryEnrollment?.actual_start_date ?? primaryEnrollment?.start_date);
+      const hasStarted = primaryPathStarted;
       let previousCourseComplete = true;
       for (let courseIndex = 0; courseIndex < primaryCourses.length; courseIndex += 1) {
         const course = primaryCourses[courseIndex];
@@ -2830,7 +2837,7 @@ const Dashboard = () => {
               onClick={() => setLearningPathPanels((prev) => ({ ...prev, track: true }))}
               className="w-full rounded-full bg-accent-purple px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-accent-purple/90 sm:w-auto"
             >
-              Resume module
+              {primaryPathStarted ? "Resume Module" : "Start Module"}
             </button>
           </div>
         </div>
@@ -2974,7 +2981,7 @@ const Dashboard = () => {
                   </span>
                   <span className="rounded-full border border-white/10 px-3 py-1">
                     Actual start{" "}
-                    {formatDate(primaryEnrollment?.actual_start_date ?? primaryEnrollment?.start_date)}
+                    {formatDate(primaryEnrollment?.actual_start_date)}
                   </span>
                   <span className="rounded-full border border-white/10 px-3 py-1">
                     Actual end {formatDate(primaryEnrollment?.actual_end_date)}
@@ -3664,7 +3671,7 @@ const Dashboard = () => {
                   onClick={() => setActiveNav("learning-path")}
                   className="hidden sm:flex items-center gap-2 bg-accent-purple hover:bg-accent-purple/90 text-white text-sm font-semibold px-4 py-2 rounded-full transition-colors"
                 >
-                  Resume Module
+                  {moduleCtaLabel}
                 </button>
                 <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2">
                   <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent-purple/20 text-2xs font-semibold uppercase text-accent-purple">
