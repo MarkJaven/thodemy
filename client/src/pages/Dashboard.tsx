@@ -830,6 +830,52 @@ const Dashboard = () => {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileUpdateError, setProfileUpdateError] = useState<string | null>(null);
   const [profileUpdateSuccess, setProfileUpdateSuccess] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const getAvatarPublicUrl = (path: string | null | undefined) => {
+    if (!path || !supabase) return null;
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    return data?.publicUrl || null;
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !supabase || !user?.id) return;
+    if (e.target) e.target.value = "";
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      setProfileUpdateError("Only JPG, PNG, or WebP images are allowed.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileUpdateError("Image must be under 2 MB.");
+      return;
+    }
+    setAvatarUploading(true);
+    setProfileUpdateError(null);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const filePath = `${user.id}/avatar.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: filePath })
+        .eq("id", user.id);
+      if (updateError) throw updateError;
+      setProfile((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
+      setProfileDraft((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
+      setProfileUpdateSuccess("Profile photo updated.");
+      setTimeout(() => setProfileUpdateSuccess(null), 3000);
+    } catch (err: any) {
+      setProfileUpdateError(err?.message || "Failed to upload photo.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   useEffect(() => {
     setActivityEntries(data.activities);
@@ -3472,9 +3518,37 @@ const Dashboard = () => {
       <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple">
-              {initials}
-            </div>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple overflow-hidden"
+              title="Change profile photo"
+            >
+              {profileView.avatar_url ? (
+                <img
+                  src={getAvatarPublicUrl(profileView.avatar_url) ?? ""}
+                  alt={displayName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                initials
+              )}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                {avatarUploading ? (
+                  <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                ) : (
+                  <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                )}
+              </div>
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
             <div>
               <h2 className="font-display text-2xl text-white">{displayName}</h2>
               <p className="text-sm text-slate-400">
@@ -3804,8 +3878,10 @@ const Dashboard = () => {
 
           <div className="p-4 border-t border-white/5">
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple">
-                {userInitials}
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple overflow-hidden">
+                {profile?.avatar_url ? (
+                  <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={welcomeName} className="h-full w-full object-cover" />
+                ) : userInitials}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="truncate text-sm font-medium text-white">{welcomeName}</p>
@@ -3836,11 +3912,8 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent-purple/20 text-2xs font-semibold uppercase text-accent-purple">
-                    {userInitials}
-                  </div>
-                  <span className="max-w-[160px] truncate text-xs text-slate-300">
+                <div className="hidden sm:flex items-center rounded-full border border-white/10 bg-white/[0.03] px-4 py-2">
+                  <span className="max-w-[200px] truncate text-xs text-slate-300">
                     {user?.email ?? "Learner"}
                   </span>
                 </div>
@@ -3849,9 +3922,11 @@ const Dashboard = () => {
                   <button
                     type="button"
                     onClick={() => setProfileDropdownOpen((prev) => !prev)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors"
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors overflow-hidden"
                   >
-                    {userInitials}
+                    {profile?.avatar_url ? (
+                      <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={welcomeName} className="h-full w-full object-cover" />
+                    ) : userInitials}
                   </button>
                   {profileDropdownOpen && (
                     <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-white/10 bg-ink-800 shadow-xl overflow-hidden z-50">
