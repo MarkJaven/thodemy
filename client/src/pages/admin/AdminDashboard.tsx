@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import LoadingScreen from "../../components/LoadingScreen";
 import { useAuth } from "../../context/AuthContext";
 import { useUser } from "../../hooks/useUser";
 import { useUserRole } from "../../hooks/useUserRole";
@@ -246,6 +247,16 @@ const AdminDashboard = () => {
     navigate(`/admin/${nav}`);
   };
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [navTransitioning, setNavTransitioning] = useState(false);
+  const prevNavRef = useRef(activeNav);
+  useEffect(() => {
+    if (prevNavRef.current !== activeNav) {
+      prevNavRef.current = activeNav;
+      setNavTransitioning(true);
+      const timer = setTimeout(() => setNavTransitioning(false), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [activeNav]);
   const [quizNavOpen, setQuizNavOpen] = useState(activeNav === "quiz" || activeNav === "quiz-scores");
   const [approvalsNavOpen, setApprovalsNavOpen] = useState(
     activeNav === "activity" ||
@@ -1826,7 +1837,14 @@ const AdminDashboard = () => {
 
           {/* Page Content */}
           <div className="flex-1 p-4 sm:p-6 lg:p-8">
-            {renderContent()}
+            {navTransitioning ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
+                <div className="relative h-10 w-10">
+                  <div className="absolute inset-0 rounded-full border-[3px] border-accent-purple/20" />
+                  <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-accent-purple/70 animate-spin" />
+                </div>
+              </div>
+            ) : renderContent()}
           </div>
         </main>
       </div>

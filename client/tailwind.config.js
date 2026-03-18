@@ -58,6 +58,12 @@ export default {
         "fade-in": "fadeIn 0.2s ease-out",
         "slide-up": "slideUp 0.3s ease-out",
         "pulse-soft": "pulseSoft 2s ease-in-out infinite",
+        "loading-float": "loadingFloat 3s ease-in-out infinite",
+        "loading-glow": "loadingGlow 4s ease-in-out infinite",
+        "loading-glow-delayed": "loadingGlow 4s ease-in-out 2s infinite",
+        "loading-fade-in": "loadingFadeIn 0.8s ease-out forwards",
+        "loading-fade-in-delayed": "loadingFadeIn 0.8s ease-out 0.3s forwards",
+        "loading-progress": "loadingProgress 2s ease-in-out infinite",
       },
       keyframes: {
         fadeIn: {
@@ -71,6 +77,23 @@ export default {
         pulseSoft: {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.7" },
+        },
+        loadingFloat: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-10px)" },
+        },
+        loadingGlow: {
+          "0%, 100%": { opacity: "0.5", transform: "translate(-50%, -50%) scale(1)" },
+          "50%": { opacity: "1", transform: "translate(-50%, -50%) scale(1.15)" },
+        },
+        loadingFadeIn: {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        loadingProgress: {
+          "0%": { transform: "translateX(-100%)" },
+          "50%": { transform: "translateX(100%)" },
+          "100%": { transform: "translateX(-100%)" },
         },
       },
       transitionDuration: {
