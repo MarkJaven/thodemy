@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import FormList from "../components/dashboard/FormList";
 import ProfileSetupModal from "../components/auth/ProfileSetupModal";
 import QuizList from "../components/dashboard/QuizList";
@@ -140,6 +140,8 @@ const userNavItems: Array<{
   { key: "requests", label: "Requests", icon: <RequestIcon /> },
   { key: "profile", label: "Profile", icon: <ProfileIcon /> },
 ];
+
+const userNavKeys = new Set<UserNavItem>(userNavItems.map((item) => item.key));
 
 const SkeletonCard = () => (
   <div className="h-36 rounded-2xl border border-white/10 bg-white/5 shadow-[0_18px_40px_rgba(10,8,18,0.35)]">
@@ -651,6 +653,15 @@ const getSubmissionTimestamp = (submission?: TopicSubmission | null) => {
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 };
 
+const getProgressTimestamp = (progress?: TopicProgress | null) => {
+  if (!progress) return 0;
+  const stamp =
+    progress.updated_at ?? progress.start_date ?? progress.created_at ?? progress.end_date ?? null;
+  if (!stamp) return 0;
+  const date = new Date(stamp);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
+
 const getTopicStatusLabel = (
   progress?: TopicProgress | null,
   submission?: TopicSubmission | null
@@ -679,6 +690,7 @@ const Dashboard = () => {
   const { user, isLoading: userLoading, verified } = useUser();
   const { signOut } = useAuth();
   const navigate = useNavigate();
+  const params = useParams();
   const { data, loading, error, refresh } = useDashboardData(user?.id);
   const { role: userRole, loading: roleLoading } = useUserRole(user?.id);
   const {
@@ -687,24 +699,31 @@ const Dashboard = () => {
     error: topicsError,
     refresh: refreshTopics,
   } = useTopicsData(user?.id);
-  const [activeNav, setActiveNavRaw] = useState<UserNavItem>(
-    () => (sessionStorage.getItem("thodemy-user-nav") as UserNavItem) || "overview"
-  );
-  const setActiveNav = (nav: UserNavItem) => {
-    sessionStorage.setItem("thodemy-user-nav", nav);
-    setActiveNavRaw(nav);
-  };
+  const requestedNav = params["*"];
+  const activeNav: UserNavItem = userNavKeys.has(requestedNav as UserNavItem)
+    ? (requestedNav as UserNavItem)
+    : "overview";
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const [selectedLearningPathId, setSelectedLearningPathId] = useState("all");
   const [selectedCourseId, setSelectedCourseId] = useState("all");
   const [selectedTopicId, setSelectedTopicId] = useState("all");
+  const [focusedTrackTarget, setFocusedTrackTarget] = useState<{
+    learningPathId: string;
+    courseId: string;
+    topicId: string;
+  } | null>(null);
+  const setActiveNav = (nav: UserNavItem) => {
+    setFocusedTrackTarget(null);
+    navigate(`/dashboard/${nav}`);
+  };
   const [learningPathPanels, setLearningPathPanels] = useState({
     enroll: false,
     track: false,
   });
   const learningPathCodeRef = useRef<HTMLInputElement | null>(null);
+  const learningPathTrackPanelRef = useRef<HTMLDivElement | null>(null);
   const didInitLearningPathTrack = useRef(false);
 
   // Redirect to auth page if not logged in or not verified
@@ -713,6 +732,13 @@ const Dashboard = () => {
       navigate("/auth/login", { replace: true });
     }
   }, [user, userLoading, verified, navigate]);
+
+  useEffect(() => {
+    if (userLoading || !user || !verified) return;
+    if (!requestedNav || !userNavKeys.has(requestedNav as UserNavItem)) {
+      navigate("/dashboard/overview", { replace: true });
+    }
+  }, [navigate, requestedNav, user, userLoading, verified]);
 
   // Fetch profile
   useEffect(() => {
@@ -754,6 +780,7 @@ const Dashboard = () => {
   const [learningPathEnrollSuccess, setLearningPathEnrollSuccess] = useState<string | null>(null);
 
   const resetLearningPathFilters = () => {
+    setFocusedTrackTarget(null);
     setSelectedLearningPathId("all");
     setSelectedCourseId("all");
     setSelectedTopicId("all");
@@ -979,6 +1006,83 @@ const Dashboard = () => {
     }
     return Array.from(seen.values()).slice(0, 3);
   }, [activityEntries]);
+
+  const activeLearningPathTopicLocations = useMemo(() => {
+    const locations = new Map<string, { learningPathId: string; courseId: string }>();
+
+    data.learningPaths.forEach((path) => {
+      if (!activeLearningPathIds.has(path.id)) return;
+
+      (path.course_ids ?? []).forEach((courseId) => {
+        const course = courseLookup.get(courseId);
+        if (!course) return;
+
+        (course.topic_ids ?? []).forEach((topicId) => {
+          if (!locations.has(topicId)) {
+            locations.set(topicId, { learningPathId: path.id, courseId });
+          }
+        });
+      });
+    });
+
+    return locations;
+  }, [activeLearningPathIds, courseLookup, data.learningPaths]);
+
+  const latestInProgressTopic = useMemo(() => {
+    return (
+      topicsData.topicProgress
+        .filter((progress) => progress.status === "in_progress")
+        .map((progress) => {
+          const topic = topicLookup.get(progress.topic_id);
+          const location = activeLearningPathTopicLocations.get(progress.topic_id);
+          if (!topic || !location) return null;
+          return {
+            topic,
+            progress,
+            learningPathId: location.learningPathId,
+            courseId: location.courseId,
+          };
+        })
+        .filter(Boolean)
+        .sort(
+          (left, right) =>
+            getProgressTimestamp(right!.progress) - getProgressTimestamp(left!.progress)
+        )[0] ?? null
+    );
+  }, [activeLearningPathTopicLocations, topicLookup, topicsData.topicProgress]);
+
+  const focusTrackTopic = (
+    selection?: { learningPathId: string; courseId: string; topicId: string } | null
+  ) => {
+    setActiveNav("learning-path");
+    setLearningPathPanels((prev) => ({ ...prev, track: true }));
+    setFocusedTrackTarget(selection ?? null);
+  };
+
+  useEffect(() => {
+    if (!learningPathPanels.track || activeNav !== "learning-path" || !focusedTrackTarget) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const topicCard = document.getElementById(
+        `learning-path-topic-${focusedTrackTarget.topicId}`
+      );
+
+      let parentDetails = topicCard?.closest("details");
+      while (parentDetails) {
+        parentDetails.open = true;
+        parentDetails = parentDetails.parentElement?.closest("details") ?? null;
+      }
+
+      window.requestAnimationFrame(() => {
+        const target = topicCard ?? learningPathTrackPanelRef.current;
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeNav, focusedTrackTarget, learningPathPanels.track]);
 
   const visibleQuizzes = data.quizzes.filter((quiz) => {
     // Quiz is assigned to a specific user - only that user sees it
@@ -1644,7 +1748,10 @@ const Dashboard = () => {
               Learning Path
               <select
                 value={selectedLearningPathId}
-                onChange={(event) => setSelectedLearningPathId(event.target.value)}
+                onChange={(event) => {
+                  setFocusedTrackTarget(null);
+                  setSelectedLearningPathId(event.target.value);
+                }}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/70 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               >
                 <option value="all">All learning paths</option>
@@ -1659,7 +1766,10 @@ const Dashboard = () => {
               Course
               <select
                 value={selectedCourseId}
-                onChange={(event) => setSelectedCourseId(event.target.value)}
+                onChange={(event) => {
+                  setFocusedTrackTarget(null);
+                  setSelectedCourseId(event.target.value);
+                }}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/70 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               >
                 <option value="all">All courses</option>
@@ -1674,7 +1784,10 @@ const Dashboard = () => {
               Topic
               <select
                 value={selectedTopicId}
-                onChange={(event) => setSelectedTopicId(event.target.value)}
+                onChange={(event) => {
+                  setFocusedTrackTarget(null);
+                  setSelectedTopicId(event.target.value);
+                }}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/70 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               >
                 <option value="all">All topics</option>
@@ -1799,9 +1912,25 @@ const Dashboard = () => {
               return true;
             });
 
+            const pathContainsSelectedCourse =
+              selectedCourseId !== "all" && (path.course_ids ?? []).includes(selectedCourseId);
+            const pathContainsSelectedTopic =
+              selectedTopicId !== "all" &&
+              pathCourses.some((course) => (course.topic_ids ?? []).includes(selectedTopicId));
+            const pathContainsFocusedTopic =
+              focusedTrackTarget?.learningPathId === path.id;
+
             return (
               <details
                 key={`learning-path-track-${path.id}`}
+                open={
+                  selectedLearningPathId === path.id ||
+                  pathContainsSelectedCourse ||
+                  pathContainsSelectedTopic ||
+                  pathContainsFocusedTopic
+                    ? true
+                    : undefined
+                }
                 className="group rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-6"
               >
                 <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
@@ -2010,9 +2139,18 @@ const Dashboard = () => {
                           });
                         });
 
+                        const shouldOpenCourse =
+                          selectedCourseId === course.id ||
+                          focusedTrackTarget?.courseId === course.id ||
+                          (selectedTopicId !== "all" &&
+                            (course.topic_ids ?? []).includes(selectedTopicId)) ||
+                          (focusedTrackTarget !== null &&
+                            (course.topic_ids ?? []).includes(focusedTrackTarget.topicId));
+
                         return (
                       <details
                         key={`course-track-${path.id}-${course?.id}`}
+                        open={shouldOpenCourse ? true : undefined}
                         className={`group rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5 ${
                           isCourseLocked ? "opacity-60" : ""
                         }`}
@@ -2074,6 +2212,14 @@ const Dashboard = () => {
                                   return (
                                     <details
                                       key={`topic-group-${path.id}-${course?.id}-${section.id}`}
+                                      open={
+                                        (selectedTopicId !== "all" &&
+                                          section.topicIds.includes(selectedTopicId)) ||
+                                        (focusedTrackTarget !== null &&
+                                          section.topicIds.includes(focusedTrackTarget.topicId))
+                                          ? true
+                                          : undefined
+                                      }
                                       className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 sm:px-4"
                                     >
                                       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
@@ -2145,7 +2291,12 @@ const Dashboard = () => {
                                           return (
                                             <div
                                               key={`topic-${path.id}-${course?.id}-${section.id}-${topic.id}`}
-                                              className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm sm:px-4"
+                                              id={`learning-path-topic-${topic.id}`}
+                                              className={`rounded-xl border bg-white/5 px-3 py-3 text-sm sm:px-4 ${
+                                                focusedTrackTarget?.topicId === topic.id
+                                                  ? "border-accent-purple/40 shadow-[0_0_0_1px_rgba(124,58,237,0.25)]"
+                                                  : "border-white/10"
+                                              }`}
                                             >
                                               <div className="flex flex-wrap items-center justify-between gap-3">
                                                 <div>
@@ -2817,6 +2968,17 @@ const Dashboard = () => {
       setLearningPathPanels((prev) => ({ ...prev, track: true }));
     };
 
+    const handleViewLatestInProgress = () =>
+      focusTrackTopic(
+        latestInProgressTopic
+          ? {
+              learningPathId: latestInProgressTopic.learningPathId,
+              courseId: latestInProgressTopic.courseId,
+              topicId: latestInProgressTopic.topic.id,
+            }
+          : null
+      );
+
     return (
       <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -2834,7 +2996,7 @@ const Dashboard = () => {
           <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
             <button
               type="button"
-              onClick={() => setLearningPathPanels((prev) => ({ ...prev, track: true }))}
+              onClick={handleViewLatestInProgress}
               className="w-full rounded-full bg-accent-purple px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-accent-purple/90 sm:w-auto"
             >
               {primaryPathStarted ? "Resume Module" : "Start Module"}
@@ -2904,7 +3066,7 @@ const Dashboard = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLearningPathPanels((prev) => ({ ...prev, track: true }))}
+                  onClick={handleViewLatestInProgress}
                   className="w-full rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 sm:w-auto"
                 >
                   View progress
@@ -3074,6 +3236,7 @@ const Dashboard = () => {
               {learningPathPanels.track && (
                 <div
                   id="learning-path-track-panel"
+                  ref={learningPathTrackPanelRef}
                   className="border-t border-white/5 px-4 pb-6 sm:px-6"
                 >
                   <div className="pt-6">{renderTrackTab()}</div>
@@ -3192,16 +3355,7 @@ const Dashboard = () => {
         </p>
       </div>
       <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="font-display text-xl text-white">Recent requests</h3>
-          <button
-            type="button"
-            onClick={() => setActiveNav("forms")}
-            className="text-xs font-semibold uppercase tracking-[0.25em] text-accent-purple"
-          >
-            Go to forms
-          </button>
-        </div>
+        <h3 className="font-display text-xl text-white">Recent requests</h3>
         <div className="mt-5 space-y-3">
           {latestSubmissions.length === 0 ? (
             <p className="text-sm text-slate-400">
@@ -3666,13 +3820,6 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveNav("learning-path")}
-                  className="hidden sm:flex items-center gap-2 bg-accent-purple hover:bg-accent-purple/90 text-white text-sm font-semibold px-4 py-2 rounded-full transition-colors"
-                >
-                  {moduleCtaLabel}
-                </button>
                 <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2">
                   <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent-purple/20 text-2xs font-semibold uppercase text-accent-purple">
                     {userInitials}
