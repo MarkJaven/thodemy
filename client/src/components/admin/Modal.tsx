@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 
 type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
@@ -118,6 +119,15 @@ const Modal = ({
   variant = "default",
   icon,
 }: ModalProps) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const config = variantConfig[variant];

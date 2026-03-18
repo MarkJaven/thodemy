@@ -30,6 +30,19 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 const normalizeUrl = (value: string) =>
   value.startsWith("http://") || value.startsWith("https://")
     ? value
@@ -478,17 +491,18 @@ const ActivitiesSection = ({
       setSaving(false);
       return;
     }
+    const finalScoreValue = projectStatus === "rejected" ? null : scoreValue;
     const now = new Date().toISOString();
     try {
       await superAdminService.updateActivitySubmission(
         selectedProjectSubmission.id,
         {
           status: projectStatus,
-          score: scoreValue,
+          score: finalScoreValue,
           review_notes: projectReviewNotes.trim() || null,
           reviewed_by: user?.id ?? null,
           reviewed_at:
-            projectStatus !== "pending" || scoreValue !== null ? now : null,
+            projectStatus !== "pending" || finalScoreValue !== null ? now : null,
         },
       );
       setSelectedProjectSubmission(null);
@@ -2002,7 +2016,13 @@ const ActivitiesSection = ({
                 Status
                 <select
                   value={projectStatus}
-                  onChange={(event) => setProjectStatus(event.target.value)}
+                  onChange={(event) => {
+                    const nextStatus = event.target.value;
+                    setProjectStatus(nextStatus);
+                    if (nextStatus === "rejected") {
+                      setProjectScore("");
+                    }
+                  }}
                   className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
                 >
                   <option value="pending">Pending</option>
@@ -2018,8 +2038,11 @@ const ActivitiesSection = ({
                   type="number"
                   value={projectScore}
                   onChange={(event) => setProjectScore(event.target.value)}
-                  placeholder="Enter score"
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                  placeholder={projectStatus === "rejected" ? "Not applicable" : "Enter score"}
+                  disabled={projectStatus === "rejected"}
+                  className={`mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0 ${
+                    projectStatus === "rejected" ? "opacity-60" : ""
+                  }`}
                 />
               </label>
             </div>
@@ -2075,7 +2098,7 @@ const ActivitiesSection = ({
                 <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
                   Date
                 </p>
-                <p>{formatDate(viewingSubmission.created_at)}</p>
+                <p>{formatDateTime(viewingSubmission.created_at)}</p>
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
