@@ -39,7 +39,7 @@ const App = () => {
         <Route path="/auth/:mode" element={<AuthPage />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/deactivated" element={<DeactivatedPage />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/*" element={<Dashboard />} />
         <Route
           path="/admin/*"
           element={

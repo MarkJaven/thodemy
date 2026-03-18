@@ -453,15 +453,15 @@ const AdminDashboard = () => {
         return title ? `Updated ${entity}: ${title}` : `Updated ${entity}`;
       case "status_changed":
         if (title && from && to) {
-          return `${entity} status changed: ${title} (${from} → ${to})`;
+          return `${entity} Status Changed: ${title} (${from}: ${to})`;
         }
         if (title && to) {
-          return `${entity} status updated: ${title} → ${to}`;
+          return `${entity} Status Updated: ${title}: ${to}`;
         }
         if (to) {
-          return `${entity} status updated → ${to}`;
+          return `${entity} Status Updated: ${to}`;
         }
-        return `${entity} status updated`;
+        return `${entity} Status Updated`;
       case "totals_recalculated":
         if (title && topicTitle) {
           return `Recalculated ${entity} totals: ${title} (topic updated: ${topicTitle})`;
@@ -1221,7 +1221,7 @@ const AdminDashboard = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-white font-semibold">Enrollment Health</h3>
-              <p className="text-xs text-slate-500">Course + learning path enrollments</p>
+              <p className="text-xs text-slate-500">Course and learning path enrollments</p>
             </div>
             <button
               onClick={() => handleOpenApprovals("learning_path_enrollments")}
