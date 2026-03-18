@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { Activity } from "../../types/dashboard";
 
@@ -37,6 +37,19 @@ const statusColor = (status?: string | null) => {
   }
 };
 
+const MAX_UPLOAD_MB = 25;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+const ALLOWED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "application/pdf"]);
+
+const formatFileSize = (bytes: number) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(1)} MB`;
+};
+
 const UploadWidget = ({
   activities,
   assignedProjects,
@@ -58,7 +71,9 @@ const UploadWidget = ({
   const [description, setDescription] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedProject = useMemo(
     () => assignedProjects?.find((project) => project.id === selectedProjectId) ?? null,
@@ -80,11 +95,21 @@ const UploadWidget = ({
     if (selectedProject) setTitle(selectedProject.title);
   }, [selectedProject]);
 
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [isModalOpen]);
+
   const resetForm = () => {
     setTitle("");
     setDescription("");
     setGithubUrl("");
     setSelectedFile(null);
+    setFileError(null);
     setSelectedProjectId("");
   };
 
@@ -125,6 +150,16 @@ const UploadWidget = ({
   };
 
   const isPdf = selectedFile?.type === "application/pdf";
+  const resetFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    setFileError(null);
+    resetFileInput();
+  };
 
   const getSubmissionForProject = (projectId: string) =>
     activities.find((a) => a.activity_id === projectId);
@@ -467,27 +502,79 @@ const UploadWidget = ({
                 <input
                   type="file"
                   accept="image/png,image/jpeg,application/pdf"
-                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                  ref={fileInputRef}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    if (!file) {
+                      // Keep existing selection when user cancels the picker.
+                      return;
+                    }
+                    if (!ALLOWED_UPLOAD_TYPES.has(file.type)) {
+                      setSelectedFile(null);
+                      resetFileInput();
+                      setFileError("File must be JPG, PNG, or PDF.");
+                      return;
+                    }
+                    if (file.size > MAX_UPLOAD_BYTES) {
+                      setSelectedFile(null);
+                      resetFileInput();
+                      setFileError(`File must be ${MAX_UPLOAD_MB}MB or less.`);
+                      return;
+                    }
+                    setFileError(null);
+                    setSelectedFile(file);
+                  }}
                   className="mt-2 w-full text-sm text-slate-300 file:mr-4 file:rounded-full file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-xs file:uppercase file:tracking-[0.15em] file:text-white"
                 />
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Allowed: JPG, PNG, PDF • Max {MAX_UPLOAD_MB}MB
+                </p>
               </label>
+              {fileError && (
+                <p className="rounded-lg border border-rose-400/20 bg-rose-400/5 px-3 py-2 text-xs text-rose-300">
+                  {fileError}
+                </p>
+              )}
               {selectedFile && (
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                    Preview
-                  </p>
-                  {isPdf ? (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-slate-200">
-                      <span className="rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] uppercase">
-                        PDF
-                      </span>
-                      {selectedFile.name}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                        Preview
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-200">
+                        <span className="rounded border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] uppercase">
+                          {isPdf ? "PDF" : "Image"}
+                        </span>
+                        <span className="max-w-[220px] truncate">{selectedFile.name}</span>
+                        <span className="text-[11px] text-slate-500">
+                          {formatFileSize(selectedFile.size)}
+                        </span>
+                      </div>
                     </div>
-                  ) : (
+                    <button
+                      type="button"
+                      onClick={clearSelectedFile}
+                      className="rounded-full p-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
+                      aria-label="Remove file"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {!isPdf && (
                     <img
                       src={previewUrl}
                       alt={selectedFile.name}
-                      className="mt-2 h-32 w-full rounded-lg object-cover"
+                      className="mt-3 max-h-40 w-full rounded-lg object-contain"
                     />
                   )}
                 </div>

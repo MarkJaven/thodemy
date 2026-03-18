@@ -1283,9 +1283,9 @@ const Dashboard = () => {
       setQuizProofError("Proof file must be a PDF, JPG, or PNG.");
       return;
     }
-    const maxSizeBytes = 10 * 1024 * 1024;
+    const maxSizeBytes = 25 * 1024 * 1024;
     if (quizProofFile.size > maxSizeBytes) {
-      setQuizProofError("Proof file must be smaller than 10MB.");
+      setQuizProofError("Proof file must be smaller than 25MB.");
       return;
     }
     setSubmittingQuizProof(true);
