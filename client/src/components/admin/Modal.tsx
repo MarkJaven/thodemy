@@ -131,7 +131,6 @@ const Modal = ({
       className={`fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm animate-fade-in ${
         topAligned ? "pt-4 pb-8" : "flex items-center justify-center p-4"
       }`}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         className={`${topAligned ? "mx-auto" : ""} w-full ${sizeClasses[size]} ${

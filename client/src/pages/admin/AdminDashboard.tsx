@@ -1118,7 +1118,6 @@ const AdminDashboard = () => {
           delta={`${stats.approvalsToday} require action today`}
           deltaColor="text-red-400"
           isLoading={isLoading}
-          onClick={() => handleOpenApprovals("learning_path_enrollments")}
         />
       </div>
 
@@ -1656,7 +1655,7 @@ const AdminDashboard = () => {
           : "--";
         const detailEntries = Object.entries(details).filter(([, v]) => v !== null && v !== undefined && v !== "");
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setSelectedActivityLog(null)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
             <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
               {/* Header */}
               <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-white/5">
