@@ -46,7 +46,7 @@ const getQuizAvailability = (quiz: Quiz) => {
 
   const windowLabel =
     start || end
-      ? `${start ? formatDateTime(start) : "Anytime"}${end ? ` -> ${formatDateTime(end)}` : ""}`
+      ? `${start ? formatDateTime(start) : "Anytime"}${end ? ` - ${formatDateTime(end)}` : ""}`
       : "Anytime";
 
   const badgeClass = !statusAllowsOpen
@@ -194,25 +194,23 @@ const QuizList = ({
                 <p className="mt-1 text-xs text-slate-400">{scoreNote}</p>
               </div>
               <div className="flex flex-col gap-2">
-                <a
-                  href={quiz.link_url || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`rounded-full border px-5 py-2 text-center text-xs uppercase tracking-[0.25em] transition ${
-                    canOpen
-                      ? "border-white/10 bg-white/10 text-white hover:bg-white/20"
-                      : "pointer-events-none border-white/5 bg-white/[0.02] text-slate-600"
-                  }`}
-                  aria-disabled={!canOpen}
-                  tabIndex={canOpen ? undefined : -1}
-                  onClick={(event) => {
-                    if (!canOpen) {
-                      event.preventDefault();
-                    }
-                  }}
-                >
-                  Open quiz
-                </a>
+                {canOpen ? (
+                  <a
+                    href={quiz.link_url!}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-center text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20"
+                  >
+                    Open quiz
+                  </a>
+                ) : (
+                  <span
+                    className="rounded-full border border-white/5 bg-white/[0.02] px-5 py-2 text-center text-xs uppercase tracking-[0.25em] text-slate-600 cursor-not-allowed select-none"
+                    aria-disabled
+                  >
+                    Open quiz
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleUploadProofClick}
