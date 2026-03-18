@@ -662,6 +662,12 @@ const getProgressTimestamp = (progress?: TopicProgress | null) => {
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 };
 
+const getQuizSortTime = (quiz: Quiz) => {
+  const start = quiz.start_at ? new Date(quiz.start_at).getTime() : 0;
+  const end = quiz.end_at ? new Date(quiz.end_at).getTime() : 0;
+  return Math.max(start, end);
+};
+
 const getTopicStatusLabel = (
   progress?: TopicProgress | null,
   submission?: TopicSubmission | null
@@ -2441,9 +2447,18 @@ const Dashboard = () => {
   };
 
   const filteredQuizzes = useMemo(() => {
-    if (quizFilter === "all") return visibleQuizzes;
+    const sortQuizzes = (list: Quiz[]) =>
+      list
+        .slice()
+        .sort(
+          (left, right) =>
+            getQuizSortTime(right) - getQuizSortTime(left) ||
+            left.title.localeCompare(right.title)
+        );
+
+    if (quizFilter === "all") return sortQuizzes(visibleQuizzes);
     const now = new Date();
-    return visibleQuizzes.filter((quiz) => {
+    const filtered = visibleQuizzes.filter((quiz) => {
       const attempt = quizAttemptLookup.get(quiz.id);
       const score = quizScoreLookup.get(quiz.id);
       const isCompleted = Boolean(attempt?.submitted_at);
@@ -2463,6 +2478,7 @@ const Dashboard = () => {
         default: return true;
       }
     });
+    return sortQuizzes(filtered);
   }, [visibleQuizzes, quizFilter, quizAttemptLookup, quizScoreLookup]);
 
   const renderQuizTab = () => {
