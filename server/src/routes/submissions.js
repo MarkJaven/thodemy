@@ -22,6 +22,16 @@ router.get(
   submissionController.listSubmissions
 );
 
+router.get(
+  "/:submissionId",
+  generalLimiter,
+  requireAuth,
+  requireAdmin,
+  validateSubmissionIdParam,
+  validateRequest,
+  submissionController.getSubmission
+);
+
 router.patch(
   "/:submissionId/status",
   generalLimiter,
