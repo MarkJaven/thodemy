@@ -187,18 +187,11 @@ const QuizList = ({
               </div>
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_1fr_0.9fr]">
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_0.9fr]">
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
                 <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Score</p>
                 <p className="mt-2 text-xl font-semibold text-white">{scoreLabel}</p>
                 <p className="mt-1 text-xs text-slate-400">{scoreNote}</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
-                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">How it works</p>
-                <p className="mt-2 text-xs text-slate-300">
-                  1. Open the quiz link. 2. Submit your responses. 3. Upload proof so your
-                  admin can verify and grade.
-                </p>
               </div>
               <div className="flex flex-col gap-2">
                 <a
