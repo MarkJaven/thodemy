@@ -3648,7 +3648,7 @@ const Dashboard = () => {
           </div>
           <div>
             <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
-              Birthday
+              Birth Date
             </label>
             {isProfileEditing ? (
               <input

@@ -426,7 +426,7 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                       )}
                     </div>
                     <div>
-                      <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">Birthday</label>
+                      <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">Birth Date</label>
                       {isEditMode ? (
                         <input
                           type="date"
