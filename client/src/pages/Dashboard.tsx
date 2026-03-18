@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import FormList from "../components/dashboard/FormList";
+import LoadingScreen from "../components/LoadingScreen";
 import ProfileSetupModal from "../components/auth/ProfileSetupModal";
 import QuizList from "../components/dashboard/QuizList";
 import UploadWidget from "../components/dashboard/UploadWidget";
@@ -710,6 +711,16 @@ const Dashboard = () => {
     ? (requestedNav as UserNavItem)
     : "overview";
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [navTransitioning, setNavTransitioning] = useState(false);
+  const prevNavRef = useRef(activeNav);
+  useEffect(() => {
+    if (prevNavRef.current !== activeNav) {
+      prevNavRef.current = activeNav;
+      setNavTransitioning(true);
+      const timer = setTimeout(() => setNavTransitioning(false), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [activeNav]);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const [selectedLearningPathId, setSelectedLearningPathId] = useState("all");
@@ -3792,6 +3803,10 @@ const Dashboard = () => {
       .slice(0, 2)
       .toUpperCase() ?? "LR";
 
+  if (userLoading || loading || roleLoading) {
+    return <LoadingScreen />;
+  }
+
   return (
     <div className="min-h-screen bg-ink-900 text-slate-100">
       {/* Background glows */}
@@ -3996,7 +4011,14 @@ const Dashboard = () => {
               </div>
             )}
 
-            {renderActiveSection()}
+            {navTransitioning ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
+                <div className="relative h-10 w-10">
+                  <div className="absolute inset-0 rounded-full border-[3px] border-accent-purple/20" />
+                  <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-accent-purple/70 animate-spin" />
+                </div>
+              </div>
+            ) : renderActiveSection()}
           </div>
         </main>
       </div>
