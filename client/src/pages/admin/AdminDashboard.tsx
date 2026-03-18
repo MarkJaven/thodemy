@@ -157,12 +157,39 @@ type NavItem =
   | "users"
   | "projects"
   | "activity"
+  | "activity-enrollments"
+  | "activity-submissions"
   | "quiz"
   | "quiz-scores"
   | "forms"
   | "reports"
   | "evaluation"
   | "profile";
+
+type ApprovalSection =
+  | "topic_submissions"
+  | "course_completion"
+  | "learning_path_enrollments"
+  | "course_enrollments";
+
+type ApprovalNavItem = "activity-enrollments" | "activity-submissions";
+
+const APPROVAL_NAV_ITEMS: Array<{
+  key: ApprovalNavItem;
+  label: string;
+  defaultSection: ApprovalSection;
+}> = [
+  {
+    key: "activity-enrollments",
+    label: "Enrollment Approvals",
+    defaultSection: "learning_path_enrollments",
+  },
+  {
+    key: "activity-submissions",
+    label: "Submission Approvals",
+    defaultSection: "topic_submissions",
+  },
+];
 
 interface DashboardStats {
   activeCourses: number;
@@ -220,6 +247,11 @@ const AdminDashboard = () => {
   };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [quizNavOpen, setQuizNavOpen] = useState(activeNav === "quiz" || activeNav === "quiz-scores");
+  const [approvalsNavOpen, setApprovalsNavOpen] = useState(
+    activeNav === "activity" ||
+    activeNav === "activity-enrollments" ||
+    activeNav === "activity-submissions"
+  );
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -259,12 +291,7 @@ const AdminDashboard = () => {
   const [taskError, setTaskError] = useState<string | null>(null);
   const [approvalFocus, setApprovalFocus] = useState<{
     submissionId?: string | null;
-    section?:
-      | "topic_submissions"
-      | "course_completion"
-      | "learning_path_enrollments"
-      | "course_enrollments"
-      | null;
+    section?: ApprovalSection | null;
   } | null>(null);
 
   const { signOut } = useAuth();
@@ -710,6 +737,19 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
+    if (activeNav === "quiz" || activeNav === "quiz-scores") {
+      setQuizNavOpen(true);
+    }
+    if (
+      activeNav === "activity" ||
+      activeNav === "activity-enrollments" ||
+      activeNav === "activity-submissions"
+    ) {
+      setApprovalsNavOpen(true);
+    }
+  }, [activeNav]);
+
+  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target as Node)) {
         setProfileDropdownOpen(false);
@@ -769,30 +809,31 @@ const AdminDashboard = () => {
     }
   };
 
+  const getApprovalNavItem = (section: ApprovalSection): ApprovalNavItem =>
+    section === "learning_path_enrollments" || section === "course_enrollments"
+      ? "activity-enrollments"
+      : "activity-submissions";
+
   const handleReviewApproval = (item: ApprovalItem) => {
     if (item.entityType === "topic_submission") {
-      setActiveNav("activity");
+      setActiveNav("activity-submissions");
       setApprovalFocus({ submissionId: item.id, section: "topic_submissions" });
     } else if (item.entityType === "course_completion") {
-      setActiveNav("activity");
+      setActiveNav("activity-submissions");
       setApprovalFocus({ section: "course_completion" });
     } else if (item.entityType === "learning_path_enrollment") {
-      setActiveNav("activity");
+      setActiveNav("activity-enrollments");
       setApprovalFocus({ section: "learning_path_enrollments" });
     } else if (item.entityType === "course_enrollment") {
-      setActiveNav("activity");
+      setActiveNav("activity-enrollments");
       setApprovalFocus({ section: "course_enrollments" });
     }
   };
 
   const handleOpenApprovals = (
-    section:
-      | "topic_submissions"
-      | "course_completion"
-      | "learning_path_enrollments"
-      | "course_enrollments" = "learning_path_enrollments"
+    section: ApprovalSection = "learning_path_enrollments"
   ) => {
-    setActiveNav("activity");
+    setActiveNav(getApprovalNavItem(section));
     setApprovalFocus({ section });
   };
 
@@ -1055,12 +1096,25 @@ const AdminDashboard = () => {
       case "projects":
         return <ActivitiesSection variant="projects" editable={false} />;
       case "activity":
+      case "activity-enrollments":
         return (
           <ActivitiesSection
             focusSubmissionId={approvalFocus?.submissionId ?? null}
             focusSection={approvalFocus?.section ?? null}
             onFocusHandled={() => setApprovalFocus(null)}
             variant="approvals"
+            approvalPage="enrollments"
+            editable={false}
+          />
+        );
+      case "activity-submissions":
+        return (
+          <ActivitiesSection
+            focusSubmissionId={approvalFocus?.submissionId ?? null}
+            focusSection={approvalFocus?.section ?? null}
+            onFocusHandled={() => setApprovalFocus(null)}
+            variant="approvals"
+            approvalPage="submissions"
             editable={false}
           />
         );
@@ -1503,6 +1557,58 @@ const AdminDashboard = () => {
                     </div>
                   );
                 }
+                if (item.key === "activity") {
+                  const isApprovalsActive =
+                    activeNav === "activity" ||
+                    activeNav === "activity-enrollments" ||
+                    activeNav === "activity-submissions";
+                  return (
+                    <div key="approvals-group">
+                      <button
+                        type="button"
+                        onClick={() => setApprovalsNavOpen(prev => !prev)}
+                        className={`
+                          w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                          ${isApprovalsActive ? "bg-ink-700 text-white border border-accent-purple/30" : "text-slate-400 hover:text-white hover:bg-ink-800"}
+                        `}
+                      >
+                        <span className={isApprovalsActive ? "text-accent-purple" : "text-slate-500"}>
+                          {item.icon}
+                        </span>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        <svg
+                          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                          className={`transition-transform duration-200 ${approvalsNavOpen ? "rotate-180" : ""}`}
+                        >
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                      {approvalsNavOpen && (
+                        <div className="mt-1 ml-4 flex flex-col gap-1 border-l border-white/10 pl-3">
+                          {APPROVAL_NAV_ITEMS.map((approvalItem) => (
+                            <button
+                              key={approvalItem.key}
+                              type="button"
+                              onClick={() => {
+                                setApprovalsNavOpen(true);
+                                handleOpenApprovals(approvalItem.defaultSection);
+                                setSidebarOpen(false);
+                              }}
+                              className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                                activeNav === approvalItem.key ||
+                                (activeNav === "activity" && approvalItem.key === "activity-enrollments")
+                                  ? "text-white"
+                                  : "text-slate-400 hover:text-white"
+                              }`}
+                            >
+                              {approvalItem.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
                 return (
                   <a
                     key={item.key}
@@ -1564,7 +1670,13 @@ const AdminDashboard = () => {
                     Admin Workspace
                   </span>
                   <h1 className="text-lg sm:text-xl font-semibold text-white truncate">
-                    {activeNav === "overview" ? "Admin Dashboard Overview" : activeNav === "quiz-scores" ? "Quiz Scores" : navItems.find(n => n.key === activeNav)?.label}
+                    {activeNav === "overview"
+                      ? "Admin Dashboard Overview"
+                      : activeNav === "quiz-scores"
+                        ? "Quiz Scores"
+                        : APPROVAL_NAV_ITEMS.find((item) => item.key === activeNav)?.label ??
+                          navItems.find((n) => n.key === activeNav)?.label ??
+                          "Approvals"}
                   </h1>
                 </div>
               </div>
