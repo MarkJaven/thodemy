@@ -40,24 +40,23 @@ const FormList = ({ forms }: FormListProps) => {
               <p className="mt-2 text-sm text-slate-300">{form.description}</p>
               <p className="mt-2 text-xs text-slate-400">{statusLabel}</p>
             </div>
-            <a
-              href={form.link_url || "#"}
-              target="_blank"
-              rel="noreferrer"
-              className={`rounded-full border border-white/10 px-5 py-2 text-xs uppercase tracking-[0.25em] text-white transition ${
-                isOpen && form.link_url
-                  ? "bg-white/10 hover:bg-white/20"
-                  : "cursor-not-allowed bg-white/5 text-slate-400"
-              }`}
-              aria-disabled={!isOpen || !form.link_url}
-              onClick={(event) => {
-                if (!isOpen || !form.link_url) {
-                  event.preventDefault();
-                }
-              }}
-            >
-              Open form
-            </a>
+            {isOpen && form.link_url ? (
+              <a
+                href={form.link_url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-xs uppercase tracking-[0.25em] text-white transition hover:bg-white/20"
+              >
+                Open form
+              </a>
+            ) : (
+              <span
+                className="rounded-full border border-white/10 bg-white/5 px-5 py-2 text-xs uppercase tracking-[0.25em] text-slate-400 cursor-not-allowed select-none"
+                aria-disabled
+              >
+                Open form
+              </span>
+            )}
           </div>
         );
       })}
