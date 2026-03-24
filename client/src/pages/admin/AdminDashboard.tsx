@@ -1918,8 +1918,6 @@ const AdminDashboard = () => {
                         : null;
                       return entityName ? (
                         <p className="text-xs text-slate-500 mt-0.5 truncate">{entityName}</p>
-                      ) : log.entity_id ? (
-                        <p className="text-xs text-slate-500 font-mono mt-0.5 truncate">{log.entity_id}</p>
                       ) : null;
                     })()}
                   </div>
