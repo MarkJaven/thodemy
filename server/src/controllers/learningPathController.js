@@ -495,7 +495,7 @@ const enrollByCode = async (req, res, next) => {
 
     const { data: existing, error: existingError } = await supabaseAdmin
       .from("learning_path_enrollments")
-      .select("id")
+      .select("id, status")
       .eq("learning_path_id", lp.id)
       .eq("user_id", userId)
       .maybeSingle();
@@ -505,7 +505,8 @@ const enrollByCode = async (req, res, next) => {
         details: existingError.message,
       });
     }
-    if (existing) {
+    const ACTIVE_STATUSES = ["pending", "approved", "active", "completed"];
+    if (existing && ACTIVE_STATUSES.includes(existing.status)) {
       throw new ConflictError("You are already enrolled in this learning path.");
     }
 
@@ -547,25 +548,36 @@ const enrollByCode = async (req, res, next) => {
     const targetStartIso = trainingStartDate.toISOString();
     const targetEndIso = targetEndDate ? targetEndDate.toISOString() : null;
 
-    const { data: enrollment, error: enrollError } = await supabaseAdmin
-      .from("learning_path_enrollments")
-      .insert({
-        learning_path_id: lp.id,
-        user_id: userId,
-        status: "pending",
-        start_date: targetStartIso,
-        end_date: targetEndIso,
-        target_start_date: targetStartIso,
-        target_end_date: targetEndIso,
-        actual_start_date: null,
-        actual_end_date: null,
-        created_by: userId,
-        updated_by: userId,
-      })
-      .select(
-        "id, learning_path_id, user_id, status, enrolled_at, start_date, end_date, target_start_date, target_end_date, actual_start_date, actual_end_date, created_at"
-      )
-      .single();
+    const enrollFields = {
+      status: "pending",
+      start_date: targetStartIso,
+      end_date: targetEndIso,
+      target_start_date: targetStartIso,
+      target_end_date: targetEndIso,
+      actual_start_date: null,
+      actual_end_date: null,
+      updated_by: userId,
+      enrolled_at: new Date().toISOString(),
+    };
+    const selectFields =
+      "id, learning_path_id, user_id, status, enrolled_at, start_date, end_date, target_start_date, target_end_date, actual_start_date, actual_end_date, created_at";
+
+    let enrollment, enrollError;
+    if (existing) {
+      // Re-enrollment after rejection/removal — update existing record
+      ({ data: enrollment, error: enrollError } = await supabaseAdmin
+        .from("learning_path_enrollments")
+        .update(enrollFields)
+        .eq("id", existing.id)
+        .select(selectFields)
+        .single());
+    } else {
+      ({ data: enrollment, error: enrollError } = await supabaseAdmin
+        .from("learning_path_enrollments")
+        .insert({ learning_path_id: lp.id, user_id: userId, created_by: userId, ...enrollFields })
+        .select(selectFields)
+        .single());
+    }
     if (enrollError) {
       throw new ExternalServiceError("Unable to enroll in learning path", {
         code: enrollError.code,

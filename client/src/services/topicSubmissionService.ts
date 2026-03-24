@@ -7,10 +7,22 @@ type SubmissionFilters = {
   userId?: string;
   from?: string;
   to?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+type PaginatedTopicSubmissions = {
+  submissions: TopicSubmission[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
 };
 
 export const topicSubmissionService = {
-  async listSubmissions(filters: SubmissionFilters = {}): Promise<TopicSubmission[]> {
+  async listSubmissions(filters: SubmissionFilters = {}): Promise<PaginatedTopicSubmissions> {
     try {
       const params: Record<string, string> = {};
       if (filters.status) params.status = filters.status;
@@ -18,9 +30,28 @@ export const topicSubmissionService = {
       if (filters.userId) params.user_id = filters.userId;
       if (filters.from) params.from = filters.from;
       if (filters.to) params.to = filters.to;
+      if (filters.page) params.page = String(filters.page);
+      if (filters.pageSize) params.page_size = String(filters.pageSize);
 
       const { data } = await apiClient.get("/api/submissions", { params });
-      return (data?.submissions ?? []) as TopicSubmission[];
+      return {
+        submissions: (data?.submissions ?? []) as TopicSubmission[],
+        pagination: {
+          page: Number(data?.pagination?.page ?? filters.page ?? 1),
+          pageSize: Number(data?.pagination?.page_size ?? filters.pageSize ?? 10),
+          total: Number(data?.pagination?.total ?? 0),
+          totalPages: Number(data?.pagination?.total_pages ?? 0),
+        },
+      };
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
+  },
+
+  async getSubmission(submissionId: string): Promise<TopicSubmission> {
+    try {
+      const { data } = await apiClient.get(`/api/submissions/${submissionId}`);
+      return data?.submission as TopicSubmission;
     } catch (error) {
       throw new Error(getApiErrorMessage(error));
     }

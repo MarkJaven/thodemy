@@ -30,6 +30,19 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 const normalizeUrl = (value: string) =>
   value.startsWith("http://") || value.startsWith("https://")
     ? value
@@ -45,6 +58,7 @@ type ActivitiesSectionProps = {
     | null;
   onFocusHandled?: () => void;
   variant?: "full" | "approvals" | "projects";
+  approvalPage?: "all" | "enrollments" | "submissions";
   editable?: boolean;
 };
 
@@ -64,15 +78,23 @@ const EMPTY_PROJECT_FORM_STATE = {
   status: "active",
 };
 
+const TOPIC_SUBMISSIONS_PAGE_SIZE = 10;
+const LEARNING_PATH_ENROLLMENTS_PAGE_SIZE = 10;
+
 const ActivitiesSection = ({
   focusSubmissionId = null,
   focusSection = null,
   onFocusHandled,
   variant = "full",
+  approvalPage = "all",
   editable = true,
 }: ActivitiesSectionProps) => {
   const showApprovals = variant === "full" || variant === "approvals";
   const showProjects = variant === "full" || variant === "projects";
+  const showEnrollmentApprovals =
+    showApprovals && (approvalPage === "all" || approvalPage === "enrollments");
+  const showSubmissionApprovals =
+    showApprovals && (approvalPage === "all" || approvalPage === "submissions");
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
@@ -107,6 +129,8 @@ const ActivitiesSection = ({
   });
   const [saving, setSaving] = useState(false);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [learningPathEnrollmentsLoading, setLearningPathEnrollmentsLoading] =
+    useState(false);
   const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<
     string | null
   >(null);
@@ -120,6 +144,8 @@ const ActivitiesSection = ({
   );
   const [viewError, setViewError] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [learningPathEnrollmentError, setLearningPathEnrollmentError] =
+    useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] =
     useState<TopicSubmission | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
@@ -132,12 +158,35 @@ const ActivitiesSection = ({
   const [projectReviewNotes, setProjectReviewNotes] = useState("");
   const [reviewingSubmission, setReviewingSubmission] = useState(false);
   const [submissionFilters, setSubmissionFilters] = useState({
-    status: "pending",
+    status: "",
     topicId: "",
     userId: "",
     from: "",
     to: "",
   });
+  const [learningPathEnrollmentFilters, setLearningPathEnrollmentFilters] =
+    useState({
+      status: "",
+      learningPathId: "",
+      userId: "",
+      from: "",
+      to: "",
+    });
+  const [submissionPage, setSubmissionPage] = useState(1);
+  const [submissionPagination, setSubmissionPagination] = useState({
+    page: 1,
+    pageSize: TOPIC_SUBMISSIONS_PAGE_SIZE,
+    total: 0,
+    totalPages: 0,
+  });
+  const [learningPathEnrollmentPage, setLearningPathEnrollmentPage] = useState(1);
+  const [learningPathEnrollmentPagination, setLearningPathEnrollmentPagination] =
+    useState({
+      page: 1,
+      pageSize: LEARNING_PATH_ENROLLMENTS_PAGE_SIZE,
+      total: 0,
+      totalPages: 0,
+    });
   const { user } = useUser();
   const topicSubmissionsRef = useRef<HTMLDivElement | null>(null);
   const courseProofsRef = useRef<HTMLDivElement | null>(null);
@@ -155,7 +204,6 @@ const ActivitiesSection = ({
         learningPathData,
         userData,
         enrollmentData,
-        learningPathEnrollmentData,
         topicData,
         topicProgressData,
         courseCompletionData,
@@ -166,7 +214,6 @@ const ActivitiesSection = ({
         superAdminService.listLearningPaths(),
         superAdminService.listUsers(),
         superAdminService.listEnrollments(),
-        superAdminService.listLearningPathEnrollments(),
         superAdminService.listTopics(),
         superAdminService.listTopicProgress(),
         superAdminService.listCourseCompletionRequests(),
@@ -177,7 +224,6 @@ const ActivitiesSection = ({
       setLearningPaths(learningPathData);
       setUsers(userData);
       setEnrollments(enrollmentData);
-      setLearningPathEnrollments(learningPathEnrollmentData);
       setTopics(topicData);
       setTopicProgress(topicProgressData);
       setCourseCompletionRequests(courseCompletionData);
@@ -202,8 +248,11 @@ const ActivitiesSection = ({
         userId: submissionFilters.userId || undefined,
         from: submissionFilters.from || undefined,
         to: submissionFilters.to || undefined,
+        page: submissionPage,
+        pageSize: TOPIC_SUBMISSIONS_PAGE_SIZE,
       });
-      setTopicSubmissions(data);
+      setTopicSubmissions(data.submissions);
+      setSubmissionPagination(data.pagination);
     } catch (loadError) {
       setSubmissionError(
         loadError instanceof Error
@@ -215,13 +264,53 @@ const ActivitiesSection = ({
     }
   };
 
+  const loadLearningPathEnrollments = async () => {
+    setLearningPathEnrollmentsLoading(true);
+    setLearningPathEnrollmentError(null);
+    try {
+      const data = await superAdminService.listLearningPathEnrollmentsPage({
+        status: learningPathEnrollmentFilters.status || undefined,
+        learningPathId:
+          learningPathEnrollmentFilters.learningPathId || undefined,
+        userId: learningPathEnrollmentFilters.userId || undefined,
+        from: learningPathEnrollmentFilters.from || undefined,
+        to: learningPathEnrollmentFilters.to || undefined,
+        page: learningPathEnrollmentPage,
+        pageSize: LEARNING_PATH_ENROLLMENTS_PAGE_SIZE,
+      });
+      setLearningPathEnrollments(data.enrollments);
+      setLearningPathEnrollmentPagination(data.pagination);
+    } catch (loadError) {
+      setLearningPathEnrollmentError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load enrollments.",
+      );
+    } finally {
+      setLearningPathEnrollmentsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, []);
 
   useEffect(() => {
     loadTopicSubmissions();
-  }, [submissionFilters]);
+  }, [submissionFilters, submissionPage]);
+
+  useEffect(() => {
+    loadLearningPathEnrollments();
+  }, [learningPathEnrollmentFilters, learningPathEnrollmentPage]);
+
+  useEffect(() => {
+    const totalPages = learningPathEnrollmentPagination.totalPages;
+    if (totalPages > 0 && learningPathEnrollmentPage > totalPages) {
+      setLearningPathEnrollmentPage(totalPages);
+    } else if (totalPages === 0 && learningPathEnrollmentPage !== 1) {
+      setLearningPathEnrollmentPage(1);
+    }
+  }, [learningPathEnrollmentPage, learningPathEnrollmentPagination.totalPages]);
 
   const openCreate = () => {
     setSelectedActivity(null);
@@ -402,17 +491,18 @@ const ActivitiesSection = ({
       setSaving(false);
       return;
     }
+    const finalScoreValue = projectStatus === "rejected" ? null : scoreValue;
     const now = new Date().toISOString();
     try {
       await superAdminService.updateActivitySubmission(
         selectedProjectSubmission.id,
         {
           status: projectStatus,
-          score: scoreValue,
+          score: finalScoreValue,
           review_notes: projectReviewNotes.trim() || null,
           reviewed_by: user?.id ?? null,
           reviewed_at:
-            projectStatus !== "pending" || scoreValue !== null ? now : null,
+            projectStatus !== "pending" || finalScoreValue !== null ? now : null,
         },
       );
       setSelectedProjectSubmission(null);
@@ -519,18 +609,65 @@ const ActivitiesSection = ({
     const match = topicSubmissions.find(
       (submission) => submission.id === focusSubmissionId,
     );
-    if (!match) return;
-    openSubmissionReview(match);
-    if (topicSubmissionsRef.current) {
-      topicSubmissionsRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+    if (match) {
+      openSubmissionReview(match);
+      if (topicSubmissionsRef.current) {
+        topicSubmissionsRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+      if (onFocusHandled) {
+        onFocusHandled();
+      }
+      return;
     }
-    if (onFocusHandled) {
-      onFocusHandled();
-    }
+
+    let cancelled = false;
+    const loadFocusedSubmission = async () => {
+      try {
+        const submission = await topicSubmissionService.getSubmission(
+          focusSubmissionId,
+        );
+        if (cancelled) return;
+        openSubmissionReview(submission);
+        if (topicSubmissionsRef.current) {
+          topicSubmissionsRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }
+      } catch (loadError) {
+        if (cancelled) return;
+        setSubmissionError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load submission.",
+        );
+      } finally {
+        if (!cancelled && onFocusHandled) {
+          onFocusHandled();
+        }
+      }
+    };
+
+    loadFocusedSubmission();
+    return () => {
+      cancelled = true;
+    };
   }, [focusSubmissionId, submissionsLoading, topicSubmissions, onFocusHandled]);
+
+  const submissionRangeStart =
+    submissionPagination.total === 0
+      ? 0
+      : (submissionPagination.page - 1) * submissionPagination.pageSize + 1;
+  const submissionRangeEnd =
+    submissionPagination.total === 0
+      ? 0
+      : Math.min(
+          submissionPagination.page * submissionPagination.pageSize,
+          submissionPagination.total,
+        );
 
   const handleSubmissionAction = async (
     status: "completed" | "rejected" | "in_progress",
@@ -641,11 +778,7 @@ const ActivitiesSection = ({
         enrollmentId,
         status,
       );
-      setLearningPathEnrollments((prev) =>
-        prev.map((entry) =>
-          entry.id === enrollmentId ? { ...entry, status } : entry,
-        ),
-      );
+      await loadLearningPathEnrollments();
     } catch (updateError) {
       setActionError(
         updateError instanceof Error
@@ -668,6 +801,21 @@ const ActivitiesSection = ({
       })),
     [learningPathEnrollments, users, learningPaths],
   );
+
+  const learningPathEnrollmentRangeStart =
+    learningPathEnrollmentPagination.total === 0
+      ? 0
+      : (learningPathEnrollmentPagination.page - 1) *
+          learningPathEnrollmentPagination.pageSize +
+        1;
+  const learningPathEnrollmentRangeEnd =
+    learningPathEnrollmentPagination.total === 0
+      ? 0
+      : Math.min(
+          learningPathEnrollmentPagination.page *
+            learningPathEnrollmentPagination.pageSize,
+          learningPathEnrollmentPagination.total,
+        );
 
   const learningPathEnrollmentColumns = useMemo(
     () => [
@@ -1337,28 +1485,193 @@ const ActivitiesSection = ({
 
   return (
     <div className="space-y-6">
-      {showApprovals && (
+      {showEnrollmentApprovals && (
         <>
           <div ref={learningPathEnrollmentsRef} className="space-y-4">
             <div>
               <h2 className="font-display text-2xl text-white">
-                Learning path enrollments
+                Learning Path Enrollments
               </h2>
               <p className="text-sm text-slate-300">
                 Review users who requested access via learning path code.
               </p>
             </div>
-            <DataTable
-              columns={learningPathEnrollmentColumns}
-              data={learningPathEnrollmentRows}
-              emptyMessage="No learning path enrollment requests yet."
-            />
+            <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300 md:grid-cols-5">
+              <label className="flex flex-col gap-2">
+                Status
+                <select
+                  value={learningPathEnrollmentFilters.status}
+                  onChange={(event) => {
+                    setLearningPathEnrollmentPage(1);
+                    setLearningPathEnrollmentFilters((prev) => ({
+                      ...prev,
+                      status: event.target.value,
+                    }));
+                  }}
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                >
+                  <option value="">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="active">Active</option>
+                  <option value="enrolled">Enrolled</option>
+                  <option value="completed">Completed</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="removed">Removed</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-2">
+                Learning Path
+                <select
+                  value={learningPathEnrollmentFilters.learningPathId}
+                  onChange={(event) => {
+                    setLearningPathEnrollmentPage(1);
+                    setLearningPathEnrollmentFilters((prev) => ({
+                      ...prev,
+                      learningPathId: event.target.value,
+                    }));
+                  }}
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                >
+                  <option value="">All learning paths</option>
+                  {learningPaths.map((path) => (
+                    <option key={path.id} value={path.id}>
+                      {path.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2">
+                User
+                <select
+                  value={learningPathEnrollmentFilters.userId}
+                  onChange={(event) => {
+                    setLearningPathEnrollmentPage(1);
+                    setLearningPathEnrollmentFilters((prev) => ({
+                      ...prev,
+                      userId: event.target.value,
+                    }));
+                  }}
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                >
+                  <option value="">All users</option>
+                  {users.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.email ?? entry.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2">
+                From
+                <input
+                  type="date"
+                  value={learningPathEnrollmentFilters.from}
+                  onChange={(event) => {
+                    setLearningPathEnrollmentPage(1);
+                    setLearningPathEnrollmentFilters((prev) => ({
+                      ...prev,
+                      from: event.target.value,
+                    }));
+                  }}
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                To
+                <input
+                  type="date"
+                  value={learningPathEnrollmentFilters.to}
+                  onChange={(event) => {
+                    setLearningPathEnrollmentPage(1);
+                    setLearningPathEnrollmentFilters((prev) => ({
+                      ...prev,
+                      to: event.target.value,
+                    }));
+                  }}
+                  className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
+                />
+              </label>
+            </div>
+            <div className="space-y-4">
+              {learningPathEnrollmentsLoading ? (
+                <p className="text-sm text-slate-400">Loading enrollments...</p>
+              ) : (
+                <DataTable
+                  columns={learningPathEnrollmentColumns}
+                  data={learningPathEnrollmentRows}
+                  emptyMessage="No learning path enrollment requests yet."
+                />
+              )}
+              {learningPathEnrollmentPagination.total > 0 && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-slate-300 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-slate-400">
+                    Showing {learningPathEnrollmentRangeStart}-
+                    {learningPathEnrollmentRangeEnd} of{" "}
+                    {learningPathEnrollmentPagination.total} learning path enrollments
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLearningPathEnrollmentPage((prev) =>
+                          Math.max(prev - 1, 1),
+                        )
+                      }
+                      disabled={
+                        learningPathEnrollmentsLoading ||
+                        updatingLPEnrollmentId !== null ||
+                        learningPathEnrollmentPagination.page <= 1
+                      }
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="min-w-20 text-center text-slate-400">
+                      Page {learningPathEnrollmentPagination.page} of{" "}
+                      {Math.max(learningPathEnrollmentPagination.totalPages, 1)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLearningPathEnrollmentPage((prev) =>
+                          Math.min(
+                            prev + 1,
+                            Math.max(
+                              learningPathEnrollmentPagination.totalPages,
+                              1,
+                            ),
+                          ),
+                        )
+                      }
+                      disabled={
+                        learningPathEnrollmentsLoading ||
+                        updatingLPEnrollmentId !== null ||
+                        learningPathEnrollmentPagination.page >=
+                          Math.max(
+                            learningPathEnrollmentPagination.totalPages,
+                            1,
+                          )
+                      }
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+              {learningPathEnrollmentError && (
+                <p className="text-xs text-rose-200">
+                  {learningPathEnrollmentError}
+                </p>
+              )}
+            </div>
           </div>
 
           <div ref={courseEnrollmentsRef} className="space-y-4">
             <div>
               <h2 className="font-display text-2xl text-white">
-                Course progress
+                Course Progress
               </h2>
               <p className="text-sm text-slate-300">
                 Track enrollment progress by user.
@@ -1425,12 +1738,12 @@ const ActivitiesSection = ({
         </>
       )}
 
-      {showApprovals && (
+      {showSubmissionApprovals && (
         <>
           <div ref={topicSubmissionsRef} className="space-y-3">
             <div>
               <h3 className="font-display text-xl text-white">
-                Topic submissions
+                Topic Submissions
               </h3>
               <p className="text-sm text-slate-400">
                 Review learner-uploaded certificates and mark completion status.
@@ -1442,18 +1755,21 @@ const ActivitiesSection = ({
                 <select
                   value={submissionFilters.status}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({
-                      ...prev,
-                      status: event.target.value,
-                    }))
+                    {
+                      setSubmissionPage(1);
+                      setSubmissionFilters((prev) => ({
+                        ...prev,
+                        status: event.target.value,
+                      }));
+                    }
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 >
                   <option value="">All</option>
-                  <option value="pending">pending</option>
-                  <option value="in_progress">in_progress</option>
-                  <option value="completed">completed</option>
-                  <option value="rejected">rejected</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="rejected">Rejected</option>
                 </select>
               </label>
               <label className="flex flex-col gap-2">
@@ -1461,10 +1777,13 @@ const ActivitiesSection = ({
                 <select
                   value={submissionFilters.topicId}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({
-                      ...prev,
-                      topicId: event.target.value,
-                    }))
+                    {
+                      setSubmissionPage(1);
+                      setSubmissionFilters((prev) => ({
+                        ...prev,
+                        topicId: event.target.value,
+                      }));
+                    }
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 >
@@ -1481,10 +1800,13 @@ const ActivitiesSection = ({
                 <select
                   value={submissionFilters.userId}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({
-                      ...prev,
-                      userId: event.target.value,
-                    }))
+                    {
+                      setSubmissionPage(1);
+                      setSubmissionFilters((prev) => ({
+                        ...prev,
+                        userId: event.target.value,
+                      }));
+                    }
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 >
@@ -1502,10 +1824,13 @@ const ActivitiesSection = ({
                   type="date"
                   value={submissionFilters.from}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({
-                      ...prev,
-                      from: event.target.value,
-                    }))
+                    {
+                      setSubmissionPage(1);
+                      setSubmissionFilters((prev) => ({
+                        ...prev,
+                        from: event.target.value,
+                      }));
+                    }
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 />
@@ -1516,10 +1841,13 @@ const ActivitiesSection = ({
                   type="date"
                   value={submissionFilters.to}
                   onChange={(event) =>
-                    setSubmissionFilters((prev) => ({
-                      ...prev,
-                      to: event.target.value,
-                    }))
+                    {
+                      setSubmissionPage(1);
+                      setSubmissionFilters((prev) => ({
+                        ...prev,
+                        to: event.target.value,
+                      }));
+                    }
                   }
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 />
@@ -1528,11 +1856,58 @@ const ActivitiesSection = ({
             {submissionsLoading ? (
               <p className="text-sm text-slate-400">Loading submissions...</p>
             ) : (
-              <DataTable
-                columns={topicSubmissionColumns}
-                data={topicSubmissionRows}
-                emptyMessage="No topic submissions yet."
-              />
+              <div className="space-y-4">
+                <DataTable
+                  columns={topicSubmissionColumns}
+                  data={topicSubmissionRows}
+                  emptyMessage="No topic submissions yet."
+                />
+                {submissionPagination.total > 0 && (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-slate-300 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-slate-400">
+                      Showing {submissionRangeStart}-{submissionRangeEnd} of{" "}
+                      {submissionPagination.total} topic submissions
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSubmissionPage((prev) => Math.max(prev - 1, 1))
+                        }
+                        disabled={
+                          submissionsLoading || submissionPagination.page <= 1
+                        }
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Previous
+                      </button>
+                      <span className="min-w-20 text-center text-slate-400">
+                        Page {submissionPagination.page} of{" "}
+                        {Math.max(submissionPagination.totalPages, 1)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSubmissionPage((prev) =>
+                            Math.min(
+                              prev + 1,
+                              Math.max(submissionPagination.totalPages, 1),
+                            ),
+                          )
+                        }
+                        disabled={
+                          submissionsLoading ||
+                          submissionPagination.page >=
+                            Math.max(submissionPagination.totalPages, 1)
+                        }
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             {submissionError && (
               <p className="text-xs text-rose-200">{submissionError}</p>
@@ -1542,7 +1917,7 @@ const ActivitiesSection = ({
           <div ref={courseProofsRef} className="space-y-3">
             <div>
               <h3 className="font-display text-xl text-white">
-                Course completion proofs
+                Course Completion Proofs
               </h3>
               <p className="text-sm text-slate-400">
                 Review uploaded course proofs before unlocking the next course.
@@ -1641,14 +2016,20 @@ const ActivitiesSection = ({
                 Status
                 <select
                   value={projectStatus}
-                  onChange={(event) => setProjectStatus(event.target.value)}
+                  onChange={(event) => {
+                    const nextStatus = event.target.value;
+                    setProjectStatus(nextStatus);
+                    if (nextStatus === "rejected") {
+                      setProjectScore("");
+                    }
+                  }}
                   className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
                 >
-                  <option value="pending">pending</option>
-                  <option value="in_progress">in_progress</option>
-                  <option value="completed">completed</option>
-                  <option value="resubmit">resubmit</option>
-                  <option value="rejected">rejected</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="resubmit">Resubmit</option>
+                  <option value="rejected">Rejected</option>
                 </select>
               </label>
               <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
@@ -1657,8 +2038,11 @@ const ActivitiesSection = ({
                   type="number"
                   value={projectScore}
                   onChange={(event) => setProjectScore(event.target.value)}
-                  placeholder="Enter score"
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
+                  placeholder={projectStatus === "rejected" ? "Not applicable" : "Enter score"}
+                  disabled={projectStatus === "rejected"}
+                  className={`mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0 ${
+                    projectStatus === "rejected" ? "opacity-60" : ""
+                  }`}
                 />
               </label>
             </div>
@@ -1714,7 +2098,7 @@ const ActivitiesSection = ({
                 <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
                   Date
                 </p>
-                <p>{formatDate(viewingSubmission.created_at)}</p>
+                <p>{formatDateTime(viewingSubmission.created_at)}</p>
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">

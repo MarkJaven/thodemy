@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import FormList from "../components/dashboard/FormList";
+import LoadingScreen from "../components/LoadingScreen";
 import ProfileSetupModal from "../components/auth/ProfileSetupModal";
 import QuizList from "../components/dashboard/QuizList";
 import UploadWidget from "../components/dashboard/UploadWidget";
@@ -140,6 +141,8 @@ const userNavItems: Array<{
   { key: "requests", label: "Requests", icon: <RequestIcon /> },
   { key: "profile", label: "Profile", icon: <ProfileIcon /> },
 ];
+
+const userNavKeys = new Set<UserNavItem>(userNavItems.map((item) => item.key));
 
 const SkeletonCard = () => (
   <div className="h-36 rounded-2xl border border-white/10 bg-white/5 shadow-[0_18px_40px_rgba(10,8,18,0.35)]">
@@ -651,6 +654,21 @@ const getSubmissionTimestamp = (submission?: TopicSubmission | null) => {
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 };
 
+const getProgressTimestamp = (progress?: TopicProgress | null) => {
+  if (!progress) return 0;
+  const stamp =
+    progress.updated_at ?? progress.start_date ?? progress.created_at ?? progress.end_date ?? null;
+  if (!stamp) return 0;
+  const date = new Date(stamp);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
+
+const getQuizSortTime = (quiz: Quiz) => {
+  const start = quiz.start_at ? new Date(quiz.start_at).getTime() : 0;
+  const end = quiz.end_at ? new Date(quiz.end_at).getTime() : 0;
+  return Math.max(start, end);
+};
+
 const getTopicStatusLabel = (
   progress?: TopicProgress | null,
   submission?: TopicSubmission | null
@@ -679,6 +697,7 @@ const Dashboard = () => {
   const { user, isLoading: userLoading, verified } = useUser();
   const { signOut } = useAuth();
   const navigate = useNavigate();
+  const params = useParams();
   const { data, loading, error, refresh } = useDashboardData(user?.id);
   const { role: userRole, loading: roleLoading } = useUserRole(user?.id);
   const {
@@ -687,24 +706,41 @@ const Dashboard = () => {
     error: topicsError,
     refresh: refreshTopics,
   } = useTopicsData(user?.id);
-  const [activeNav, setActiveNavRaw] = useState<UserNavItem>(
-    () => (sessionStorage.getItem("thodemy-user-nav") as UserNavItem) || "overview"
-  );
-  const setActiveNav = (nav: UserNavItem) => {
-    sessionStorage.setItem("thodemy-user-nav", nav);
-    setActiveNavRaw(nav);
-  };
+  const requestedNav = params["*"];
+  const activeNav: UserNavItem = userNavKeys.has(requestedNav as UserNavItem)
+    ? (requestedNav as UserNavItem)
+    : "overview";
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [navTransitioning, setNavTransitioning] = useState(false);
+  const prevNavRef = useRef(activeNav);
+  useEffect(() => {
+    if (prevNavRef.current !== activeNav) {
+      prevNavRef.current = activeNav;
+      setNavTransitioning(true);
+      const timer = setTimeout(() => setNavTransitioning(false), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [activeNav]);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const [selectedLearningPathId, setSelectedLearningPathId] = useState("all");
   const [selectedCourseId, setSelectedCourseId] = useState("all");
   const [selectedTopicId, setSelectedTopicId] = useState("all");
+  const [focusedTrackTarget, setFocusedTrackTarget] = useState<{
+    learningPathId: string;
+    courseId: string;
+    topicId: string;
+  } | null>(null);
+  const setActiveNav = (nav: UserNavItem) => {
+    setFocusedTrackTarget(null);
+    navigate(`/dashboard/${nav}`);
+  };
   const [learningPathPanels, setLearningPathPanels] = useState({
     enroll: false,
     track: false,
   });
   const learningPathCodeRef = useRef<HTMLInputElement | null>(null);
+  const learningPathTrackPanelRef = useRef<HTMLDivElement | null>(null);
   const didInitLearningPathTrack = useRef(false);
 
   // Redirect to auth page if not logged in or not verified
@@ -713,6 +749,13 @@ const Dashboard = () => {
       navigate("/auth/login", { replace: true });
     }
   }, [user, userLoading, verified, navigate]);
+
+  useEffect(() => {
+    if (userLoading || !user || !verified) return;
+    if (!requestedNav || !userNavKeys.has(requestedNav as UserNavItem)) {
+      navigate("/dashboard/overview", { replace: true });
+    }
+  }, [navigate, requestedNav, user, userLoading, verified]);
 
   // Fetch profile
   useEffect(() => {
@@ -754,6 +797,7 @@ const Dashboard = () => {
   const [learningPathEnrollSuccess, setLearningPathEnrollSuccess] = useState<string | null>(null);
 
   const resetLearningPathFilters = () => {
+    setFocusedTrackTarget(null);
     setSelectedLearningPathId("all");
     setSelectedCourseId("all");
     setSelectedTopicId("all");
@@ -797,6 +841,52 @@ const Dashboard = () => {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileUpdateError, setProfileUpdateError] = useState<string | null>(null);
   const [profileUpdateSuccess, setProfileUpdateSuccess] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const getAvatarPublicUrl = (path: string | null | undefined) => {
+    if (!path || !supabase) return null;
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    return data?.publicUrl || null;
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !supabase || !user?.id) return;
+    if (e.target) e.target.value = "";
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      setProfileUpdateError("Only JPG, PNG, or WebP images are allowed.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileUpdateError("Image must be under 2 MB.");
+      return;
+    }
+    setAvatarUploading(true);
+    setProfileUpdateError(null);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const filePath = `${user.id}/avatar.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: filePath })
+        .eq("id", user.id);
+      if (updateError) throw updateError;
+      setProfile((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
+      setProfileDraft((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
+      setProfileUpdateSuccess("Profile photo updated.");
+      setTimeout(() => setProfileUpdateSuccess(null), 3000);
+    } catch (err: any) {
+      setProfileUpdateError(err?.message || "Failed to upload photo.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   useEffect(() => {
     setActivityEntries(data.activities);
@@ -883,7 +973,7 @@ const Dashboard = () => {
     () =>
       new Set(
         learningPathEnrollmentEntries
-          .filter((entry) => Boolean(entry.actual_start_date ?? entry.start_date))
+          .filter((entry) => Boolean(entry.actual_start_date))
           .map((entry) => entry.learning_path_id)
       ),
     [learningPathEnrollmentEntries]
@@ -916,6 +1006,8 @@ const Dashboard = () => {
   }, [enrollmentEntries, activeLearningPathCourseIds]);
 
   const hasActiveEnrollment = activeEnrollmentCourseIds.size > 0;
+  const hasStartedLearningPath = startedLearningPathIds.size > 0;
+  const moduleCtaLabel = hasStartedLearningPath ? "Resume Module" : "Start Module";
 
   const completedTopicCount = useMemo(
     () =>
@@ -977,6 +1069,83 @@ const Dashboard = () => {
     }
     return Array.from(seen.values()).slice(0, 3);
   }, [activityEntries]);
+
+  const activeLearningPathTopicLocations = useMemo(() => {
+    const locations = new Map<string, { learningPathId: string; courseId: string }>();
+
+    data.learningPaths.forEach((path) => {
+      if (!activeLearningPathIds.has(path.id)) return;
+
+      (path.course_ids ?? []).forEach((courseId) => {
+        const course = courseLookup.get(courseId);
+        if (!course) return;
+
+        (course.topic_ids ?? []).forEach((topicId) => {
+          if (!locations.has(topicId)) {
+            locations.set(topicId, { learningPathId: path.id, courseId });
+          }
+        });
+      });
+    });
+
+    return locations;
+  }, [activeLearningPathIds, courseLookup, data.learningPaths]);
+
+  const latestInProgressTopic = useMemo(() => {
+    return (
+      topicsData.topicProgress
+        .filter((progress) => progress.status === "in_progress")
+        .map((progress) => {
+          const topic = topicLookup.get(progress.topic_id);
+          const location = activeLearningPathTopicLocations.get(progress.topic_id);
+          if (!topic || !location) return null;
+          return {
+            topic,
+            progress,
+            learningPathId: location.learningPathId,
+            courseId: location.courseId,
+          };
+        })
+        .filter(Boolean)
+        .sort(
+          (left, right) =>
+            getProgressTimestamp(right!.progress) - getProgressTimestamp(left!.progress)
+        )[0] ?? null
+    );
+  }, [activeLearningPathTopicLocations, topicLookup, topicsData.topicProgress]);
+
+  const focusTrackTopic = (
+    selection?: { learningPathId: string; courseId: string; topicId: string } | null
+  ) => {
+    setActiveNav("learning-path");
+    setLearningPathPanels((prev) => ({ ...prev, track: true }));
+    setFocusedTrackTarget(selection ?? null);
+  };
+
+  useEffect(() => {
+    if (!learningPathPanels.track || activeNav !== "learning-path" || !focusedTrackTarget) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const topicCard = document.getElementById(
+        `learning-path-topic-${focusedTrackTarget.topicId}`
+      );
+
+      let parentDetails = topicCard?.closest("details");
+      while (parentDetails) {
+        parentDetails.open = true;
+        parentDetails = parentDetails.parentElement?.closest("details") ?? null;
+      }
+
+      window.requestAnimationFrame(() => {
+        const target = topicCard ?? learningPathTrackPanelRef.current;
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeNav, focusedTrackTarget, learningPathPanels.track]);
 
   const visibleQuizzes = data.quizzes.filter((quiz) => {
     // Quiz is assigned to a specific user - only that user sees it
@@ -1177,9 +1346,9 @@ const Dashboard = () => {
       setQuizProofError("Proof file must be a PDF, JPG, or PNG.");
       return;
     }
-    const maxSizeBytes = 10 * 1024 * 1024;
+    const maxSizeBytes = 25 * 1024 * 1024;
     if (quizProofFile.size > maxSizeBytes) {
-      setQuizProofError("Proof file must be smaller than 10MB.");
+      setQuizProofError("Proof file must be smaller than 25MB.");
       return;
     }
     setSubmittingQuizProof(true);
@@ -1642,7 +1811,10 @@ const Dashboard = () => {
               Learning Path
               <select
                 value={selectedLearningPathId}
-                onChange={(event) => setSelectedLearningPathId(event.target.value)}
+                onChange={(event) => {
+                  setFocusedTrackTarget(null);
+                  setSelectedLearningPathId(event.target.value);
+                }}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/70 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               >
                 <option value="all">All learning paths</option>
@@ -1657,7 +1829,10 @@ const Dashboard = () => {
               Course
               <select
                 value={selectedCourseId}
-                onChange={(event) => setSelectedCourseId(event.target.value)}
+                onChange={(event) => {
+                  setFocusedTrackTarget(null);
+                  setSelectedCourseId(event.target.value);
+                }}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/70 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               >
                 <option value="all">All courses</option>
@@ -1672,7 +1847,10 @@ const Dashboard = () => {
               Topic
               <select
                 value={selectedTopicId}
-                onChange={(event) => setSelectedTopicId(event.target.value)}
+                onChange={(event) => {
+                  setFocusedTrackTarget(null);
+                  setSelectedTopicId(event.target.value);
+                }}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/70 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               >
                 <option value="all">All topics</option>
@@ -1712,7 +1890,7 @@ const Dashboard = () => {
         ) : (
           filteredLearningPaths.map((path) => {
             const enrollment = learningPathEnrollmentLookup.get(path.id);
-            const hasStarted = Boolean(enrollment?.actual_start_date ?? enrollment?.start_date);
+            const hasStarted = Boolean(enrollment?.actual_start_date);
             const canStart =
               Boolean(enrollment?.id) &&
               !enrollment?.actual_start_date &&
@@ -1797,9 +1975,25 @@ const Dashboard = () => {
               return true;
             });
 
+            const pathContainsSelectedCourse =
+              selectedCourseId !== "all" && (path.course_ids ?? []).includes(selectedCourseId);
+            const pathContainsSelectedTopic =
+              selectedTopicId !== "all" &&
+              pathCourses.some((course) => (course.topic_ids ?? []).includes(selectedTopicId));
+            const pathContainsFocusedTopic =
+              focusedTrackTarget?.learningPathId === path.id;
+
             return (
               <details
                 key={`learning-path-track-${path.id}`}
+                open={
+                  selectedLearningPathId === path.id ||
+                  pathContainsSelectedCourse ||
+                  pathContainsSelectedTopic ||
+                  pathContainsFocusedTopic
+                    ? true
+                    : undefined
+                }
                 className="group rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-6"
               >
                 <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
@@ -1820,7 +2014,7 @@ const Dashboard = () => {
                         </span>
                         <span className="rounded-full border border-white/10 px-3 py-1">
                           Actual start:{" "}
-                          {formatDate(enrollment?.actual_start_date ?? enrollment?.start_date)}
+                          {formatDate(enrollment?.actual_start_date)}
                         </span>
                         <span className="rounded-full border border-white/10 px-3 py-1">
                           Actual end: {formatDate(enrollment?.actual_end_date)}
@@ -2008,9 +2202,18 @@ const Dashboard = () => {
                           });
                         });
 
+                        const shouldOpenCourse =
+                          selectedCourseId === course.id ||
+                          focusedTrackTarget?.courseId === course.id ||
+                          (selectedTopicId !== "all" &&
+                            (course.topic_ids ?? []).includes(selectedTopicId)) ||
+                          (focusedTrackTarget !== null &&
+                            (course.topic_ids ?? []).includes(focusedTrackTarget.topicId));
+
                         return (
                       <details
                         key={`course-track-${path.id}-${course?.id}`}
+                        open={shouldOpenCourse ? true : undefined}
                         className={`group rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5 ${
                           isCourseLocked ? "opacity-60" : ""
                         }`}
@@ -2072,6 +2275,14 @@ const Dashboard = () => {
                                   return (
                                     <details
                                       key={`topic-group-${path.id}-${course?.id}-${section.id}`}
+                                      open={
+                                        (selectedTopicId !== "all" &&
+                                          section.topicIds.includes(selectedTopicId)) ||
+                                        (focusedTrackTarget !== null &&
+                                          section.topicIds.includes(focusedTrackTarget.topicId))
+                                          ? true
+                                          : undefined
+                                      }
                                       className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 sm:px-4"
                                     >
                                       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
@@ -2143,7 +2354,12 @@ const Dashboard = () => {
                                           return (
                                             <div
                                               key={`topic-${path.id}-${course?.id}-${section.id}-${topic.id}`}
-                                              className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm sm:px-4"
+                                              id={`learning-path-topic-${topic.id}`}
+                                              className={`rounded-xl border bg-white/5 px-3 py-3 text-sm sm:px-4 ${
+                                                focusedTrackTarget?.topicId === topic.id
+                                                  ? "border-accent-purple/40 shadow-[0_0_0_1px_rgba(124,58,237,0.25)]"
+                                                  : "border-white/10"
+                                              }`}
                                             >
                                               <div className="flex flex-wrap items-center justify-between gap-3">
                                                 <div>
@@ -2288,9 +2504,18 @@ const Dashboard = () => {
   };
 
   const filteredQuizzes = useMemo(() => {
-    if (quizFilter === "all") return visibleQuizzes;
+    const sortQuizzes = (list: Quiz[]) =>
+      list
+        .slice()
+        .sort(
+          (left, right) =>
+            getQuizSortTime(right) - getQuizSortTime(left) ||
+            left.title.localeCompare(right.title)
+        );
+
+    if (quizFilter === "all") return sortQuizzes(visibleQuizzes);
     const now = new Date();
-    return visibleQuizzes.filter((quiz) => {
+    const filtered = visibleQuizzes.filter((quiz) => {
       const attempt = quizAttemptLookup.get(quiz.id);
       const score = quizScoreLookup.get(quiz.id);
       const isCompleted = Boolean(attempt?.submitted_at);
@@ -2310,6 +2535,7 @@ const Dashboard = () => {
         default: return true;
       }
     });
+    return sortQuizzes(filtered);
   }, [visibleQuizzes, quizFilter, quizAttemptLookup, quizScoreLookup]);
 
   const renderQuizTab = () => {
@@ -2433,7 +2659,11 @@ const Dashboard = () => {
     const visibleCourses = activeCourses.slice(0, 3);
 
     const nextSteps = [
-      hasActiveEnrollment ? "Resume your active course" : "Enroll in a learning path to start",
+      hasStartedLearningPath
+        ? "Resume your active course"
+        : hasActiveEnrollment
+          ? "Start your enrolled course"
+          : "Enroll in a learning path to start",
       pendingSubmissionCount > 0
         ? "Track certificate review status"
         : "Submit required certificates for completed topics",
@@ -2657,6 +2887,7 @@ const Dashboard = () => {
     const primaryEnrollment = primaryPath
       ? learningPathEnrollmentLookup.get(primaryPath.id)
       : null;
+    const primaryPathStarted = Boolean(primaryEnrollment?.actual_start_date);
     const primaryCourses = primaryPath
       ? ((primaryPath.course_ids ?? [])
           .map((courseId) => courseLookup.get(courseId))
@@ -2709,7 +2940,7 @@ const Dashboard = () => {
 
     const nextUp = (() => {
       if (!primaryPath || primaryCourses.length === 0) return null;
-      const hasStarted = Boolean(primaryEnrollment?.actual_start_date ?? primaryEnrollment?.start_date);
+      const hasStarted = primaryPathStarted;
       let previousCourseComplete = true;
       for (let courseIndex = 0; courseIndex < primaryCourses.length; courseIndex += 1) {
         const course = primaryCourses[courseIndex];
@@ -2810,6 +3041,17 @@ const Dashboard = () => {
       setLearningPathPanels((prev) => ({ ...prev, track: true }));
     };
 
+    const handleViewLatestInProgress = () =>
+      focusTrackTopic(
+        latestInProgressTopic
+          ? {
+              learningPathId: latestInProgressTopic.learningPathId,
+              courseId: latestInProgressTopic.courseId,
+              topicId: latestInProgressTopic.topic.id,
+            }
+          : null
+      );
+
     return (
       <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -2827,10 +3069,10 @@ const Dashboard = () => {
           <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
             <button
               type="button"
-              onClick={() => setLearningPathPanels((prev) => ({ ...prev, track: true }))}
+              onClick={handleViewLatestInProgress}
               className="w-full rounded-full bg-accent-purple px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-accent-purple/90 sm:w-auto"
             >
-              Resume module
+              {primaryPathStarted ? "Resume Module" : "Start Module"}
             </button>
           </div>
         </div>
@@ -2897,7 +3139,7 @@ const Dashboard = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLearningPathPanels((prev) => ({ ...prev, track: true }))}
+                  onClick={handleViewLatestInProgress}
                   className="w-full rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/20 sm:w-auto"
                 >
                   View progress
@@ -2974,7 +3216,7 @@ const Dashboard = () => {
                   </span>
                   <span className="rounded-full border border-white/10 px-3 py-1">
                     Actual start{" "}
-                    {formatDate(primaryEnrollment?.actual_start_date ?? primaryEnrollment?.start_date)}
+                    {formatDate(primaryEnrollment?.actual_start_date)}
                   </span>
                   <span className="rounded-full border border-white/10 px-3 py-1">
                     Actual end {formatDate(primaryEnrollment?.actual_end_date)}
@@ -3067,6 +3309,7 @@ const Dashboard = () => {
               {learningPathPanels.track && (
                 <div
                   id="learning-path-track-panel"
+                  ref={learningPathTrackPanelRef}
                   className="border-t border-white/5 px-4 pb-6 sm:px-6"
                 >
                   <div className="pt-6">{renderTrackTab()}</div>
@@ -3185,16 +3428,7 @@ const Dashboard = () => {
         </p>
       </div>
       <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card">
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="font-display text-xl text-white">Recent requests</h3>
-          <button
-            type="button"
-            onClick={() => setActiveNav("forms")}
-            className="text-xs font-semibold uppercase tracking-[0.25em] text-accent-purple"
-          >
-            Go to forms
-          </button>
-        </div>
+        <h3 className="font-display text-xl text-white">Recent requests</h3>
         <div className="mt-5 space-y-3">
           {latestSubmissions.length === 0 ? (
             <p className="text-sm text-slate-400">
@@ -3295,9 +3529,37 @@ const Dashboard = () => {
       <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple">
-              {initials}
-            </div>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple overflow-hidden"
+              title="Change profile photo"
+            >
+              {profileView.avatar_url ? (
+                <img
+                  src={getAvatarPublicUrl(profileView.avatar_url) ?? ""}
+                  alt={displayName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                initials
+              )}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                {avatarUploading ? (
+                  <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                ) : (
+                  <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                )}
+              </div>
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
             <div>
               <h2 className="font-display text-2xl text-white">{displayName}</h2>
               <p className="text-sm text-slate-400">
@@ -3397,7 +3659,7 @@ const Dashboard = () => {
           </div>
           <div>
             <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
-              Birthday
+              Birth Date
             </label>
             {isProfileEditing ? (
               <input
@@ -3541,6 +3803,10 @@ const Dashboard = () => {
       .slice(0, 2)
       .toUpperCase() ?? "LR";
 
+  if (userLoading || loading || roleLoading) {
+    return <LoadingScreen />;
+  }
+
   return (
     <div className="min-h-screen bg-ink-900 text-slate-100">
       {/* Background glows */}
@@ -3627,8 +3893,10 @@ const Dashboard = () => {
 
           <div className="p-4 border-t border-white/5">
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple">
-                {userInitials}
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple overflow-hidden">
+                {profile?.avatar_url ? (
+                  <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={welcomeName} className="h-full w-full object-cover" />
+                ) : userInitials}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="truncate text-sm font-medium text-white">{welcomeName}</p>
@@ -3659,18 +3927,8 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveNav("learning-path")}
-                  className="hidden sm:flex items-center gap-2 bg-accent-purple hover:bg-accent-purple/90 text-white text-sm font-semibold px-4 py-2 rounded-full transition-colors"
-                >
-                  Resume Module
-                </button>
-                <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent-purple/20 text-2xs font-semibold uppercase text-accent-purple">
-                    {userInitials}
-                  </div>
-                  <span className="max-w-[160px] truncate text-xs text-slate-300">
+                <div className="hidden sm:flex items-center rounded-full border border-white/10 bg-white/[0.03] px-4 py-2">
+                  <span className="max-w-[200px] truncate text-xs text-slate-300">
                     {user?.email ?? "Learner"}
                   </span>
                 </div>
@@ -3679,9 +3937,11 @@ const Dashboard = () => {
                   <button
                     type="button"
                     onClick={() => setProfileDropdownOpen((prev) => !prev)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors"
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors overflow-hidden"
                   >
-                    {userInitials}
+                    {profile?.avatar_url ? (
+                      <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={welcomeName} className="h-full w-full object-cover" />
+                    ) : userInitials}
                   </button>
                   {profileDropdownOpen && (
                     <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-white/10 bg-ink-800 shadow-xl overflow-hidden z-50">
@@ -3751,7 +4011,14 @@ const Dashboard = () => {
               </div>
             )}
 
-            {renderActiveSection()}
+            {navTransitioning ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
+                <div className="relative h-10 w-10">
+                  <div className="absolute inset-0 rounded-full border-[3px] border-accent-purple/20" />
+                  <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-accent-purple/70 animate-spin" />
+                </div>
+              </div>
+            ) : renderActiveSection()}
           </div>
         </main>
       </div>

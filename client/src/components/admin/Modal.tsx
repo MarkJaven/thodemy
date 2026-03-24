@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 
 type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
@@ -118,6 +119,15 @@ const Modal = ({
   variant = "default",
   icon,
 }: ModalProps) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const config = variantConfig[variant];
@@ -131,7 +141,6 @@ const Modal = ({
       className={`fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm animate-fade-in ${
         topAligned ? "pt-4 pb-8" : "flex items-center justify-center p-4"
       }`}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         className={`${topAligned ? "mx-auto" : ""} w-full ${sizeClasses[size]} ${

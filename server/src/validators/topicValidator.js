@@ -67,6 +67,11 @@ const validateSubmissionQuery = [
   query("topic_id").optional().isUUID(),
   query("from").optional().isISO8601(),
   query("to").optional().isISO8601(),
+  query("page").optional().isInt({ min: 1 }).withMessage("Page must be 1 or greater."),
+  query("page_size")
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage("Page size must be between 1 and 100."),
 ];
 
 module.exports = {

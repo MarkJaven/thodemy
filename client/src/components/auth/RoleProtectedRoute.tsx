@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useUser } from "../../hooks/useUser";
 import { useUserRole } from "../../hooks/useUserRole";
+import LoadingScreen from "../LoadingScreen";
 import type { Role } from "../../types/superAdmin";
 
 type RoleProtectedRouteProps = {
@@ -14,13 +15,7 @@ const RoleProtectedRoute = ({ allowedRoles, children }: RoleProtectedRouteProps)
   const { role, loading, error } = useUserRole(user?.id);
 
   if (isLoading || loading || !verified) {
-    return (
-      <div className="min-h-screen bg-ink-900 text-slate-100">
-        <div className="mx-auto flex min-h-screen max-w-3xl items-center px-6">
-          <p className="text-sm text-slate-400">Checking access...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!user) {

@@ -53,6 +53,26 @@ const parseOptions = (value: unknown): string[] => {
 
 const REQUEST_HARD_TIMEOUT_MS = 20000;
 
+type LearningPathEnrollmentFilters = {
+  status?: string;
+  learningPathId?: string;
+  userId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+type PaginatedLearningPathEnrollments = {
+  enrollments: LearningPathEnrollment[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 export const superAdminService = {
   async getCurrentRole(userId?: string): Promise<Role | null> {
     if (!userId) return null;
@@ -165,6 +185,60 @@ export const superAdminService = {
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
     return (data ?? []) as LearningPathEnrollment[];
+  },
+
+  async listLearningPathEnrollmentsPage(
+    filters: LearningPathEnrollmentFilters = {}
+  ): Promise<PaginatedLearningPathEnrollments> {
+    const client = requireSupabase();
+    const page = Math.max(filters.page ?? 1, 1);
+    const pageSize = Math.max(filters.pageSize ?? 10, 1);
+    const fromIndex = (page - 1) * pageSize;
+    const toIndex = fromIndex + pageSize - 1;
+
+    let query = client
+      .from("learning_path_enrollments")
+      .select(
+        "id, user_id, learning_path_id, status, enrolled_at, start_date, end_date, target_start_date, target_end_date, actual_start_date, actual_end_date, created_at, updated_at",
+        { count: "exact" }
+      );
+
+    if (filters.status) {
+      query = query.eq("status", filters.status);
+    }
+
+    if (filters.learningPathId) {
+      query = query.eq("learning_path_id", filters.learningPathId);
+    }
+
+    if (filters.userId) {
+      query = query.eq("user_id", filters.userId);
+    }
+
+    if (filters.from) {
+      query = query.gte("enrolled_at", filters.from);
+    }
+
+    if (filters.to) {
+      query = query.lte("enrolled_at", `${filters.to}T23:59:59.999`);
+    }
+
+    const { data, error, count } = await query
+      .order("created_at", { ascending: false })
+      .range(fromIndex, toIndex);
+
+    if (error) throw new Error(error.message);
+
+    const total = count ?? 0;
+    return {
+      enrollments: (data ?? []) as LearningPathEnrollment[],
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
+      },
+    };
   },
 
   async updateLearningPathEnrollmentStatus(
