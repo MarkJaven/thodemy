@@ -8,7 +8,9 @@ const validateCreateUser = [
     .withMessage("Username must be between 3 and 50 characters."),
   body("password")
     .isLength({ min: 8, max: 128 })
-    .withMessage("Password must be between 8 and 128 characters."),
+    .withMessage("Password must be between 8 and 128 characters.")
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?])/)
+    .withMessage("Password must include uppercase, lowercase, number, and special character."),
   body("role")
     .isIn(["user", "admin", "superadmin"])
     .withMessage("Role must be user, admin, or superadmin."),
@@ -23,7 +25,9 @@ const validateUpdateUser = [
   body("password")
     .optional()
     .isLength({ min: 8, max: 128 })
-    .withMessage("Password must be between 8 and 128 characters."),
+    .withMessage("Password must be between 8 and 128 characters.")
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?])/)
+    .withMessage("Password must include uppercase, lowercase, number, and special character."),
   body("role")
     .optional()
     .isIn(["user", "admin", "superadmin"])

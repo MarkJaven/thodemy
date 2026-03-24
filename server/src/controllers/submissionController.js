@@ -12,6 +12,23 @@ const logger = require("../utils/logger");
 const SUBMISSION_SELECT_FIELDS =
   "id, topic_id, user_id, file_url, message, status, submitted_at, reviewed_by, reviewed_at, review_notes, created_at, updated_at";
 
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 10;
+
+const getPaginationParams = (query = {}) => {
+  const page = Math.max(Number.parseInt(query.page, 10) || DEFAULT_PAGE, 1);
+  const pageSize = Math.max(
+    Number.parseInt(query.page_size, 10) || DEFAULT_PAGE_SIZE,
+    1
+  );
+  return {
+    page,
+    pageSize,
+    from: (page - 1) * pageSize,
+    to: page * pageSize - 1,
+  };
+};
+
 const createTopicSubmission = async (req, res, next) => {
   try {
     const { topicId } = req.params;
@@ -137,8 +154,13 @@ const listTopicSubmissions = async (req, res, next) => {
 const listSubmissions = async (req, res, next) => {
   try {
     const { status, user_id: userId, topic_id: topicId, from, to } = req.query;
+    const { page, pageSize, from: rangeStart, to: rangeEnd } = getPaginationParams(
+      req.query
+    );
 
-    let query = supabaseAdmin.from("topic_submissions").select(SUBMISSION_SELECT_FIELDS);
+    let query = supabaseAdmin
+      .from("topic_submissions")
+      .select(SUBMISSION_SELECT_FIELDS, { count: "exact" });
 
     if (topicId) {
       query = query.eq("topic_id", topicId);
@@ -166,7 +188,9 @@ const listSubmissions = async (req, res, next) => {
       query = query.lte("submitted_at", to);
     }
 
-    const { data, error } = await query.order("submitted_at", { ascending: false });
+    const { data, error, count } = await query
+      .order("submitted_at", { ascending: false })
+      .range(rangeStart, rangeEnd);
     if (error) {
       throw new ExternalServiceError("Unable to load submissions", {
         code: error.code,
@@ -174,7 +198,44 @@ const listSubmissions = async (req, res, next) => {
       });
     }
 
-    return res.json({ submissions: data ?? [] });
+    const total = count ?? 0;
+    const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0;
+
+    return res.json({
+      submissions: data ?? [],
+      pagination: {
+        page,
+        page_size: pageSize,
+        total,
+        total_pages: totalPages,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getSubmission = async (req, res, next) => {
+  try {
+    const { submissionId } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from("topic_submissions")
+      .select(SUBMISSION_SELECT_FIELDS)
+      .eq("id", submissionId)
+      .maybeSingle();
+
+    if (error) {
+      throw new ExternalServiceError("Unable to load submission", {
+        code: error.code,
+        details: error.message,
+      });
+    }
+
+    if (!data) {
+      throw new NotFoundError("Submission not found.");
+    }
+
+    return res.json({ submission: data });
   } catch (error) {
     return next(error);
   }
@@ -313,6 +374,7 @@ module.exports = {
     createTopicSubmission,
     listTopicSubmissions,
     listSubmissions,
+    getSubmission,
     updateSubmissionStatus,
     getSubmissionFile,
   },

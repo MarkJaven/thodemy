@@ -107,14 +107,14 @@ const AuthPage = () => {
       if (userId) {
         const approval = await sessionService.requestDeviceApproval();
         if (approval?.status === "pending") {
-          // Another device already has an active session — block this login.
+          // Another device has an active session — block this login.
           await authService.signOut();
           setError("User is already logged in on another device or browser.");
           setLoadingTarget(null);
           return;
         }
         // No conflicting session — register this device's session.
-        sessionService.createSession(userId).catch(() => {});
+        await sessionService.createSession(userId).catch(() => {});
       }
       setRoleCheckUserId(userId ?? null);
       await resolveRoleAndRedirect(userId);

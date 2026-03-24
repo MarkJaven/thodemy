@@ -351,7 +351,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-white">Birthday *</label>
+                    <label className="block text-sm font-semibold text-white">Birth Date *</label>
                     <input
                       type="date"
                       value={personalInfo.birthday}

@@ -5,6 +5,7 @@ import AuthPage from "./pages/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/LandingPage";
 import DeactivatedPage from "./pages/DeactivatedPage";
+import NotFoundPage from "./pages/NotFoundPage";
 import RoleProtectedRoute from "./components/auth/RoleProtectedRoute";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import SuperAdminDashboard from "./pages/admin/SuperAdminDashboard";
@@ -39,7 +40,7 @@ const App = () => {
         <Route path="/auth/:mode" element={<AuthPage />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/deactivated" element={<DeactivatedPage />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/*" element={<Dashboard />} />
         <Route
           path="/admin/*"
           element={
@@ -56,7 +57,7 @@ const App = () => {
             </RoleProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/auth/login" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AuthProvider>
   );

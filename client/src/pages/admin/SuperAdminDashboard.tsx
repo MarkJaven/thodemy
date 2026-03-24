@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import LoadingScreen from "../../components/LoadingScreen";
 import { useAuth } from "../../context/AuthContext";
 import { useUser } from "../../hooks/useUser";
 import { useUserRole } from "../../hooks/useUserRole";
@@ -156,9 +157,36 @@ type NavItem =
   | "quiz"
   | "quiz-scores"
   | "approvals"
+  | "approvals-enrollments"
+  | "approvals-submissions"
   | "reports"
   | "evaluation"
   | "profile";
+
+type ApprovalSection =
+  | "topic_submissions"
+  | "course_completion"
+  | "learning_path_enrollments"
+  | "course_enrollments";
+
+type ApprovalNavItem = "approvals-enrollments" | "approvals-submissions";
+
+const APPROVAL_NAV_ITEMS: Array<{
+  key: ApprovalNavItem;
+  label: string;
+  defaultSection: ApprovalSection;
+}> = [
+  {
+    key: "approvals-enrollments",
+    label: "Enrollment Approvals",
+    defaultSection: "learning_path_enrollments",
+  },
+  {
+    key: "approvals-submissions",
+    label: "Submission Approvals",
+    defaultSection: "topic_submissions",
+  },
+];
 
 interface DashboardStats {
   activeCourses: number;
@@ -215,7 +243,22 @@ const SuperAdminDashboard = () => {
     navigate(`/super-admin/${nav}`);
   };
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [navTransitioning, setNavTransitioning] = useState(false);
+  const prevNavRef = useRef(activeNav);
+  useEffect(() => {
+    if (prevNavRef.current !== activeNav) {
+      prevNavRef.current = activeNav;
+      setNavTransitioning(true);
+      const timer = setTimeout(() => setNavTransitioning(false), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [activeNav]);
   const [quizNavOpen, setQuizNavOpen] = useState(activeNav === "quiz" || activeNav === "quiz-scores");
+  const [approvalsNavOpen, setApprovalsNavOpen] = useState(
+    activeNav === "approvals" ||
+    activeNav === "approvals-enrollments" ||
+    activeNav === "approvals-submissions"
+  );
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -255,12 +298,7 @@ const SuperAdminDashboard = () => {
   const [taskError, setTaskError] = useState<string | null>(null);
   const [approvalFocus, setApprovalFocus] = useState<{
     submissionId?: string | null;
-    section?:
-      | "topic_submissions"
-      | "course_completion"
-      | "learning_path_enrollments"
-      | "course_enrollments"
-      | null;
+    section?: ApprovalSection | null;
   } | null>(null);
 
   const { signOut } = useAuth();
@@ -276,6 +314,52 @@ const SuperAdminDashboard = () => {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileUpdateError, setProfileUpdateError] = useState<string | null>(null);
   const [profileUpdateSuccess, setProfileUpdateSuccess] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const getAvatarPublicUrl = (path: string | null | undefined) => {
+    if (!path || !supabase) return null;
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    return data?.publicUrl || null;
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !supabase || !user?.id) return;
+    if (e.target) e.target.value = "";
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      setProfileUpdateError("Only JPG, PNG, or WebP images are allowed.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileUpdateError("Image must be under 2 MB.");
+      return;
+    }
+    setAvatarUploading(true);
+    setProfileUpdateError(null);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const filePath = `${user.id}/avatar.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: filePath })
+        .eq("id", user.id);
+      if (updateError) throw updateError;
+      setProfile((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
+      setProfileDraft((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
+      setProfileUpdateSuccess("Profile photo updated.");
+      setTimeout(() => setProfileUpdateSuccess(null), 3000);
+    } catch (err: any) {
+      setProfileUpdateError(err?.message || "Failed to upload photo.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   // Fetch profile
   useEffect(() => {
@@ -422,15 +506,15 @@ const SuperAdminDashboard = () => {
         return title ? `Updated ${entity}: ${title}` : `Updated ${entity}`;
       case "status_changed":
         if (title && from && to) {
-          return `${entity} status changed: ${title} (${from} → ${to})`;
+          return `${entity} Status Changed: ${title} (${from}: ${to})`;
         }
         if (title && to) {
-          return `${entity} status updated: ${title} → ${to}`;
+          return `${entity} Status Updated: ${title}: ${to}`;
         }
         if (to) {
-          return `${entity} status updated → ${to}`;
+          return `${entity} Status Updated: ${to}`;
         }
-        return `${entity} status updated`;
+        return `${entity} Status Updated`;
       case "totals_recalculated":
         if (title && topicTitle) {
           return `Recalculated ${entity} totals: ${title} (topic updated: ${topicTitle})`;
@@ -706,6 +790,19 @@ const SuperAdminDashboard = () => {
   };
 
   useEffect(() => {
+    if (activeNav === "quiz" || activeNav === "quiz-scores") {
+      setQuizNavOpen(true);
+    }
+    if (
+      activeNav === "approvals" ||
+      activeNav === "approvals-enrollments" ||
+      activeNav === "approvals-submissions"
+    ) {
+      setApprovalsNavOpen(true);
+    }
+  }, [activeNav]);
+
+  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target as Node)) {
         setProfileDropdownOpen(false);
@@ -765,31 +862,32 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const getApprovalNavItem = (section: ApprovalSection): ApprovalNavItem =>
+    section === "learning_path_enrollments" || section === "course_enrollments"
+      ? "approvals-enrollments"
+      : "approvals-submissions";
+
   const handleReviewApproval = (item: ApprovalItem) => {
     // Navigate to the appropriate section based on approval type
     if (item.entityType === "topic_submission") {
-      setActiveNav("approvals");
+      setActiveNav("approvals-submissions");
       setApprovalFocus({ submissionId: item.id, section: "topic_submissions" });
     } else if (item.entityType === "course_completion") {
-      setActiveNav("approvals");
+      setActiveNav("approvals-submissions");
       setApprovalFocus({ section: "course_completion" });
     } else if (item.entityType === "learning_path_enrollment") {
-      setActiveNav("approvals");
+      setActiveNav("approvals-enrollments");
       setApprovalFocus({ section: "learning_path_enrollments" });
     } else if (item.entityType === "course_enrollment") {
-      setActiveNav("approvals");
+      setActiveNav("approvals-enrollments");
       setApprovalFocus({ section: "course_enrollments" });
     }
   };
 
   const handleOpenApprovals = (
-    section:
-      | "topic_submissions"
-      | "course_completion"
-      | "learning_path_enrollments"
-      | "course_enrollments" = "learning_path_enrollments"
+    section: ApprovalSection = "learning_path_enrollments"
   ) => {
-    setActiveNav("approvals");
+    setActiveNav(getApprovalNavItem(section));
     setApprovalFocus({ section });
   };
 
@@ -866,9 +964,37 @@ const SuperAdminDashboard = () => {
       <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-6 shadow-card space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple">
-              {initials}
-            </div>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple overflow-hidden"
+              title="Change profile photo"
+            >
+              {profileView.avatar_url ? (
+                <img
+                  src={getAvatarPublicUrl(profileView.avatar_url) ?? ""}
+                  alt={displayName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                initials
+              )}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                {avatarUploading ? (
+                  <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                ) : (
+                  <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                )}
+              </div>
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
             <div>
               <h2 className="font-display text-2xl text-white">{displayName}</h2>
               <p className="text-sm text-slate-400">
@@ -964,7 +1090,7 @@ const SuperAdminDashboard = () => {
           </div>
           <div>
             <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">
-              Birthday
+              Birth Date
             </label>
             {isProfileEditing ? (
               <input
@@ -1055,12 +1181,24 @@ const SuperAdminDashboard = () => {
       case "quiz-scores":
         return <QuizzesSection view="scores" />;
       case "approvals":
+      case "approvals-enrollments":
         return (
           <ActivitiesSection
             focusSubmissionId={approvalFocus?.submissionId ?? null}
             focusSection={approvalFocus?.section ?? null}
             onFocusHandled={() => setApprovalFocus(null)}
             variant="approvals"
+            approvalPage="enrollments"
+          />
+        );
+      case "approvals-submissions":
+        return (
+          <ActivitiesSection
+            focusSubmissionId={approvalFocus?.submissionId ?? null}
+            focusSection={approvalFocus?.section ?? null}
+            onFocusHandled={() => setApprovalFocus(null)}
+            variant="approvals"
+            approvalPage="submissions"
           />
         );
       case "reports":
@@ -1111,7 +1249,6 @@ const SuperAdminDashboard = () => {
           delta={`${stats.approvalsToday} require action today`}
           deltaColor="text-red-400"
           isLoading={isLoading}
-          onClick={() => handleOpenApprovals("learning_path_enrollments")}
         />
       </div>
 
@@ -1161,7 +1298,7 @@ const SuperAdminDashboard = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-white font-semibold">Enrollment Health</h3>
-              <p className="text-xs text-slate-500">Course + learning path enrollments</p>
+              <p className="text-xs text-slate-500">Course and learning path enrollments</p>
             </div>
             <button
               onClick={() => handleOpenApprovals("learning_path_enrollments")}
@@ -1494,6 +1631,58 @@ const SuperAdminDashboard = () => {
                     </div>
                   );
                 }
+                if (item.key === "approvals") {
+                  const isApprovalsActive =
+                    activeNav === "approvals" ||
+                    activeNav === "approvals-enrollments" ||
+                    activeNav === "approvals-submissions";
+                  return (
+                    <div key="approvals-group">
+                      <button
+                        type="button"
+                        onClick={() => setApprovalsNavOpen(prev => !prev)}
+                        className={`
+                          w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                          ${isApprovalsActive ? "bg-ink-700 text-white border border-accent-purple/30" : "text-slate-400 hover:text-white hover:bg-ink-800"}
+                        `}
+                      >
+                        <span className={isApprovalsActive ? "text-accent-purple" : "text-slate-500"}>
+                          {item.icon}
+                        </span>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        <svg
+                          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                          className={`transition-transform duration-200 ${approvalsNavOpen ? "rotate-180" : ""}`}
+                        >
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                      {approvalsNavOpen && (
+                        <div className="mt-1 ml-4 flex flex-col gap-1 border-l border-white/10 pl-3">
+                          {APPROVAL_NAV_ITEMS.map((approvalItem) => (
+                            <button
+                              key={approvalItem.key}
+                              type="button"
+                              onClick={() => {
+                                setApprovalsNavOpen(true);
+                                handleOpenApprovals(approvalItem.defaultSection);
+                                setSidebarOpen(false);
+                              }}
+                              className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                                activeNav === approvalItem.key ||
+                                (activeNav === "approvals" && approvalItem.key === "approvals-enrollments")
+                                  ? "text-white"
+                                  : "text-slate-400 hover:text-white"
+                              }`}
+                            >
+                              {approvalItem.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
                 return (
                   <a
                     key={item.key}
@@ -1524,8 +1713,10 @@ const SuperAdminDashboard = () => {
           {/* User Section */}
           <div className="p-4 border-t border-white/5">
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple">
-                {sidebarInitials}
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple overflow-hidden">
+                {profile?.avatar_url ? (
+                  <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={sidebarDisplayName} className="h-full w-full object-cover" />
+                ) : sidebarInitials}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="truncate text-sm font-medium text-white">{sidebarDisplayName}</p>
@@ -1555,7 +1746,13 @@ const SuperAdminDashboard = () => {
                     Superadmin Workspace
                   </span>
                   <h1 className="text-lg sm:text-xl font-semibold text-white truncate">
-                    {activeNav === "overview" ? "Learning Management Overview" : activeNav === "quiz-scores" ? "Quiz Scores" : navItems.find(n => n.key === activeNav)?.label}
+                    {activeNav === "overview"
+                      ? "Learning Management Overview"
+                      : activeNav === "quiz-scores"
+                        ? "Quiz Scores"
+                        : APPROVAL_NAV_ITEMS.find((item) => item.key === activeNav)?.label ??
+                          navItems.find((n) => n.key === activeNav)?.label ??
+                          "Approvals"}
                   </h1>
                 </div>
               </div>
@@ -1574,14 +1771,23 @@ const SuperAdminDashboard = () => {
                   <span className="hidden lg:inline">New Course</span>
                 </button>
 
+                {/* Email pill */}
+                <div className="hidden sm:flex items-center rounded-full border border-white/10 bg-white/[0.03] px-4 py-2">
+                  <span className="max-w-[200px] truncate text-xs text-slate-300">
+                    {user?.email ?? "Admin"}
+                  </span>
+                </div>
+
                 {/* Avatar with dropdown */}
                 <div className="relative" ref={profileDropdownRef}>
                   <button
                     type="button"
                     onClick={() => setProfileDropdownOpen((prev) => !prev)}
-                    className="w-9 h-9 rounded-full bg-ink-700 border border-white/10 flex items-center justify-center text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors"
+                    className="w-9 h-9 rounded-full bg-ink-700 border border-white/10 flex items-center justify-center text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors overflow-hidden"
                   >
-                    {sidebarInitials}
+                    {profile?.avatar_url ? (
+                      <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={sidebarDisplayName} className="h-full w-full object-cover" />
+                    ) : sidebarInitials}
                   </button>
                   {profileDropdownOpen && (
                     <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-white/10 bg-ink-800 shadow-xl overflow-hidden z-50">
@@ -1620,7 +1826,14 @@ const SuperAdminDashboard = () => {
 
           {/* Page Content */}
           <div className="flex-1 p-4 sm:p-6 lg:p-8">
-            {renderContent()}
+            {navTransitioning ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
+                <div className="relative h-10 w-10">
+                  <div className="absolute inset-0 rounded-full border-[3px] border-accent-purple/20" />
+                  <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-accent-purple/70 animate-spin" />
+                </div>
+              </div>
+            ) : renderContent()}
           </div>
         </main>
       </div>
@@ -1646,7 +1859,7 @@ const SuperAdminDashboard = () => {
           : "--";
         const detailEntries = Object.entries(details).filter(([, v]) => v !== null && v !== undefined && v !== "");
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setSelectedActivityLog(null)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
             <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
               {/* Header */}
               <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-white/5">

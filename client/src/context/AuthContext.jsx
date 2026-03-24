@@ -88,6 +88,7 @@ export const AuthProvider = ({ children }) => {
   const pusherChannelRef = useRef(null);
   const pollingStopRef = useRef(false);
   const pollingIntervalRef = useRef(null);
+  const heartbeatIntervalRef = useRef(null);
 
   const clearForcedSignOut = () => {
     forcedSignOutRef.current = false;
@@ -100,6 +101,21 @@ export const AuthProvider = ({ children }) => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
+    }
+  };
+
+  const startHeartbeat = (userId) => {
+    if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+    // Beat every 2 minutes to keep last_activity_at fresh
+    heartbeatIntervalRef.current = setInterval(() => {
+      sessionService.heartbeat(userId);
+    }, 2 * 60 * 1000);
+  };
+
+  const stopHeartbeat = () => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
     }
   };
 
@@ -178,30 +194,57 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Mark unloads so init() knows whether it's a refresh/nav (sessionStorage survives)
+  // or a fresh open after tab close (sessionStorage is cleared by the browser).
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      sessionStorage.setItem("thodemy_refreshing", "1");
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
     const init = async () => {
+      // Detect refresh vs fresh open / tab-close
+      const wasRefresh = sessionStorage.getItem("thodemy_refreshing") === "1";
+      sessionStorage.removeItem("thodemy_refreshing");
+
       try {
         const currentSession = await authService.getSession();
         if (!isMounted) return;
         setSession(currentSession);
         const authUser = currentSession?.user ?? null;
         if (authUser) {
+          if (wasRefresh) {
+            // Page was refreshed or navigated — keep session alive
+            await sessionService.createSession(authUser.id).catch(() => {});
+          } else {
+            // New tab open or returning after tab close — verify session is still active + not stale
+            const sessionActive = await sessionService.isCurrentSessionActive(authUser.id, true);
+            if (!isMounted) return;
+            if (!sessionActive) {
+              clearLocalAuthSession();
+              setUser(null);
+              setVerified(true);
+              return;
+            }
+          }
           clearForcedSignOut();
           const username = await fetchUsername(authUser.id);
           if (!isMounted) return;
           setUser({ ...authUser, username });
-          // Allow access immediately; verify account status in the background.
           if (isMounted) {
             setVerified(true);
           }
           verifyAccountActive(lastVerifyRef, verifyInFlightRef).catch(() => {});
-        subscribeToPusher(authUser.id);
+          subscribeToPusher(authUser.id);
+          startHeartbeat(authUser.id);
       } else {
         setUser(null);
         setVerified(true);
-        clearDeviceApproval();
       }
     } catch (error) {
       if (!isMounted) return;
@@ -228,6 +271,7 @@ export const AuthProvider = ({ children }) => {
         });
         verifyAccountActive(lastVerifyRef, verifyInFlightRef).catch(() => {});
         subscribeToPusher(authUser.id);
+        startHeartbeat(authUser.id);
       } else {
         setUser(null);
         setVerified(true);
@@ -252,6 +296,7 @@ export const AuthProvider = ({ children }) => {
       isMounted = false;
       subscription?.unsubscribe?.();
       stopSessionPolling();
+      stopHeartbeat();
       if (pusherChannelRef.current) {
         const p = getPusher();
         pusherChannelRef.current.unbind_all();
@@ -269,6 +314,7 @@ export const AuthProvider = ({ children }) => {
     }
     const currentUserId = user?.id;
 
+    stopHeartbeat();
     // unsubscribe from realtime channel first
     if (pusherChannelRef.current) {
       const p = getPusher();
