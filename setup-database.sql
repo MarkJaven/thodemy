@@ -463,3 +463,24 @@ CREATE TRIGGER course_enrollments_updated_at
 CREATE TRIGGER user_progress_updated_at
   BEFORE UPDATE ON public.user_progress
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ============================================
+-- MFA (Multi-Factor Authentication)
+-- ============================================
+
+alter table public.profiles add column if not exists mfa_enabled boolean not null default false;
+alter table public.profiles add column if not exists mfa_locked_until timestamptz;
+
+create table if not exists public.mfa_codes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  code_hash text not null,
+  expires_at timestamptz not null,
+  attempts integer not null default 0,
+  max_attempts integer not null default 5,
+  used boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_mfa_codes_user on public.mfa_codes(user_id);
+alter table public.mfa_codes enable row level security;

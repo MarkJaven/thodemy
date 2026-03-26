@@ -216,15 +216,6 @@ export type Quiz = {
   updated_at?: string | null;
 };
 
-export type QuizQuestion = {
-  id: string;
-  quiz_id: string;
-  prompt: string;
-  options: string[];
-  correct_answer?: string | null;
-  order_index: number;
-};
-
 export type QuizAttempt = {
   id: string;
   quiz_id: string;

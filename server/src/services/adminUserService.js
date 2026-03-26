@@ -61,7 +61,6 @@ const nullifyUserReferences = async (userId) => {
     { table: "quizzes", column: "assigned_user_id" },
     { table: "quizzes", column: "created_by" },
     { table: "quizzes", column: "updated_by" },
-    { table: "quiz_questions", column: "updated_by" },
     { table: "quiz_attempts", column: "updated_by" },
     { table: "forms", column: "assigned_user_id" },
     { table: "forms", column: "created_by" },

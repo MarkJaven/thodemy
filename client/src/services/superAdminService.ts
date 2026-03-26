@@ -21,7 +21,6 @@ import type {
   QuestionDraft,
   Quiz,
   QuizAttempt,
-  QuizQuestion,
   QuizScore,
   LearningPath,
   LearningPathEnrollment,
@@ -736,20 +735,6 @@ export const superAdminService = {
     return (data ?? []) as Quiz[];
   },
 
-  async listQuizQuestions(quizId: string): Promise<QuizQuestion[]> {
-    const client = requireSupabase();
-    const { data, error } = await client
-      .from("quiz_questions")
-      .select("id, quiz_id, prompt, options, correct_answer, order_index")
-      .eq("quiz_id", quizId)
-      .order("order_index", { ascending: true });
-    if (error) throw new Error(error.message);
-    return (data ?? []).map((item) => ({
-      ...item,
-      options: parseOptions(item.options),
-    })) as QuizQuestion[];
-  },
-
   async createQuiz(payload: {
     quiz: Pick<
       Quiz,
@@ -765,7 +750,6 @@ export const superAdminService = {
       | "show_score"
       | "max_score"
     >;
-    questions: QuestionDraft[];
   }): Promise<Quiz> {
     const client = requireSupabase();
     const { data, error } = await client
@@ -777,49 +761,16 @@ export const superAdminService = {
       .single();
     if (error) throw new Error(error.message);
 
-    if (payload.questions.length > 0) {
-      const { error: questionError } = await client.from("quiz_questions").insert(
-        payload.questions.map((question, index) => ({
-          quiz_id: data.id,
-          prompt: question.prompt,
-          options: question.options,
-          correct_answer: question.correctAnswer ?? null,
-          order_index: index,
-        }))
-      );
-      if (questionError) throw new Error(questionError.message);
-    }
-
     return data as Quiz;
   },
 
   async updateQuiz(payload: {
     quizId: string;
     updates: Partial<Quiz>;
-    questions: QuestionDraft[];
   }): Promise<void> {
     const client = requireSupabase();
     const { error } = await client.from("quizzes").update(payload.updates).eq("id", payload.quizId);
     if (error) throw new Error(error.message);
-
-    const { error: deleteError } = await client
-      .from("quiz_questions")
-      .delete()
-      .eq("quiz_id", payload.quizId);
-    if (deleteError) throw new Error(deleteError.message);
-
-    if (payload.questions.length > 0) {
-      const { error: insertError } = await client.from("quiz_questions").insert(
-        payload.questions.map((question, index) => ({
-          quiz_id: payload.quizId,
-          prompt: question.prompt,
-          options: question.options,
-          correct_answer: question.correctAnswer ?? null,
-          order_index: index,
-        }))
-      );
-      if (insertError) throw new Error(insertError.message);
-    }
   },
 
   async deleteQuiz(quizId: string): Promise<void> {
