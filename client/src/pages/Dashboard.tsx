@@ -4030,6 +4030,7 @@ const Dashboard = () => {
                   <button
                     type="button"
                     onClick={() => setProfileDropdownOpen((prev) => !prev)}
+                    aria-label="Open profile menu"
                     className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors overflow-hidden"
                   >
                     {profile?.avatar_url ? (
@@ -4072,7 +4073,7 @@ const Dashboard = () => {
           </header>
 
           <div className="flex-1 px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-            {activeNav === "overview" ? (
+            {activeNav === "overview" && (
               <div className="flex flex-wrap items-end justify-between gap-6">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
@@ -4085,11 +4086,6 @@ const Dashboard = () => {
                     Track course progress, submit forms, and stay on top of quizzes.
                   </p>
                 </div>
-              </div>
-            ) : (
-              <div className="mb-6">
-                <p className="text-sm text-slate-400">Dashboard</p>
-                <h2 className="mt-1 font-display text-2xl text-white">{activeNavLabel}</h2>
               </div>
             )}
 
