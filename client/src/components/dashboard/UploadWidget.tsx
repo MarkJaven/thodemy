@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import CharacterCounter from "../CharacterCounter";
 import type { Activity } from "../../types/dashboard";
 
 type UploadWidgetProps = {
@@ -474,7 +475,7 @@ const UploadWidget = ({
                   type="text"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  maxLength={150}
+                  maxLength={100}
                   placeholder="Reflection or assignment title"
                   className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2.5 text-sm text-white focus:border-white/30 focus:outline-none focus:ring-0"
                 />
@@ -496,11 +497,11 @@ const UploadWidget = ({
                   rows={3}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
-                  maxLength={2000}
+                  maxLength={500}
                   placeholder="Share what you built or learned"
                   className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2.5 text-sm text-white focus:border-white/30 focus:outline-none focus:ring-0"
                 />
-                <p className="mt-1 text-xs text-slate-500 text-right">{description.length} / 2000</p>
+                <CharacterCounter current={description.length} max={500} />
               </label>
               <label className="block text-xs uppercase tracking-[0.2em] text-slate-400">
                 File (optional)

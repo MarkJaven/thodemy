@@ -1611,7 +1611,7 @@ const toWholeScoreOption = (
                 <input
                   type="text"
                   value={editMetaForm.position}
-                  maxLength={100}
+                  maxLength={80}
                   onChange={(e) =>
                     setEditMetaForm((prev) => ({
                       ...prev,
@@ -1628,7 +1628,7 @@ const toWholeScoreOption = (
                 <input
                   type="text"
                   value={editMetaForm.jobTitle}
-                  maxLength={100}
+                  maxLength={80}
                   onChange={(e) =>
                     setEditMetaForm((prev) => ({
                       ...prev,
@@ -1647,7 +1647,7 @@ const toWholeScoreOption = (
                 <input
                   type="text"
                   value={editMetaForm.endorsedDepartment}
-                  maxLength={100}
+                  maxLength={80}
                   onChange={(e) =>
                     setEditMetaForm((prev) => ({
                       ...prev,
@@ -1704,7 +1704,7 @@ const toWholeScoreOption = (
               <input
                 type="text"
                 value={editMetaForm.supervisorPosition}
-                maxLength={100}
+                maxLength={80}
                 onChange={(e) =>
                   setEditMetaForm((prev) => ({
                     ...prev,
@@ -1857,7 +1857,7 @@ const toWholeScoreOption = (
                 <input
                   type="text"
                   value={scoreboardModalDraft.remarks}
-                  maxLength={500}
+                  maxLength={300}
                   onChange={(e) =>
                     setScoreboardModalDraft((prev) =>
                       prev ? { ...prev, remarks: e.target.value } : prev,
@@ -2173,7 +2173,7 @@ const toWholeScoreOption = (
                             BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET,
                             strengthKey,
                           )}
-                          maxLength={500}
+                          maxLength={300}
                           onChange={(e) =>
                             setRemarksValue(
                               BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET,
@@ -2192,7 +2192,7 @@ const toWholeScoreOption = (
                             BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET,
                             improvementKey,
                           )}
-                          maxLength={500}
+                          maxLength={300}
                           onChange={(e) =>
                             setRemarksValue(
                               BOOTCAMP_ENDORSEMENT_FEEDBACK_SHEET,
@@ -2568,7 +2568,7 @@ const toWholeScoreOption = (
                         PERFORMANCE_FEEDBACK_SHEET,
                         strengthKey,
                       )}
-                      maxLength={500}
+                      maxLength={300}
                       onChange={(e) =>
                         setRemarksValue(
                           PERFORMANCE_FEEDBACK_SHEET,
@@ -2587,7 +2587,7 @@ const toWholeScoreOption = (
                         PERFORMANCE_FEEDBACK_SHEET,
                         improvementKey,
                       )}
-                      maxLength={500}
+                      maxLength={300}
                       onChange={(e) =>
                         setRemarksValue(
                           PERFORMANCE_FEEDBACK_SHEET,
@@ -3312,7 +3312,7 @@ const toWholeScoreOption = (
               <input
                 type="text"
                 value={createForm.position}
-                maxLength={100}
+                maxLength={80}
                 onChange={(e) =>
                   setCreateForm((prev) => ({
                     ...prev,
@@ -3330,7 +3330,7 @@ const toWholeScoreOption = (
               <input
                 type="text"
                 value={createForm.jobTitle}
-                maxLength={100}
+                maxLength={80}
                 onChange={(e) =>
                   setCreateForm((prev) => ({
                     ...prev,
@@ -3350,7 +3350,7 @@ const toWholeScoreOption = (
               <input
                 type="text"
                 value={createForm.endorsedDepartment}
-                maxLength={100}
+                maxLength={80}
                 onChange={(e) =>
                   setCreateForm((prev) => ({
                     ...prev,
@@ -3409,7 +3409,7 @@ const toWholeScoreOption = (
             <input
               type="text"
               value={createForm.supervisorPosition}
-              maxLength={100}
+              maxLength={80}
               onChange={(e) =>
                 setCreateForm((prev) => ({
                   ...prev,
@@ -3454,7 +3454,7 @@ const AddScoreboardEntry = ({
       <input
         type="text"
         value={label}
-        maxLength={150}
+        maxLength={100}
         onChange={(e) => setLabel(e.target.value)}
         placeholder="Activity name (e.g., Portfolio Project)"
         className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-purple-500 focus:outline-none"

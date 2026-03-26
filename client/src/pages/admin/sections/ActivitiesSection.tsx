@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
 import ConfirmationModal from "../../../components/admin/ConfirmationModal";
+import CharacterCounter from "../../../components/CharacterCounter";
 import { useUser } from "../../../hooks/useUser";
 import { superAdminService } from "../../../services/superAdminService";
 import { topicSubmissionService } from "../../../services/topicSubmissionService";
@@ -2052,10 +2053,10 @@ const ActivitiesSection = ({
                 rows={3}
                 value={projectReviewNotes}
                 onChange={(event) => setProjectReviewNotes(event.target.value)}
-                maxLength={500}
+                maxLength={300}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white"
               />
-              <p className="mt-1 text-xs text-slate-500 text-right">{projectReviewNotes.length} / 500</p>
+              <CharacterCounter current={projectReviewNotes.length} max={300} />
             </label>
           </div>
         )}
@@ -2274,7 +2275,7 @@ const ActivitiesSection = ({
               onChange={(event) =>
                 setFormState((prev) => ({ ...prev, title: event.target.value }))
               }
-              maxLength={150}
+              maxLength={100}
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             />
           </label>
@@ -2289,10 +2290,10 @@ const ActivitiesSection = ({
                 }))
               }
               rows={3}
-              maxLength={2000}
+              maxLength={500}
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             />
-            <p className="mt-1 text-xs text-slate-500 text-right">{formState.description.length} / 2000</p>
+            <CharacterCounter current={formState.description.length} max={500} />
           </label>
           <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
             Course
@@ -2456,10 +2457,10 @@ const ActivitiesSection = ({
                 rows={3}
                 value={reviewNotes}
                 onChange={(event) => setReviewNotes(event.target.value)}
-                maxLength={500}
+                maxLength={300}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white"
               />
-              <p className="mt-1 text-xs text-slate-500 text-right">{reviewNotes.length} / 500</p>
+              <CharacterCounter current={reviewNotes.length} max={300} />
             </label>
           </div>
         )}

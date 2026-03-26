@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../../../components/admin/Modal";
 import ConfirmationModal from "../../../components/admin/ConfirmationModal";
+import CharacterCounter from "../../../components/CharacterCounter";
 import {
   adminLearningPathService,
   type LearningPathSummary,
@@ -677,7 +678,7 @@ const LearningPathsSection = () => {
                       }))
                     }
                     placeholder="e.g., Full-Stack Developer Path"
-                    maxLength={150}
+                    maxLength={100}
                     className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
                 </div>
@@ -695,10 +696,10 @@ const LearningPathsSection = () => {
                       }))
                     }
                     placeholder="Brief description of what learners will achieve..."
-                    maxLength={2000}
+                    maxLength={500}
                     className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
-                  <p className="mt-1 text-xs text-slate-500 text-right">{formState.description.length} / 2000</p>
+                  <CharacterCounter current={formState.description.length} max={500} />
                 </div>
               </div>
             </div>

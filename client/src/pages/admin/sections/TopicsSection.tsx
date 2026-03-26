@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../../../components/admin/Modal";
 import ConfirmationModal from "../../../components/admin/ConfirmationModal";
+import CharacterCounter from "../../../components/CharacterCounter";
 import { superAdminService } from "../../../services/superAdminService";
 import type { Topic } from "../../../types/superAdmin";
 
@@ -24,7 +25,7 @@ type ConfirmDialogState = {
   onConfirm: () => void | Promise<void>;
 };
 
-const MAX_TOPIC_DESCRIPTION_LENGTH = 5000;
+const MAX_TOPIC_DESCRIPTION_LENGTH = 500;
 
 const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -506,7 +507,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
             <input
               type="text"
               value={formState.title}
-              maxLength={150}
+              maxLength={100}
               onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
@@ -553,9 +554,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
               maxLength={MAX_TOPIC_DESCRIPTION_LENGTH}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
-            <span className="mt-2 block text-[10px] uppercase tracking-[0.2em] text-slate-500">
-              {formState.description.length}/{MAX_TOPIC_DESCRIPTION_LENGTH} characters
-            </span>
+            <CharacterCounter current={formState.description.length} max={MAX_TOPIC_DESCRIPTION_LENGTH} />
           </label>
           <label className="md:col-span-2 text-xs uppercase tracking-[0.25em] text-slate-400">
             Topic link

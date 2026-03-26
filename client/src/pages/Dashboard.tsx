@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import CharacterCounter from "../components/CharacterCounter";
 import FormList from "../components/dashboard/FormList";
 import LoadingScreen from "../components/LoadingScreen";
 import ProfileSetupModal from "../components/auth/ProfileSetupModal";
@@ -3735,10 +3736,10 @@ const Dashboard = () => {
                 rows={3}
                 value={profileView.address ?? ""}
                 onChange={(event) => handleProfileFieldChange("address", event.target.value)}
-                maxLength={300}
+                maxLength={200}
                 className={`${inputClass} resize-none`}
               />
-              <p className="mt-1 text-xs text-slate-500 text-right">{(profileView.address ?? "").length} / 300</p>
+              <CharacterCounter current={(profileView.address ?? "").length} max={200} />
             </>
           ) : (
             <div className={`${readOnlyClass} whitespace-pre-wrap`}>
@@ -4156,10 +4157,10 @@ const Dashboard = () => {
                   rows={3}
                   value={proofMessage}
                   onChange={(event) => setProofMessage(event.target.value)}
-                  maxLength={500}
+                  maxLength={300}
                   className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
                 />
-                <p className="mt-1 text-xs text-slate-500 text-right">{proofMessage.length} / 500</p>
+                <CharacterCounter current={proofMessage.length} max={300} />
               </label>
               {proofError && (
                 <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
@@ -4219,10 +4220,10 @@ const Dashboard = () => {
                   rows={3}
                   value={quizProofMessage}
                   onChange={(event) => setQuizProofMessage(event.target.value)}
-                  maxLength={500}
+                  maxLength={300}
                   className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
                 />
-                <p className="mt-1 text-xs text-slate-500 text-right">{quizProofMessage.length} / 500</p>
+                <CharacterCounter current={quizProofMessage.length} max={300} />
               </label>
               {quizProofError && (
                 <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">

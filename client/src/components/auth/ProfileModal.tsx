@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import CharacterCounter from '../CharacterCounter';
 import { supabase } from '../../lib/supabaseClient';
 
 interface ProfileModalProps {
@@ -476,11 +477,11 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                         <textarea
                           value={profile.address}
                           onChange={(e) => handleInputChange('address', e.target.value)}
-                          maxLength={300}
+                          maxLength={200}
                           rows={3}
                           className={`${inputClass} resize-none`}
                         />
-                        <p className="mt-1 text-xs text-slate-500 text-right">{profile.address.length} / 300</p>
+                        <CharacterCounter current={profile.address.length} max={200} />
                       </>
                     ) : (
                       <div className={`${readOnlyClass} whitespace-pre-wrap`}>

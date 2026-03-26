@@ -761,7 +761,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.username}
-                        maxLength={50}
+                        maxLength={30}
                         onChange={(e) => setProfileForm((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                         placeholder="Username"
                         className="input"
@@ -939,7 +939,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="text"
                   value={formState.username}
-                  maxLength={50}
+                  maxLength={30}
                   onChange={(e) => setFormState((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                   placeholder="johndoe"
                   autoComplete="off"
@@ -1038,7 +1038,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="text"
                   value={formState.username}
-                  maxLength={50}
+                  maxLength={30}
                   onChange={(e) => setFormState((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                   className="input"
                 />

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../../components/admin/DataTable";
 import Modal from "../../../components/admin/Modal";
 import ConfirmationModal from "../../../components/admin/ConfirmationModal";
+import CharacterCounter from "../../../components/CharacterCounter";
 import { superAdminService } from "../../../services/superAdminService";
 import type { AdminUser, Form } from "../../../types/superAdmin";
 
@@ -368,7 +369,7 @@ const FormsSection = () => {
               type="text"
               value={formState.title}
               onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
-              maxLength={150}
+              maxLength={100}
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             />
           </label>
@@ -380,10 +381,10 @@ const FormsSection = () => {
                 setFormState((prev) => ({ ...prev, description: event.target.value }))
               }
               rows={3}
-              maxLength={2000}
+              maxLength={500}
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             />
-            <p className="mt-1 text-xs text-slate-500 text-right">{formState.description.length} / 2000</p>
+            <CharacterCounter current={formState.description.length} max={500} />
           </label>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="text-xs uppercase tracking-[0.25em] text-slate-400">

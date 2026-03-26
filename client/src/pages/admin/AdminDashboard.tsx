@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import CharacterCounter from "../../components/CharacterCounter";
 import LoadingScreen from "../../components/LoadingScreen";
 import { useAuth } from "../../context/AuthContext";
 import { useUser } from "../../hooks/useUser";
@@ -1170,10 +1171,10 @@ const AdminDashboard = () => {
                 rows={3}
                 value={profileView.address ?? ""}
                 onChange={(event) => handleProfileFieldChange("address", event.target.value)}
-                maxLength={300}
+                maxLength={200}
                 className={`${inputClass} resize-none`}
               />
-              <p className="mt-1 text-xs text-slate-500 text-right">{(profileView.address ?? "").length} / 300</p>
+              <CharacterCounter current={(profileView.address ?? "").length} max={200} />
             </>
           ) : (
             <div className={`${readOnlyClass} whitespace-pre-wrap`}>

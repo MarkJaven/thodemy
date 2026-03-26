@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Modal from "../components/admin/Modal";
 import ConfirmationModal from "../components/admin/ConfirmationModal";
+import CharacterCounter from "../components/CharacterCounter";
 import Navbar from "../components/dashboard/Navbar";
 import { useAuth } from "../context/AuthContext";
 import { useTopicsData } from "../hooks/useTopicsData";
@@ -29,7 +30,7 @@ type ConfirmDialogState = {
   onConfirm: () => void | Promise<void>;
 };
 
-const MAX_TOPIC_DESCRIPTION_LENGTH = 2000;
+const MAX_TOPIC_DESCRIPTION_LENGTH = 500;
 
 const formatDate = (value?: string | null) => {
   if (!value) return "--";
@@ -597,7 +598,7 @@ const TopicsPage = () => {
               type="text"
               value={formState.title}
               onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
-              maxLength={150}
+              maxLength={100}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
           </label>
@@ -640,10 +641,10 @@ const TopicsPage = () => {
               onChange={(event) =>
                 setFormState((prev) => ({ ...prev, description: event.target.value }))
               }
-              maxLength={2000}
+              maxLength={500}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
-            <p className="mt-1 text-xs text-slate-500 text-right">{formState.description.length} / 2000</p>
+            <CharacterCounter current={formState.description.length} max={500} />
           </label>
           <label className="md:col-span-2 text-xs uppercase tracking-[0.25em] text-slate-400">
             Topic link
@@ -739,10 +740,10 @@ const TopicsPage = () => {
               rows={3}
               value={submissionMessage}
               onChange={(event) => setSubmissionMessage(event.target.value)}
-              maxLength={500}
+              maxLength={300}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
-            <p className="mt-1 text-xs text-slate-500 text-right">{submissionMessage.length} / 500</p>
+            <CharacterCounter current={submissionMessage.length} max={300} />
           </label>
         </div>
       </Modal>

@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Modal from "../../../components/admin/Modal";
 import ConfirmationModal from "../../../components/admin/ConfirmationModal";
+import CharacterCounter from "../../../components/CharacterCounter";
 import {
   adminCourseService,
   CourseDetail,
@@ -191,7 +192,7 @@ type ConfirmDialogState = {
   onConfirm: () => void | Promise<void>;
 };
 
-const MAX_COURSE_DESCRIPTION_LENGTH = 2000;
+const MAX_COURSE_DESCRIPTION_LENGTH = 500;
 
 const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
@@ -992,7 +993,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
                     value={formState.title}
                     onChange={(e) => setFormState((prev) => ({ ...prev, title: e.target.value }))}
                     placeholder="e.g., Advanced Web Development"
-                    maxLength={150}
+                    maxLength={100}
                     className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
                 </div>
@@ -1008,7 +1009,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
                     maxLength={MAX_COURSE_DESCRIPTION_LENGTH}
                     className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
-                  <p className="mt-1 text-xs text-slate-500 text-right">{formState.description.length} / {MAX_COURSE_DESCRIPTION_LENGTH}</p>
+                  <CharacterCounter current={formState.description.length} max={MAX_COURSE_DESCRIPTION_LENGTH} />
                 </div>
               </div>
             </div>
