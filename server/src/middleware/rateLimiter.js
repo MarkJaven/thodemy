@@ -40,4 +40,25 @@ const sessionLimiter = rateLimit({
   limit: Math.max(env.rateLimitMax, 300),
 });
 
-module.exports = { generalLimiter, authLimiter, sessionLimiter };
+/**
+ * Rate limiter for MFA code sending.
+ * Tight limit to prevent email spam.
+ * @returns {import("express").RequestHandler}
+ */
+const mfaSendLimiter = rateLimit({
+  ...baseConfig,
+  windowMs: 60 * 1000,
+  limit: 5,
+});
+
+/**
+ * Rate limiter for MFA code verification.
+ * @returns {import("express").RequestHandler}
+ */
+const mfaVerifyLimiter = rateLimit({
+  ...baseConfig,
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+});
+
+module.exports = { generalLimiter, authLimiter, sessionLimiter, mfaSendLimiter, mfaVerifyLimiter };

@@ -13,6 +13,7 @@ import { useUser } from "../hooks/useUser";
 import { supabase } from "../lib/supabaseClient";
 import { calculateCourseEndDate, calculateTopicEndDate } from "../lib/topicDates";
 import { dashboardApi } from "../services/dashboardApi";
+import { mfaService } from "../services/mfaService";
 import logoThodemy from "../assets/images/logo-thodemy.png";
 import type {
   Activity,
@@ -782,6 +783,23 @@ const Dashboard = () => {
     fetchProfile();
   }, [user]);
 
+  // Fetch MFA status
+  useEffect(() => {
+    if (!user) return;
+    mfaService.checkStatus().then((res) => setMfaEnabled(res?.mfaEnabled ?? false)).catch(() => {});
+  }, [user]);
+
+  const handleMfaToggle = async () => {
+    setMfaToggleLoading(true);
+    try {
+      const result = await mfaService.toggle(!mfaEnabled);
+      setMfaEnabled(result?.mfaEnabled ?? !mfaEnabled);
+    } catch (err) {
+      console.error("Failed to toggle MFA:", err);
+    } finally {
+      setMfaToggleLoading(false);
+    }
+  };
 
   const [activityEntries, setActivityEntries] = useState<Activity[]>([]);
   const [quizScoreEntries, setQuizScoreEntries] = useState<QuizScore[]>([]);
@@ -842,6 +860,8 @@ const Dashboard = () => {
   const [profileUpdateError, setProfileUpdateError] = useState<string | null>(null);
   const [profileUpdateSuccess, setProfileUpdateSuccess] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaToggleLoading, setMfaToggleLoading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const getAvatarPublicUrl = (path: string | null | undefined) => {
@@ -3753,6 +3773,42 @@ const Dashboard = () => {
               Complete account setup first before editing your profile.
             </p>
           )}
+        </div>
+
+        <div className="border-t border-white/10 pt-4">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Security</p>
+          <div className="mt-3 rounded-xl border border-white/10 bg-ink-900/50 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-purple/20 text-accent-purple">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <path d="M9 12l2 2 4-4" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">Two-factor authentication</p>
+                  <p className="text-xs text-slate-400">
+                    Extra security via email verification code
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleMfaToggle}
+                disabled={mfaToggleLoading}
+                className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-accent-purple/40 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  mfaEnabled ? "bg-accent-purple" : "bg-white/10"
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    mfaEnabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
         </div>
 
         {profileUpdateError && (

@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authService } from "../services/authService";
 import { sessionService } from "../services/sessionService";
 import { superAdminService } from "../services/superAdminService";
+import { mfaService } from "../services/mfaService";
+import MfaCodeEntry from "../components/auth/MfaCodeEntry";
 import logoThodemy from "../assets/images/logo-thodemy.png";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,6 +26,14 @@ const AuthPage = () => {
   const [roleCheckStatus, setRoleCheckStatus] = useState("idle");
   const [roleCheckError, setRoleCheckError] = useState(null);
   const [roleCheckUserId, setRoleCheckUserId] = useState(null);
+  const [mfaStep, setMfaStep] = useState(null); // null | "verify"
+  const [mfaError, setMfaError] = useState(null);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaResendCooldown, setMfaResendCooldown] = useState(0);
+  const [mfaCodeExpiresAt, setMfaCodeExpiresAt] = useState(null);
+  const [mfaUserEmail, setMfaUserEmail] = useState("");
+  const [mfaLockedUntil, setMfaLockedUntil] = useState(null);
+  const mfaResendTimer = useRef(null);
 
   /**
    * Reset view state when the auth mode changes.
@@ -75,6 +85,56 @@ const AuthPage = () => {
   };
 
   /**
+   * Start the resend cooldown timer (60 seconds).
+   */
+  const startResendCooldown = useCallback(() => {
+    setMfaResendCooldown(60);
+    if (mfaResendTimer.current) clearInterval(mfaResendTimer.current);
+    mfaResendTimer.current = setInterval(() => {
+      setMfaResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(mfaResendTimer.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  // Clean up the resend timer on unmount
+  useEffect(() => () => {
+    if (mfaResendTimer.current) clearInterval(mfaResendTimer.current);
+  }, []);
+
+  /**
+   * Continue the login flow after MFA is verified (or skipped).
+   * Handles device approval, session creation, and role redirect.
+   * @param {string} userId
+   * @returns {Promise<void>}
+   */
+  const continueLoginAfterMfa = async (userId) => {
+    setLoadingTarget("form");
+    try {
+      if (userId) {
+        const approval = await sessionService.requestDeviceApproval();
+        if (approval?.status === "pending") {
+          await authService.signOut();
+          setMfaStep(null);
+          setError("User is already logged in on another device or browser.");
+          setLoadingTarget(null);
+          return;
+        }
+        await sessionService.createSession(userId).catch(() => {});
+      }
+      setRoleCheckUserId(userId ?? null);
+      await resolveRoleAndRedirect(userId);
+    } catch (err) {
+      setError(err.message);
+      setLoadingTarget(null);
+    }
+  };
+
+  /**
    * Submit the auth form.
    * @param {React.FormEvent<HTMLFormElement>} event
    * @returns {Promise<void>}
@@ -104,24 +164,112 @@ const AuthPage = () => {
       });
       const session = await authService.getSession();
       const userId = session?.user?.id;
-      if (userId) {
-        const approval = await sessionService.requestDeviceApproval();
-        if (approval?.status === "pending") {
-          // Another device has an active session — block this login.
-          await authService.signOut();
-          setError("User is already logged in on another device or browser.");
+
+      // Check if MFA is enabled for this user
+      try {
+        const status = await mfaService.checkStatus();
+        if (status.mfaEnabled) {
+          setMfaUserEmail(form.email);
+          setRoleCheckUserId(userId ?? null);
+
+          // Check if user is currently locked out
+          if (status.locked && status.retryAfterSeconds > 0) {
+            setMfaLockedUntil(Date.now() + status.retryAfterSeconds * 1000);
+            setMfaStep("verify");
+            setLoadingTarget(null);
+            return;
+          }
+
+          // Send the MFA code and show the verification screen
+          const result = await mfaService.sendCode();
+          if (result.locked) {
+            setMfaLockedUntil(Date.now() + (result.retryAfterSeconds || 120) * 1000);
+            setMfaStep("verify");
+            setLoadingTarget(null);
+            return;
+          }
+          setMfaCodeExpiresAt(Date.now() + (result.expiresInSeconds ?? 600) * 1000);
+          setMfaStep("verify");
+          startResendCooldown();
           setLoadingTarget(null);
           return;
         }
-        // No conflicting session — register this device's session.
-        await sessionService.createSession(userId).catch(() => {});
+      } catch (_mfaCheckError) {
+        // If MFA check fails (e.g., network), proceed without MFA
       }
-      setRoleCheckUserId(userId ?? null);
-      await resolveRoleAndRedirect(userId);
+
+      // MFA not enabled — continue with normal flow
+      await continueLoginAfterMfa(userId);
     } catch (signInError) {
       setError(signInError.message);
       setLoadingTarget(null);
     }
+  };
+
+  /**
+   * Handle MFA code verification.
+   * @param {string} code
+   * @returns {Promise<void>}
+   */
+  const handleMfaVerify = async (code) => {
+    setMfaError(null);
+    setMfaLoading(true);
+    try {
+      await mfaService.verifyCode(code);
+      // MFA verified — continue the login flow
+      setMfaLockedUntil(null);
+      setMfaStep(null);
+      await continueLoginAfterMfa(roleCheckUserId);
+    } catch (err) {
+      if (err.locked) {
+        setMfaLockedUntil(Date.now() + (err.retryAfterSeconds || 120) * 1000);
+        setMfaError(null);
+      } else {
+        setMfaError(err.message);
+      }
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  /**
+   * Resend the MFA code.
+   * @returns {Promise<void>}
+   */
+  const handleMfaResend = async () => {
+    setMfaError(null);
+    try {
+      const result = await mfaService.sendCode();
+      if (result.locked) {
+        setMfaLockedUntil(Date.now() + (result.retryAfterSeconds || 120) * 1000);
+        return;
+      }
+      setMfaLockedUntil(null);
+      setMfaCodeExpiresAt(Date.now() + (result.expiresInSeconds ?? 600) * 1000);
+      startResendCooldown();
+    } catch (err) {
+      if (err.locked) {
+        setMfaLockedUntil(Date.now() + (err.retryAfterSeconds || 120) * 1000);
+      } else {
+        setMfaError(err.message);
+      }
+    }
+  };
+
+  /**
+   * Cancel MFA — sign out and return to login form.
+   */
+  const handleMfaCancel = async () => {
+    await authService.signOut();
+    setMfaStep(null);
+    setMfaError(null);
+    setMfaLoading(false);
+    setMfaResendCooldown(0);
+    setMfaCodeExpiresAt(null);
+    setMfaLockedUntil(null);
+    setRoleCheckUserId(null);
+    setLoadingTarget(null);
+    if (mfaResendTimer.current) clearInterval(mfaResendTimer.current);
   };
 
   const resolveRoleAndRedirect = async (userId) => {
@@ -270,194 +418,210 @@ const AuthPage = () => {
               </div>
             </section>
 
-            {/* Right Panel - Form */}
+            {/* Right Panel - Form or MFA */}
             <section className="flex flex-col justify-center gap-6 bg-ink-850/60 p-7 sm:p-10">
-              <div className="rounded-3xl border border-white/10 bg-ink-900/60 p-6 shadow-[0_18px_45px_rgba(0,0,0,0.35)] sm:p-8">
-                <div className="space-y-2">
-                  <h2 className="font-display text-2xl font-semibold text-white sm:text-3xl">
-                    {title}
-                  </h2>
-                  <p className="text-sm text-slate-300 sm:text-base">
-                    Use your company email to continue.
-                  </p>
-                </div>
+              {mfaStep === "verify" ? (
+                <MfaCodeEntry
+                  lockedUntil={mfaLockedUntil}
+                  onSubmit={handleMfaVerify}
+                  onResend={handleMfaResend}
+                  onCancel={handleMfaCancel}
+                  error={mfaError}
+                  isLoading={mfaLoading}
+                  resendCooldown={mfaResendCooldown}
+                  expiresAt={mfaCodeExpiresAt}
+                  userEmail={mfaUserEmail}
+                />
+              ) : (
+                <>
+                  <div className="rounded-3xl border border-white/10 bg-ink-900/60 p-6 shadow-[0_18px_45px_rgba(0,0,0,0.35)] sm:p-8">
+                    <div className="space-y-2">
+                      <h2 className="font-display text-2xl font-semibold text-white sm:text-3xl">
+                        {title}
+                      </h2>
+                      <p className="text-sm text-slate-300 sm:text-base">
+                        Use your company email to continue.
+                      </p>
+                    </div>
 
-                <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                      Email address
-                    </label>
-                    <input
-                      name="email"
-                      type="email"
-                      value={form.email}
-                      onChange={handleChange}
-                      placeholder="name@company.com"
-                      autoComplete="email"
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-base text-white placeholder:text-slate-500 transition-all duration-200 focus:border-accent-purple/50 focus:outline-none focus:ring-2 focus:ring-accent-purple/20"
-                    />
-                  </div>
+                    <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                          Email address
+                        </label>
+                        <input
+                          name="email"
+                          type="email"
+                          value={form.email}
+                          onChange={handleChange}
+                          placeholder="name@company.com"
+                          autoComplete="email"
+                          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-base text-white placeholder:text-slate-500 transition-all duration-200 focus:border-accent-purple/50 focus:outline-none focus:ring-2 focus:ring-accent-purple/20"
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        name="password"
-                        type={showPassword ? "text" : "password"}
-                        value={form.password}
-                        onChange={handleChange}
-                        placeholder="••••••••"
-                        autoComplete="current-password"
-                        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 pr-12 text-base text-white placeholder:text-slate-500 transition-all duration-200 focus:border-accent-purple/50 focus:outline-none focus:ring-2 focus:ring-accent-purple/20"
-                      />
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                          Password
+                        </label>
+                        <div className="relative">
+                          <input
+                            name="password"
+                            type={showPassword ? "text" : "password"}
+                            value={form.password}
+                            onChange={handleChange}
+                            placeholder="••••••••"
+                            autoComplete="current-password"
+                            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 pr-12 text-base text-white placeholder:text-slate-500 transition-all duration-200 focus:border-accent-purple/50 focus:outline-none focus:ring-2 focus:ring-accent-purple/20"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((prev) => !prev)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-colors duration-200 hover:text-white"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                          >
+                            {showPassword ? (
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                <path d="M3 3l18 18" strokeLinecap="round" />
+                                <path d="M10.5 10.7A3 3 0 0 0 12 15a3 3 0 0 0 1.3-.3" strokeLinecap="round" />
+                                <path d="M7.4 7.5A10 10 0 0 0 2 12c1.4 2.5 4.7 6 10 6 1.7 0 3.3-.4 4.7-1" strokeLinecap="round" />
+                                <path d="M20.5 15.8A10.4 10.4 0 0 0 22 12c-1.4-2.5-4.7-6-10-6-1.1 0-2.1.1-3 .4" strokeLinecap="round" />
+                              </svg>
+                            ) : (
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {(error || info) && (
+                        <div
+                          className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-sm sm:text-base ${
+                            error
+                              ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
+                              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                          }`}
+                        >
+                          {error ? (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                              <circle cx="12" cy="12" r="10" />
+                              <path d="M12 8v4M12 16h.01" />
+                            </svg>
+                          ) : (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                              <polyline points="22 4 12 14.01 9 11.01" />
+                            </svg>
+                          )}
+                          <span>{error || info}</span>
+                        </div>
+                      )}
+
+                      {roleCheckStatus === "pending" && (
+                        <div className="flex items-start gap-3 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className="mt-0.5 flex-shrink-0"
+                          >
+                            <path d="M12 6v6l4 2" />
+                            <circle cx="12" cy="12" r="10" />
+                          </svg>
+                          <span>Finalizing your access. This can take a few seconds.</span>
+                        </div>
+                      )}
+
+                      {roleCheckStatus === "failed" && (
+                        <div className="space-y-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                          <p>{roleCheckError}</p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={handleRoleRetry}
+                              className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                            >
+                              Retry
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => window.location.replace("/dashboard")}
+                              className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                            >
+                              Learner dashboard
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => window.location.replace("/admin")}
+                              className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                            >
+                              Admin console
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => window.location.replace("/super-admin")}
+                              className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
+                            >
+                              Super admin
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       <button
-                        type="button"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-colors duration-200 hover:text-white"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        type="submit"
+                        disabled={isSubmitting || !isConfigured}
+                        className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-violet py-3.5 text-base font-semibold text-white shadow-purple-glow transition-all duration-200 hover:shadow-purple-glow-lg hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {showPassword ? (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path d="M3 3l18 18" strokeLinecap="round" />
-                            <path d="M10.5 10.7A3 3 0 0 0 12 15a3 3 0 0 0 1.3-.3" strokeLinecap="round" />
-                            <path d="M7.4 7.5A10 10 0 0 0 2 12c1.4 2.5 4.7 6 10 6 1.7 0 3.3-.4 4.7-1" strokeLinecap="round" />
-                            <path d="M20.5 15.8A10.4 10.4 0 0 0 22 12c-1.4-2.5-4.7-6-10-6-1.1 0-2.1.1-3 .4" strokeLinecap="round" />
-                          </svg>
+                        {isSubmitting ? (
+                          <>
+                            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            <span>
+                              {loadingTarget === "role" ? "Finalizing access..." : "Signing in..."}
+                            </span>
+                          </>
                         ) : (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
-                            <circle cx="12" cy="12" r="3" />
-                          </svg>
+                          <>
+                            <span>Sign in</span>
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="transition-transform duration-200 group-hover:translate-x-0.5"
+                            >
+                              <path d="M5 12h14M12 5l7 7-7 7" />
+                            </svg>
+                          </>
                         )}
                       </button>
-                    </div>
+                    </form>
                   </div>
 
-                  {(error || info) && (
-                    <div
-                      className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-sm sm:text-base ${
-                        error
-                          ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
-                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                      }`}
+                  <p className="text-center text-xs text-slate-400 sm:text-sm">
+                    Need access?{" "}
+                    <button
+                      onClick={() => { window.location.href = `mailto:${"vsescobar"}@${"sscgi.com"}`; }}
+                      className="text-accent-purple transition-colors hover:text-white"
                     >
-                      {error ? (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
-                          <circle cx="12" cy="12" r="10" />
-                          <path d="M12 8v4M12 16h.01" />
-                        </svg>
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
-                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                          <polyline points="22 4 12 14.01 9 11.01" />
-                        </svg>
-                      )}
-                      <span>{error || info}</span>
-                    </div>
-                  )}
-
-                  {roleCheckStatus === "pending" && (
-                    <div className="flex items-start gap-3 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="mt-0.5 flex-shrink-0"
-                      >
-                        <path d="M12 6v6l4 2" />
-                        <circle cx="12" cy="12" r="10" />
-                      </svg>
-                      <span>Finalizing your access. This can take a few seconds.</span>
-                    </div>
-                  )}
-
-                  {roleCheckStatus === "failed" && (
-                    <div className="space-y-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-                      <p>{roleCheckError}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={handleRoleRetry}
-                          className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
-                        >
-                          Retry
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => window.location.replace("/dashboard")}
-                          className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
-                        >
-                          Learner dashboard
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => window.location.replace("/admin")}
-                          className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
-                        >
-                          Admin console
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => window.location.replace("/super-admin")}
-                          className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white transition hover:bg-white/20"
-                        >
-                          Super admin
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || !isConfigured}
-                    className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-violet py-3.5 text-base font-semibold text-white shadow-purple-glow transition-all duration-200 hover:shadow-purple-glow-lg hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        <span>
-                          {loadingTarget === "role" ? "Finalizing access..." : "Signing in..."}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Sign in</span>
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="transition-transform duration-200 group-hover:translate-x-0.5"
-                        >
-                          <path d="M5 12h14M12 5l7 7-7 7" />
-                        </svg>
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
-
-              <p className="text-center text-xs text-slate-400 sm:text-sm">
-                Need access?{" "}
-                <button
-                  onClick={() => { window.location.href = `mailto:${"vsescobar"}@${"sscgi.com"}`; }}
-                  className="text-accent-purple transition-colors hover:text-white"
-                >
-                  Contact your administrator
-                </button>
-              </p>
+                      Contact your administrator
+                    </button>
+                  </p>
+                </>
+              )}
             </section>
           </div>
         </div>

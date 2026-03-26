@@ -82,6 +82,14 @@ const env = {
   pusherKey: process.env.PUSHER_KEY || null,
   pusherSecret: process.env.PUSHER_SECRET || null,
   pusherCluster: process.env.PUSHER_CLUSTER || null,
+  smtpHost: process.env.SMTP_HOST || null,
+  smtpPort: parseNumber(process.env.SMTP_PORT, 587, "SMTP_PORT"),
+  smtpSecure: process.env.SMTP_SECURE === "true",
+  smtpUser: process.env.SMTP_USER || null,
+  smtpPass: process.env.SMTP_PASS || null,
+  smtpFrom: process.env.SMTP_FROM || "Thodemy <noreply@thodemy.com>",
+  mfaCodeTtlMinutes: parseNumber(process.env.MFA_CODE_TTL_MINUTES, 10, "MFA_CODE_TTL_MINUTES"),
+  mfaMaxAttempts: parseNumber(process.env.MFA_MAX_ATTEMPTS, 5, "MFA_MAX_ATTEMPTS"),
 };
 
 if (env.frontendOrigins.length === 0) {

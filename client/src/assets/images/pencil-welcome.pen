@@ -14901,6 +14901,629 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "mfa-email-design-001",
+      "x": -2400,
+      "y": 0,
+      "name": "Thodemy MFA Email",
+      "clip": true,
+      "width": 600,
+      "fill": "#0B0D14",
+      "layout": "vertical",
+      "alignItems": "center",
+      "padding": [48, 40],
+      "gap": 0,
+      "children": [
+        {
+          "type": "frame",
+          "id": "mfa-logo-row",
+          "name": "Logo Row",
+          "width": "fill_container",
+          "gap": 10,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "mfa-logo-img",
+              "name": "Logo Image",
+              "width": 140,
+              "height": 36,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "./logo-thodemy.png",
+                "mode": "fill"
+              }
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "mfa-spacer-1",
+          "name": "Spacer",
+          "width": "fill_container",
+          "height": 36
+        },
+        {
+          "type": "frame",
+          "id": "mfa-card",
+          "name": "Email Card",
+          "width": "fill_container",
+          "fill": "#0F1120",
+          "cornerRadius": 20,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "#FFFFFF0F"
+          },
+          "effect": {
+            "type": "shadow",
+            "shadowType": "outer",
+            "color": "#00000033",
+            "offset": { "x": 0, "y": 12 },
+            "blur": 40,
+            "spread": -8
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "mfa-accent-bar",
+              "name": "Accent Bar",
+              "width": "fill_container",
+              "height": 3,
+              "fill": {
+                "type": "gradient",
+                "gradient": {
+                  "type": "linear",
+                  "from": { "x": 0, "y": 0.5 },
+                  "to": { "x": 1, "y": 0.5 },
+                  "stops": [
+                    { "offset": 0, "color": "#7C5CFF" },
+                    { "offset": 0.5, "color": "#A78BFA" },
+                    { "offset": 1, "color": "#7C5CFF" }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "mfa-card-content",
+              "name": "Card Content",
+              "width": "fill_container",
+              "layout": "vertical",
+              "padding": [40, 40],
+              "gap": 0,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "mfa-icon-title",
+                  "name": "Icon + Title",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "mfa-shield-icon",
+                      "name": "Shield Icon BG",
+                      "width": 48,
+                      "height": 48,
+                      "fill": "#7C5CFF14",
+                      "cornerRadius": 14,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#7C5CFF33"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "mfa-shield-emoji",
+                          "name": "Shield",
+                          "fill": "#7C5CFF",
+                          "content": "\uD83D\uDEE1\uFE0F",
+                          "fontSize": 22
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "mfa-title-group",
+                      "name": "Title Group",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "mfa-heading",
+                          "name": "Heading",
+                          "fill": "#FFFFFF",
+                          "content": "Verification Code",
+                          "fontFamily": "Funnel Display",
+                          "fontSize": 22,
+                          "fontWeight": "600",
+                          "letterSpacing": -0.3
+                        },
+                        {
+                          "type": "text",
+                          "id": "mfa-subtitle",
+                          "name": "Subtitle",
+                          "fill": "#A8AEC6",
+                          "content": "Sign-in security check",
+                          "fontFamily": "Rubik",
+                          "fontSize": 13,
+                          "fontWeight": "400"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "mfa-divider-1",
+                  "name": "Divider",
+                  "width": "fill_container",
+                  "height": 1,
+                  "fill": "#FFFFFF0A",
+                  "layout": "none"
+                },
+                {
+                  "type": "frame",
+                  "id": "mfa-spacer-greeting",
+                  "name": "Spacer",
+                  "width": "fill_container",
+                  "height": 24
+                },
+                {
+                  "type": "text",
+                  "id": "mfa-greeting",
+                  "name": "Greeting Text",
+                  "fill": "#B7BCD6",
+                  "textGrowth": "fixed-width",
+                  "width": 480,
+                  "content": "Hey Mark, someone is trying to sign in to your Thodemy account. Use the verification code below to complete the process.",
+                  "lineHeight": 1.7,
+                  "fontFamily": "Rubik",
+                  "fontSize": 15,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "mfa-spacer-code",
+                  "name": "Spacer",
+                  "width": "fill_container",
+                  "height": 28
+                },
+                {
+                  "type": "frame",
+                  "id": "mfa-code-box",
+                  "name": "Code Container",
+                  "width": "fill_container",
+                  "fill": "#080A12",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FFFFFF0A"
+                  },
+                  "layout": "vertical",
+                  "padding": [28, 24],
+                  "gap": 16,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "mfa-code-label",
+                      "name": "Code Label",
+                      "fill": "#A8AEC6",
+                      "content": "YOUR CODE",
+                      "fontFamily": "Rubik",
+                      "fontSize": 10,
+                      "fontWeight": "600",
+                      "letterSpacing": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "mfa-digits-row",
+                      "name": "Digits Row",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "mfa-digit-1",
+                          "name": "Digit 1",
+                          "width": 52,
+                          "height": 60,
+                          "fill": "#0F1120",
+                          "cornerRadius": 12,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1.5,
+                            "fill": "#7C5CFF55"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "mfa-d1",
+                              "name": "D1",
+                              "fill": "#FFFFFF",
+                              "content": "4",
+                              "fontFamily": "Rubik",
+                              "fontSize": 28,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mfa-digit-2",
+                          "name": "Digit 2",
+                          "width": 52,
+                          "height": 60,
+                          "fill": "#0F1120",
+                          "cornerRadius": 12,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1.5,
+                            "fill": "#7C5CFF55"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "mfa-d2",
+                              "name": "D2",
+                              "fill": "#FFFFFF",
+                              "content": "8",
+                              "fontFamily": "Rubik",
+                              "fontSize": 28,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mfa-digit-3",
+                          "name": "Digit 3",
+                          "width": 52,
+                          "height": 60,
+                          "fill": "#0F1120",
+                          "cornerRadius": 12,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1.5,
+                            "fill": "#7C5CFF55"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "mfa-d3",
+                              "name": "D3",
+                              "fill": "#FFFFFF",
+                              "content": "2",
+                              "fontFamily": "Rubik",
+                              "fontSize": 28,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mfa-digit-sep",
+                          "name": "Separator",
+                          "width": 8,
+                          "height": 4,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "mfa-sep-dot",
+                              "name": "Dot",
+                              "width": 4,
+                              "height": 4,
+                              "fill": "#7C5CFF",
+                              "cornerRadius": 999
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mfa-digit-4",
+                          "name": "Digit 4",
+                          "width": 52,
+                          "height": 60,
+                          "fill": "#0F1120",
+                          "cornerRadius": 12,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1.5,
+                            "fill": "#7C5CFF55"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "mfa-d4",
+                              "name": "D4",
+                              "fill": "#FFFFFF",
+                              "content": "9",
+                              "fontFamily": "Rubik",
+                              "fontSize": 28,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mfa-digit-5",
+                          "name": "Digit 5",
+                          "width": 52,
+                          "height": 60,
+                          "fill": "#0F1120",
+                          "cornerRadius": 12,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1.5,
+                            "fill": "#7C5CFF55"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "mfa-d5",
+                              "name": "D5",
+                              "fill": "#FFFFFF",
+                              "content": "1",
+                              "fontFamily": "Rubik",
+                              "fontSize": 28,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mfa-digit-6",
+                          "name": "Digit 6",
+                          "width": 52,
+                          "height": 60,
+                          "fill": "#0F1120",
+                          "cornerRadius": 12,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1.5,
+                            "fill": "#7C5CFF55"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "mfa-d6",
+                              "name": "D6",
+                              "fill": "#FFFFFF",
+                              "content": "7",
+                              "fontFamily": "Rubik",
+                              "fontSize": 28,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "mfa-timer-row",
+                      "name": "Timer Row",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "mfa-timer-dot",
+                          "name": "Timer Dot",
+                          "width": 6,
+                          "height": 6,
+                          "fill": "#7C5CFF",
+                          "cornerRadius": 999
+                        },
+                        {
+                          "type": "text",
+                          "id": "mfa-timer-text",
+                          "name": "Timer Text",
+                          "fill": "#A8AEC6",
+                          "content": "Expires in 10 minutes",
+                          "fontFamily": "Rubik",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "mfa-spacer-warn",
+                  "name": "Spacer",
+                  "width": "fill_container",
+                  "height": 20
+                },
+                {
+                  "type": "frame",
+                  "id": "mfa-warning-box",
+                  "name": "Warning Box",
+                  "width": "fill_container",
+                  "fill": "#7C5CFF0A",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#7C5CFF22"
+                  },
+                  "padding": [14, 16],
+                  "gap": 10,
+                  "alignItems": "start",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "mfa-warn-icon",
+                      "name": "Warning Icon",
+                      "fill": "#7C5CFF",
+                      "content": "\u26A0",
+                      "fontSize": 14
+                    },
+                    {
+                      "type": "frame",
+                      "id": "mfa-warn-text-group",
+                      "name": "Warning Text",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "mfa-warn-title",
+                          "name": "Warning Title",
+                          "fill": "#FFFFFF",
+                          "textGrowth": "fixed-width",
+                          "width": 400,
+                          "content": "Don't share this code.",
+                          "fontFamily": "Rubik",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "mfa-warn-body",
+                          "name": "Warning Body",
+                          "fill": "#B7BCD6",
+                          "textGrowth": "fixed-width",
+                          "width": 400,
+                          "content": "Thodemy will never ask for your verification code via phone, SMS, or any other channel.",
+                          "lineHeight": 1.5,
+                          "fontFamily": "Rubik",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "mfa-spacer-footer",
+          "name": "Spacer",
+          "width": "fill_container",
+          "height": 32
+        },
+        {
+          "type": "frame",
+          "id": "mfa-footer-dots",
+          "name": "Footer Dots",
+          "gap": 8,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "mfa-fdot1",
+              "name": "Dot",
+              "width": 4,
+              "height": 4,
+              "fill": "#FFFFFF15",
+              "cornerRadius": 999
+            },
+            {
+              "type": "frame",
+              "id": "mfa-fdot2",
+              "name": "Dot",
+              "width": 4,
+              "height": 4,
+              "fill": "#FFFFFF15",
+              "cornerRadius": 999
+            },
+            {
+              "type": "frame",
+              "id": "mfa-fdot3",
+              "name": "Dot",
+              "width": 4,
+              "height": 4,
+              "fill": "#FFFFFF15",
+              "cornerRadius": 999
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "mfa-spacer-footer2",
+          "name": "Spacer",
+          "width": "fill_container",
+          "height": 20
+        },
+        {
+          "type": "text",
+          "id": "mfa-footer-line1",
+          "name": "Footer Line 1",
+          "fill": "#A8AEC6",
+          "textGrowth": "fixed-width",
+          "width": 480,
+          "textAlign": "center",
+          "content": "This is an automated security email from Thodemy.",
+          "lineHeight": 1.6,
+          "fontFamily": "Rubik",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "mfa-footer-line2",
+          "name": "Footer Line 2",
+          "fill": "#A8AEC680",
+          "textGrowth": "fixed-width",
+          "width": 480,
+          "textAlign": "center",
+          "content": "If you didn't try to sign in, you can safely ignore this email.",
+          "lineHeight": 1.6,
+          "fontFamily": "Rubik",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "mfa-spacer-copyright",
+          "name": "Spacer",
+          "width": "fill_container",
+          "height": 24
+        },
+        {
+          "type": "text",
+          "id": "mfa-copyright",
+          "name": "Copyright",
+          "fill": "#FFFFFF20",
+          "textAlign": "center",
+          "content": "\u00A9 2026 Thodemy \u2014 Secure employee training platform",
+          "fontFamily": "Rubik",
+          "fontSize": 11,
+          "fontWeight": "normal"
+        }
+      ]
     }
   ],
   "themes": {
