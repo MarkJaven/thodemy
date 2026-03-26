@@ -123,12 +123,14 @@ const QuizList = ({
         const canShowScore = quiz.show_score !== false;
         const hasScore = score !== null && typeof score.score === "number";
         const maxScore = quiz.max_score ?? null;
+        const isClosed = !availability.isOpen;
+
         const scoreLabel = hasScore
           ? maxScore
             ? `${score?.score} / ${maxScore}`
             : `${score?.score}`
           : canShowScore
-            ? "Awaiting score"
+            ? isCompleted ? "Awaiting score" : (isClosed ? "Missed" : "Awaiting score")
             : "Hidden";
         const scoreNote = canShowScore
           ? hasScore
@@ -137,12 +139,13 @@ const QuizList = ({
               : "Score posted."
             : isCompleted
               ? "Your admin will post the score after review."
-              : "Upload proof after completing the quiz."
+              : isClosed
+                ? "This quiz was not submitted before the deadline."
+                : "Upload proof after completing the quiz."
           : "Score is hidden by your instructor.";
 
-        const isClosed = !availability.isOpen;
         const isDone = isCompleted && hasScore;
-        const canOpen = availability.isOpen && !isDone && Boolean(quiz.link_url);
+        const canOpen = !isClosed && !isDone && Boolean(quiz.link_url);
         const canUploadProof = Boolean(onUploadProof) && !isArchived && !isClosed && !isDone && uploadingQuizId !== quiz.id;
 
         const handleUploadProofClick = () => {
@@ -151,11 +154,11 @@ const QuizList = ({
         };
 
         return (
-          <div key={quiz.id} className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+          <div key={quiz.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="max-w-2xl">
                 <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Quiz</p>
-                <h3 className="mt-2 font-display text-xl text-white">{quiz.title}</h3>
+                <h3 className="mt-1 font-display text-base text-white">{quiz.title}</h3>
                 {quiz.description && (
                   <p className="mt-2 text-sm text-slate-300">{quiz.description}</p>
                 )}
@@ -187,11 +190,11 @@ const QuizList = ({
               </div>
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_0.9fr]">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+            <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_0.9fr]">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
                 <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Score</p>
-                <p className="mt-2 text-xl font-semibold text-white">{scoreLabel}</p>
-                <p className="mt-1 text-xs text-slate-400">{scoreNote}</p>
+                <p className="mt-1 text-base font-semibold text-white">{scoreLabel}</p>
+                <p className="mt-0.5 text-xs text-slate-400">{scoreNote}</p>
               </div>
               <div className="flex flex-col gap-2">
                 {canOpen ? (

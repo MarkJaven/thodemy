@@ -6,6 +6,7 @@ import LoadingScreen from "../components/LoadingScreen";
 import ProfileSetupModal from "../components/auth/ProfileSetupModal";
 import QuizList from "../components/dashboard/QuizList";
 import UploadWidget from "../components/dashboard/UploadWidget";
+import Breadcrumb from "../components/admin/Breadcrumb";
 import { useAuth } from "../context/AuthContext";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useTopicsData } from "../hooks/useTopicsData";
@@ -2655,6 +2656,7 @@ const Dashboard = () => {
         label: "Active Course",
         value: activeEnrollmentCourseIds.size,
         delta: hasActiveEnrollment ? "Based on enrollments" : "No active enrollments",
+        nav: "learning-path" as UserNavItem,
       },
       {
         label: "Lessons Completed",
@@ -2662,16 +2664,19 @@ const Dashboard = () => {
         delta: approvedSubmissionCount
           ? `${approvedSubmissionCount} certificates approved`
           : "Awaiting first approval",
+        nav: "requests" as UserNavItem,
       },
       {
         label: "Learning Paths",
         value: activeLearningPathCount,
         delta: activeLearningPathCount ? "In progress" : "Enroll to start",
+        nav: "learning-path" as UserNavItem,
       },
       {
         label: "Pending Reviews",
         value: pendingSubmissionCount,
         delta: pendingSubmissionCount ? "Awaiting admin review" : "No pending reviews",
+        nav: "requests" as UserNavItem,
       },
     ];
 
@@ -2680,17 +2685,26 @@ const Dashboard = () => {
     );
     const visibleCourses = activeCourses.slice(0, 3);
 
-    const nextSteps = [
-      hasStartedLearningPath
-        ? "Resume your active course"
-        : hasActiveEnrollment
-          ? "Start your enrolled course"
-          : "Enroll in a learning path to start",
-      pendingSubmissionCount > 0
-        ? "Track certificate review status"
-        : "Submit required certificates for completed topics",
-      visibleQuizzes.length > 0 ? "Complete assigned quizzes" : "Check for new quizzes",
-    ].filter(Boolean);
+    const nextSteps: { label: string; nav: UserNavItem }[] = [
+      {
+        label: hasStartedLearningPath
+          ? "Resume your active course"
+          : hasActiveEnrollment
+            ? "Start your enrolled course"
+            : "Enroll in a learning path to start",
+        nav: "learning-path",
+      },
+      {
+        label: pendingSubmissionCount > 0
+          ? "Track certificate review status"
+          : "Submit required certificates for completed topics",
+        nav: "requests",
+      },
+      {
+        label: visibleQuizzes.length > 0 ? "Complete assigned quizzes" : "Check for new quizzes",
+        nav: "quiz",
+      },
+    ];
 
     const statusStyles: Record<string, string> = {
       pending: "border-amber-400/40 text-amber-200 bg-amber-500/10",
@@ -2712,7 +2726,11 @@ const Dashboard = () => {
           {stats.map((stat) => (
             <div
               key={stat.label}
-              className="rounded-2xl border border-white/10 bg-ink-800/70 p-5 shadow-card"
+              role="button"
+              tabIndex={0}
+              onClick={() => setActiveNav(stat.nav)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setActiveNav(stat.nav); }}
+              className="rounded-2xl border border-white/10 bg-ink-800/70 p-5 shadow-card cursor-pointer hover:border-accent-purple/30 hover:bg-white/[0.03] transition-all"
             >
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
                 {stat.label}
@@ -2882,10 +2900,16 @@ const Dashboard = () => {
           )}
           <div className="mt-4 space-y-3">
             {nextSteps.map((step) => (
-              <div key={step} className="flex items-center gap-3 text-sm text-slate-200">
+              <button
+                key={step.label}
+                type="button"
+                onClick={() => setActiveNav(step.nav)}
+                className="flex w-full items-center gap-3 text-sm text-slate-200 hover:text-white cursor-pointer transition-colors group"
+              >
                 <span className="h-2 w-2 rounded-sm bg-accent-purple" />
-                <span>{step}</span>
-                </div>
+                <span>{step.label}</span>
+                <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-accent-purple">&rarr;</span>
+              </button>
               ))}
             </div>
           </div>
@@ -3806,6 +3830,7 @@ const Dashboard = () => {
                 type="button"
                 onClick={handleMfaToggle}
                 disabled={mfaToggleLoading}
+                aria-label="Toggle two-factor authentication"
                 className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-accent-purple/40 disabled:cursor-not-allowed disabled:opacity-50 ${
                   mfaEnabled ? "bg-accent-purple" : "bg-white/10"
                 }`}
@@ -3911,6 +3936,7 @@ const Dashboard = () => {
             <button
               className="lg:hidden ml-auto p-1 text-slate-400 hover:text-white"
               onClick={() => setSidebarOpen(false)}
+              aria-label="Close sidebar"
             >
               <CloseIcon />
             </button>
@@ -3980,6 +4006,7 @@ const Dashboard = () => {
                 <button
                   className="lg:hidden p-2 -ml-2 text-slate-400 hover:text-white"
                   onClick={() => setSidebarOpen(true)}
+                  aria-label="Open sidebar"
                 >
                   <MenuIcon />
                 </button>
@@ -4045,19 +4072,26 @@ const Dashboard = () => {
           </header>
 
           <div className="flex-1 px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-            <div className="flex flex-wrap items-end justify-between gap-6">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                  Learner Home
-                </p>
-                <h1 className="mt-3 font-display text-3xl text-white sm:text-4xl">
-                  Welcome back, {welcomeName}.
-                </h1>
-                <p className="mt-3 max-w-xl text-sm text-slate-300">
-                  Track course progress, submit forms, and stay on top of quizzes.
-                </p>
+            {activeNav === "overview" ? (
+              <div className="flex flex-wrap items-end justify-between gap-6">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                    Learner Home
+                  </p>
+                  <h2 className="mt-3 font-display text-3xl text-white sm:text-4xl">
+                    Welcome back, {welcomeName}.
+                  </h2>
+                  <p className="mt-3 max-w-xl text-sm text-slate-300">
+                    Track course progress, submit forms, and stay on top of quizzes.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mb-6">
+                <p className="text-sm text-slate-400">Dashboard</p>
+                <h2 className="mt-1 font-display text-2xl text-white">{activeNavLabel}</h2>
+              </div>
+            )}
 
             {error && (
               <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200" role="alert" aria-live="assertive">
@@ -4076,6 +4110,17 @@ const Dashboard = () => {
                 {submissionSuccess}
               </div>
             )}
+
+            <Breadcrumb
+              items={
+                activeNav === "overview"
+                  ? [{ label: "Dashboard" }]
+                  : [
+                      { label: "Dashboard", onClick: () => setActiveNav("overview") },
+                      { label: activeNavLabel },
+                    ]
+              }
+            />
 
             {navTransitioning ? (
               <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
