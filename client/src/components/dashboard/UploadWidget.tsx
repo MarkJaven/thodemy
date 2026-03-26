@@ -439,6 +439,7 @@ const UploadWidget = ({
                 onClick={closeModal}
                 className="rounded-full p-2 text-slate-400 transition hover:bg-white/10 hover:text-white"
                 aria-label="Close"
+                title="Close"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -557,6 +558,7 @@ const UploadWidget = ({
                       onClick={clearSelectedFile}
                       className="rounded-full p-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
                       aria-label="Remove file"
+                      title="Remove file"
                     >
                       <svg
                         width="16"
@@ -580,7 +582,7 @@ const UploadWidget = ({
                 </div>
               )}
               {error && (
-                <p className="rounded-lg border border-rose-400/20 bg-rose-400/5 px-3 py-2 text-xs text-rose-300">
+                <p className="rounded-lg border border-rose-400/20 bg-rose-400/5 px-3 py-2 text-xs text-rose-300" role="alert" aria-live="assertive">
                   {error}
                 </p>
               )}

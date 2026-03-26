@@ -67,6 +67,7 @@ const DataTable = <T,>({
               {columns.map((column) => (
                 <th
                   key={column.key}
+                  scope="col"
                   style={column.width ? { width: column.width } : undefined}
                   className={`${compact ? "px-3 py-3" : "px-5 py-4"} text-[11px] font-semibold uppercase tracking-widest text-slate-400 ${
                     column.align === "right"

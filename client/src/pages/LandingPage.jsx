@@ -461,16 +461,19 @@ const LandingPage = () => {
 
           {/* Desktop & Tablet Landscape Navigation */}
           <nav className="hidden flex-1 items-center justify-start gap-4 pl-10 md:flex md:pl-12 lg:justify-center lg:gap-6 lg:pl-0 xl:gap-7">
-            {navItems.map((item) => (
-              <a
-                key={item.label}
-                href="/"
-                onClick={(e) => { e.preventDefault(); scrollTo(item.sectionId); }}
-                className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.1em] text-slate-400 transition-all duration-200 hover:text-white lg:text-xs lg:tracking-[0.15em]"
-              >
-                {item.label}
-              </a>
-            ))}
+            <ul className="flex items-center gap-4 list-none m-0 p-0 lg:gap-6 xl:gap-7">
+              {navItems.map((item) => (
+                <li key={item.label}>
+                  <a
+                    href="/"
+                    onClick={(e) => { e.preventDefault(); scrollTo(item.sectionId); }}
+                    className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.1em] text-slate-400 transition-all duration-200 hover:text-white lg:text-xs lg:tracking-[0.15em]"
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
           </nav>
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -523,17 +526,20 @@ const LandingPage = () => {
             }}
           />
           <nav className="relative flex flex-col px-4 py-4 sm:px-6">
-            {navItems.map((item, index) => (
-              <a
-                key={item.label}
-                href="/"
-                onClick={(e) => { e.preventDefault(); scrollTo(item.sectionId); setMobileMenuOpen(false); }}
-                className="border-b border-white/5 py-3 text-sm font-medium uppercase tracking-[0.15em] text-slate-300 transition-colors duration-200 hover:text-white"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                {item.label}
-              </a>
-            ))}
+            <ul className="flex flex-col list-none m-0 p-0">
+              {navItems.map((item, index) => (
+                <li key={item.label}>
+                  <a
+                    href="/"
+                    onClick={(e) => { e.preventDefault(); scrollTo(item.sectionId); setMobileMenuOpen(false); }}
+                    className="block border-b border-white/5 py-3 text-sm font-medium uppercase tracking-[0.15em] text-slate-300 transition-colors duration-200 hover:text-white"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
             <a
               href="/auth/login"
               onClick={() => setMobileMenuOpen(false)}

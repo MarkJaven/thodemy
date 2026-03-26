@@ -364,7 +364,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                 </div>
 
                 {error && (
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4" role="alert" aria-live="assertive">
                     <p className="text-red-400 text-sm">{error}</p>
                   </div>
                 )}
@@ -411,7 +411,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                 </div>
 
                 {error && (
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4" role="alert" aria-live="assertive">
                     <p className="text-red-400 text-sm">{error}</p>
                   </div>
                 )}
@@ -494,7 +494,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                 )}
 
                 {error && (
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4" role="alert" aria-live="assertive">
                     <p className="text-red-400 text-sm">{error}</p>
                   </div>
                 )}

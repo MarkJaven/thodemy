@@ -512,13 +512,13 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                 </div>
 
                 {error && (
-                  <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+                  <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3" role="alert" aria-live="assertive">
                     <p className="text-red-400 text-sm">{error}</p>
                   </div>
                 )}
 
                 {success && (
-                  <div className="rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-3">
+                  <div className="rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-3" aria-live="polite">
                     <p className="text-green-400 text-sm">Profile updated successfully!</p>
                   </div>
                 )}

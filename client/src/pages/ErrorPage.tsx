@@ -21,7 +21,7 @@ const ErrorPage = ({
         <div className="absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent-indigo/5 blur-[120px]" />
       </div>
 
-      <div className="relative flex flex-col items-center gap-8">
+      <div className="relative flex flex-col items-center gap-8" role="alert" aria-live="assertive">
         {/* Warning icon */}
         <div className="flex h-[88px] w-[88px] items-center justify-center rounded-[24px] border border-rose-500/15 bg-rose-500/10">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-rose-400">

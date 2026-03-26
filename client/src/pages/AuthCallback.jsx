@@ -69,7 +69,7 @@ const AuthCallback = () => {
           </p>
           {error && (
             <>
-              <p className="mt-4 text-xs text-rose-300">{error}</p>
+              <p className="mt-4 text-xs text-rose-300" role="alert" aria-live="assertive">{error}</p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 <button
                   type="button"

@@ -292,7 +292,7 @@ const FormsSection = () => {
   }
 
   if (error) {
-    return <p className="text-sm text-rose-200">{error}</p>;
+    return <p className="text-sm text-rose-200" role="alert" aria-live="assertive">{error}</p>;
   }
 
   return (
@@ -317,12 +317,12 @@ const FormsSection = () => {
       <DataTable columns={formColumns} data={forms} emptyMessage="No forms created yet." />
 
       {actionSuccess && (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-200">
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-200" aria-live="polite">
           {actionSuccess}
         </div>
       )}
       {actionError && (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-200" role="alert" aria-live="assertive">
           {actionError}
         </div>
       )}

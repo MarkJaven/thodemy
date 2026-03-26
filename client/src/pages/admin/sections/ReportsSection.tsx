@@ -687,7 +687,7 @@ const ReportsSection = () => {
 
         {/* Error display */}
         {error && (
-          <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" role="alert" aria-live="assertive">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 shrink-0 text-rose-400">
               <circle cx="12" cy="12" r="10" />
               <path d="M12 8v4M12 16h.01" />

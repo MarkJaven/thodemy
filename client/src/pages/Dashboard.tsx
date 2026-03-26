@@ -1496,6 +1496,7 @@ const Dashboard = () => {
     openQuizProofModal(quiz);
   };
   const handleDeleteActivity = async (activityId: string) => {
+    if (!window.confirm("Are you sure you want to delete this? This action cannot be undone.")) return;
     setDeleteActivityError(null);
     setDeletingActivityId(activityId);
     try {
@@ -2397,7 +2398,7 @@ const Dashboard = () => {
                                               <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
                                                 <span className="rounded-full border border-white/10 px-3 py-1">
                                                   {topic.time_allocated}{" "}
-                                                  {topic.time_unit === "hours" ? "hours" : "days"}
+                                                  {topic.time_unit === "hours" ? (Number(topic.time_allocated) === 1 ? "hour" : "hours") : (Number(topic.time_allocated) === 1 ? "day" : "days")}
                                                 </span>
                                                 <span className="rounded-full border border-white/10 px-3 py-1">
                                                   Start: {formatDate(topicStartValue)}
@@ -3812,12 +3813,12 @@ const Dashboard = () => {
         </div>
 
         {profileUpdateError && (
-          <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" role="alert" aria-live="assertive">
             {profileUpdateError}
           </div>
         )}
         {profileUpdateSuccess && (
-          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" aria-live="polite">
             {profileUpdateSuccess}
           </div>
         )}
@@ -3914,37 +3915,38 @@ const Dashboard = () => {
           </div>
 
           <nav className="flex-1 px-4 pb-6 overflow-y-auto">
-            <div className="flex flex-col gap-2">
+            <ul className="flex flex-col gap-2 list-none m-0 p-0">
               {userNavItems.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => {
-                    setActiveNav(item.key);
-                    setSidebarOpen(false);
-                  }}
-                  className={`
-                    flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
-                    ${activeNav === item.key
-                      ? "bg-ink-700 text-white border border-accent-purple/30"
-                      : "text-slate-400 hover:text-white hover:bg-ink-800"
-                    }
-                  `}
-                >
-                  <span className="flex items-center gap-3">
-                    <span className={activeNav === item.key ? "text-accent-purple" : "text-slate-500"}>
-                      {item.icon}
+                <li key={item.key}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveNav(item.key);
+                      setSidebarOpen(false);
+                    }}
+                    className={`
+                      w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                      ${activeNav === item.key
+                        ? "bg-ink-700 text-white border border-accent-purple/30"
+                        : "text-slate-400 hover:text-white hover:bg-ink-800"
+                      }
+                    `}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className={activeNav === item.key ? "text-accent-purple" : "text-slate-500"}>
+                        {item.icon}
+                      </span>
+                      {item.label}
                     </span>
-                    {item.label}
-                  </span>
-                  {item.badge && (
-                    <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
+                    {item.badge && (
+                      <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           </nav>
 
           <div className="p-4 border-t border-white/5">
@@ -4050,7 +4052,7 @@ const Dashboard = () => {
             </div>
 
             {error && (
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200" role="alert" aria-live="assertive">
                 <span>{error}</span>
                 <button
                   type="button"
@@ -4062,7 +4064,7 @@ const Dashboard = () => {
               </div>
             )}
             {submissionSuccess && (
-              <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-200">
+              <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-200" aria-live="polite">
                 {submissionSuccess}
               </div>
             )}

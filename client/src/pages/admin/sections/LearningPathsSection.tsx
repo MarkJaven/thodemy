@@ -450,12 +450,12 @@ const LearningPathsSection = () => {
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200" role="alert" aria-live="assertive">
           {error}
         </div>
       )}
       {actionError && (
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200" role="alert" aria-live="assertive">
           {actionError}
         </div>
       )}

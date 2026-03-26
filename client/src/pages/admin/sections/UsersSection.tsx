@@ -44,6 +44,9 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | Role>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -481,6 +484,24 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   }, [readOnly]);
 
   const visibleUsers = readOnly ? users.filter((user) => user.role === "user") : users;
+
+  const filteredUsers = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return visibleUsers.filter((user) => {
+      if (roleFilter !== "all" && user.role !== roleFilter) {
+        return false;
+      }
+      if (statusFilter !== "all") {
+        const isActive = user.is_active !== false;
+        if (statusFilter === "active" && !isActive) return false;
+        if (statusFilter === "inactive" && isActive) return false;
+      }
+      if (!normalizedQuery) return true;
+      const haystack = `${user.first_name ?? ""} ${user.last_name ?? ""} ${user.email ?? ""} ${user.username ?? ""}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [visibleUsers, searchQuery, roleFilter, statusFilter]);
+
   const profileDisplayName = getDisplayName(selectedUser);
   const profileInitial = getUserInitial(selectedUser);
   const profileRoleConfig = selectedUser ? roleConfig[selectedUser.role] || roleConfig.user : roleConfig.user;
@@ -515,7 +536,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
             <path d="M12 8v4M12 16h.01" />
           </svg>
         </div>
-        <p className="text-sm text-rose-200">{error}</p>
+        <p className="text-sm text-rose-200" role="alert" aria-live="assertive">{error}</p>
         <button
           type="button"
           onClick={loadUsers}
@@ -556,11 +577,43 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
         )}
       </div>
 
+      {/* Search & Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-[220px]">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search by name, email, or username..."
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-slate-500"
+          />
+        </div>
+        <select
+          value={roleFilter}
+          onChange={(event) => setRoleFilter(event.target.value as "all" | Role)}
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+        >
+          <option value="all">All roles</option>
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+          <option value="superadmin">Super Admin</option>
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value as "all" | "active" | "inactive")}
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+        >
+          <option value="all">All status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+
       {/* Data Table */}
       <DataTable
         columns={columns}
-        data={visibleUsers}
-        emptyMessage="No users found."
+        data={filteredUsers}
+        emptyMessage={searchQuery || roleFilter !== "all" || statusFilter !== "all" ? "No users match your filters." : "No users found."}
         striped={!readOnly}
         rowClassName={readOnly ? () => "hover:bg-transparent" : undefined}
         compact={readOnly}
@@ -781,7 +834,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
           </div>
 
           {profileError && (
-            <div className="flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            <div className="flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" role="alert" aria-live="assertive">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 8v4M12 16h.01" />
@@ -790,7 +843,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
             </div>
           )}
           {profileSuccess && (
-            <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" aria-live="polite">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                 <polyline points="22 4 12 14.01 9 11.01" />
@@ -998,7 +1051,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               </div>
             </div>
             {actionError && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" role="alert" aria-live="assertive">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M12 8v4M12 16h.01" />
@@ -1007,7 +1060,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
               </div>
             )}
             {actionSuccess && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" aria-live="polite">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                   <polyline points="22 4 12 14.01 9 11.01" />

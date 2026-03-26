@@ -399,12 +399,12 @@ const TopicsPage = () => {
           </div>
 
           {(error || actionError) && (
-            <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+            <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200" role="alert" aria-live="assertive">
               {actionError || error}
             </div>
           )}
           {submissionSuccess && (
-            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-200">
+            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-200" aria-live="polite">
               {submissionSuccess}
             </div>
           )}
@@ -460,7 +460,7 @@ const TopicsPage = () => {
                     <div>
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="text-lg font-semibold text-white">{topic.title}</h3>
+                          <h2 className="text-lg font-semibold text-white">{topic.title}</h2>
                           <p className="mt-1 text-sm text-slate-300">{topic.description}</p>
                         </div>
                         <span
@@ -471,7 +471,7 @@ const TopicsPage = () => {
                       </div>
                       <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-400">
                         <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                          {topic.time_allocated} {topic.time_unit === "hours" ? "hours" : "days"}
+                          {topic.time_allocated} {topic.time_unit === "hours" ? (Number(topic.time_allocated) === 1 ? "hour" : "hours") : (Number(topic.time_allocated) === 1 ? "day" : "days")}
                         </span>
                         <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
                           Start: {formatDate(progress?.start_date)}

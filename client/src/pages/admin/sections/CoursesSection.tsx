@@ -789,7 +789,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
       </div>
 
         {error && (
-          <div className="flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+          <div className="flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200" role="alert" aria-live="assertive">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
               <circle cx="12" cy="12" r="10" />
               <path d="M12 8v4M12 16h.01" />
@@ -801,7 +801,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
           </div>
         )}
         {actionError && (
-          <div className="flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+          <div className="flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200" role="alert" aria-live="assertive">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
               <circle cx="12" cy="12" r="10" />
               <path d="M12 8v4M12 16h.01" />
@@ -1081,7 +1081,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm text-white">{topic.title}</p>
                               <p className="text-[10px] text-slate-400">
-                                {topic.time_allocated} {topic.time_unit === "hours" ? "hrs" : "days"}
+                                {topic.time_allocated} {topic.time_unit === "hours" ? (Number(topic.time_allocated) === 1 ? "hr" : "hrs") : (Number(topic.time_allocated) === 1 ? "day" : "days")}
                               </p>
                             </div>
                             {groupName ? (
@@ -1311,7 +1311,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
                               )}
                             </div>
                             <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                              {topic.time_allocated} {topic.time_unit === "hours" ? "hrs" : "days"}
+                              {topic.time_allocated} {topic.time_unit === "hours" ? (Number(topic.time_allocated) === 1 ? "hr" : "hrs") : (Number(topic.time_allocated) === 1 ? "day" : "days")}
                             </span>
                           </div>
                           <div className="mt-2 flex items-center justify-between gap-2">

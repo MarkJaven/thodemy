@@ -282,12 +282,12 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200" role="alert" aria-live="assertive">
           {error}
         </div>
       )}
       {actionError && (
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-200" role="alert" aria-live="assertive">
           {actionError}
         </div>
       )}
@@ -346,7 +346,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-slate-400">Time</span>
                       <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">
-                        {topic.time_allocated} {topic.time_unit === "hours" ? "hours" : "days"}
+                        {topic.time_allocated} {topic.time_unit === "hours" ? (Number(topic.time_allocated) === 1 ? "hour" : "hours") : (Number(topic.time_allocated) === 1 ? "day" : "days")}
                       </span>
                     </div>
                   </div>
@@ -433,7 +433,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                   </div>
                   <div>
                     <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-                      {topic.time_allocated} {topic.time_unit === "hours" ? "hours" : "days"}
+                      {topic.time_allocated} {topic.time_unit === "hours" ? (Number(topic.time_allocated) === 1 ? "hour" : "hours") : (Number(topic.time_allocated) === 1 ? "day" : "days")}
                     </span>
                   </div>
                   <div>

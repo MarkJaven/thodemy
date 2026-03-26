@@ -59,6 +59,7 @@ const Navbar = ({ userEmail, onSignOut, onProfileClick }: NavbarProps) => {
           type="button"
           onClick={onSignOut}
           className="group flex items-center gap-2 rounded-xl bg-gradient-to-r from-accent-purple via-accent-indigo to-accent-violet px-4 py-2.5 text-[11px] font-semibold uppercase tracking-widest text-white shadow-purple-glow transition-all duration-200 hover:shadow-purple-glow-lg hover:brightness-110"
+          title="Sign out"
         >
           <svg
             width="14"

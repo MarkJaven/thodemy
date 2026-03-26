@@ -19,6 +19,7 @@ import ActivitiesSection from "./sections/ActivitiesSection";
 import QuizzesSection from "./sections/QuizzesSection";
 import ReportsSection from "./sections/ReportsSection";
 import EvaluationSection from "./sections/EvaluationSection";
+import Breadcrumb from "../../components/admin/Breadcrumb";
 
 // Navigation icons
 const OverviewIcon = () => (
@@ -1208,17 +1209,70 @@ const SuperAdminDashboard = () => {
         </div>
 
         {profileUpdateError && (
-          <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" role="alert" aria-live="assertive">
             {profileUpdateError}
           </div>
         )}
         {profileUpdateSuccess && (
-          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" aria-live="polite">
             {profileUpdateSuccess}
           </div>
         )}
       </div>
     );
+  };
+
+  const getBreadcrumbItems = (): { label: string; onClick?: () => void }[] => {
+    const dashboard = { label: "Dashboard", onClick: () => setActiveNav("overview") };
+    const navLabelMap: Record<string, string> = {
+      overview: "Overview",
+      courses: "Courses",
+      "learning-paths": "Learning Paths",
+      topics: "Topics",
+      users: "Users",
+      projects: "Projects",
+      approvals: "Approvals",
+      "approvals-enrollments": "Approvals",
+      "approvals-submissions": "Approvals",
+      quiz: "Quizzes",
+      "quiz-scores": "Quizzes",
+      reports: "Reports",
+      evaluation: "Evaluation",
+      profile: "Profile",
+    };
+
+    if (activeNav === "overview") {
+      return [{ label: "Dashboard" }];
+    }
+
+    const sectionLabel = navLabelMap[activeNav] ?? activeNav;
+
+    // Sub-sections: quiz-scores is a child of Quizzes
+    if (activeNav === "quiz-scores") {
+      return [
+        dashboard,
+        { label: "Quizzes", onClick: () => setActiveNav("quiz") },
+        { label: "Quiz Scores" },
+      ];
+    }
+
+    // Sub-sections: approvals-enrollments / approvals-submissions are children of Approvals
+    if (activeNav === "approvals-enrollments") {
+      return [
+        dashboard,
+        { label: "Approvals", onClick: () => setActiveNav("approvals") },
+        { label: "Enrollment Approvals" },
+      ];
+    }
+    if (activeNav === "approvals-submissions") {
+      return [
+        dashboard,
+        { label: "Approvals", onClick: () => setActiveNav("approvals") },
+        { label: "Submission Approvals" },
+      ];
+    }
+
+    return [dashboard, { label: sectionLabel }];
   };
 
   const renderContent = () => {
@@ -1642,12 +1696,12 @@ const SuperAdminDashboard = () => {
 
           {/* Nav Items */}
           <nav ref={navRef} onScroll={handleNavScroll} className="flex-1 px-4 pb-6 overflow-y-auto scrollbar-autohide">
-            <div className="flex flex-col gap-2">
+            <ul className="flex flex-col gap-2 list-none m-0 p-0">
               {navItems.map(item => {
                 if (item.key === "quiz") {
                   const isQuizActive = activeNav === "quiz" || activeNav === "quiz-scores";
                   return (
-                    <div key="quiz-group">
+                    <li key="quiz-group">
                       <button
                         type="button"
                         onClick={() => setQuizNavOpen(prev => !prev)}
@@ -1668,24 +1722,28 @@ const SuperAdminDashboard = () => {
                         </svg>
                       </button>
                       {quizNavOpen && (
-                        <div className="mt-1 ml-4 flex flex-col gap-1 border-l border-white/10 pl-3">
-                          <button
-                            type="button"
-                            onClick={() => { setActiveNav("quiz"); setSidebarOpen(false); }}
-                            className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${activeNav === "quiz" ? "text-white" : "text-slate-400 hover:text-white"}`}
-                          >
-                            Quizzes
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setActiveNav("quiz-scores"); setSidebarOpen(false); }}
-                            className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${activeNav === "quiz-scores" ? "text-white" : "text-slate-400 hover:text-white"}`}
-                          >
-                            Quiz Scores
-                          </button>
-                        </div>
+                        <ul className="mt-1 ml-4 flex flex-col gap-1 border-l border-white/10 pl-3 list-none p-0">
+                          <li>
+                            <button
+                              type="button"
+                              onClick={() => { setActiveNav("quiz"); setSidebarOpen(false); }}
+                              className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${activeNav === "quiz" ? "text-white" : "text-slate-400 hover:text-white"}`}
+                            >
+                              Quizzes
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              type="button"
+                              onClick={() => { setActiveNav("quiz-scores"); setSidebarOpen(false); }}
+                              className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${activeNav === "quiz-scores" ? "text-white" : "text-slate-400 hover:text-white"}`}
+                            >
+                              Quiz Scores
+                            </button>
+                          </li>
+                        </ul>
                       )}
-                    </div>
+                    </li>
                   );
                 }
                 if (item.key === "approvals") {
@@ -1694,7 +1752,7 @@ const SuperAdminDashboard = () => {
                     activeNav === "approvals-enrollments" ||
                     activeNav === "approvals-submissions";
                   return (
-                    <div key="approvals-group">
+                    <li key="approvals-group">
                       <button
                         type="button"
                         onClick={() => setApprovalsNavOpen(prev => !prev)}
@@ -1715,56 +1773,58 @@ const SuperAdminDashboard = () => {
                         </svg>
                       </button>
                       {approvalsNavOpen && (
-                        <div className="mt-1 ml-4 flex flex-col gap-1 border-l border-white/10 pl-3">
+                        <ul className="mt-1 ml-4 flex flex-col gap-1 border-l border-white/10 pl-3 list-none p-0">
                           {APPROVAL_NAV_ITEMS.map((approvalItem) => (
-                            <button
-                              key={approvalItem.key}
-                              type="button"
-                              onClick={() => {
-                                setApprovalsNavOpen(true);
-                                handleOpenApprovals(approvalItem.defaultSection);
-                                setSidebarOpen(false);
-                              }}
-                              className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                                activeNav === approvalItem.key ||
-                                (activeNav === "approvals" && approvalItem.key === "approvals-enrollments")
-                                  ? "text-white"
-                                  : "text-slate-400 hover:text-white"
-                              }`}
-                            >
-                              {approvalItem.label}
-                            </button>
+                            <li key={approvalItem.key}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setApprovalsNavOpen(true);
+                                  handleOpenApprovals(approvalItem.defaultSection);
+                                  setSidebarOpen(false);
+                                }}
+                                className={`text-left px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                                  activeNav === approvalItem.key ||
+                                  (activeNav === "approvals" && approvalItem.key === "approvals-enrollments")
+                                    ? "text-white"
+                                    : "text-slate-400 hover:text-white"
+                                }`}
+                              >
+                                {approvalItem.label}
+                              </button>
+                            </li>
                           ))}
-                        </div>
+                        </ul>
                       )}
-                    </div>
+                    </li>
                   );
                 }
                 return (
-                  <a
-                    key={item.key}
-                    href={`/super-admin/${item.key}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setActiveNav(item.key);
-                      setSidebarOpen(false);
-                    }}
-                    className={`
-                      flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
-                      ${activeNav === item.key
-                        ? "bg-ink-700 text-white border border-accent-purple/30"
-                        : "text-slate-400 hover:text-white hover:bg-ink-800"
-                      }
-                    `}
-                  >
-                    <span className={activeNav === item.key ? "text-accent-purple" : "text-slate-500"}>
-                      {item.icon}
-                    </span>
-                    {item.label}
-                  </a>
+                  <li key={item.key}>
+                    <a
+                      href={`/super-admin/${item.key}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setActiveNav(item.key);
+                        setSidebarOpen(false);
+                      }}
+                      className={`
+                        flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                        ${activeNav === item.key
+                          ? "bg-ink-700 text-white border border-accent-purple/30"
+                          : "text-slate-400 hover:text-white hover:bg-ink-800"
+                        }
+                      `}
+                    >
+                      <span className={activeNav === item.key ? "text-accent-purple" : "text-slate-500"}>
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </a>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           </nav>
 
           {/* User Section */}
@@ -1883,6 +1943,7 @@ const SuperAdminDashboard = () => {
 
           {/* Page Content */}
           <div className="flex-1 p-4 sm:p-6 lg:p-8">
+            <Breadcrumb items={getBreadcrumbItems()} />
             {navTransitioning ? (
               <div className="flex flex-col items-center justify-center py-32 gap-4 animate-fade-in">
                 <div className="relative h-10 w-10">

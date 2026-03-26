@@ -181,6 +181,7 @@ const Modal = ({
               onClick={onClose}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-slate-400 transition-all duration-200 hover:bg-white/10 hover:text-white hover:border-white/20"
               aria-label="Close modal"
+              title="Close"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12" />
