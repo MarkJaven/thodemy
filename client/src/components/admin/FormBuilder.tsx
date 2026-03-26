@@ -63,6 +63,7 @@ const FormBuilder = ({ mode, questions, onChange }: FormBuilderProps) => {
               type="text"
               value={question.prompt}
               onChange={(event) => handleUpdate(question.id, { prompt: event.target.value })}
+              maxLength={500}
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             />
           </label>
@@ -74,6 +75,7 @@ const FormBuilder = ({ mode, questions, onChange }: FormBuilderProps) => {
                 type="text"
                 value={option}
                 onChange={(event) => handleOptionChange(question.id, optionIndex, event.target.value)}
+                maxLength={300}
                 className="w-full rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
                 placeholder={`Option ${optionIndex + 1}`}
               />
@@ -93,6 +95,7 @@ const FormBuilder = ({ mode, questions, onChange }: FormBuilderProps) => {
                 type="text"
                 value={question.correctAnswer ?? ""}
                 onChange={(event) => handleUpdate(question.id, { correctAnswer: event.target.value })}
+                maxLength={300}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               />
             </label>

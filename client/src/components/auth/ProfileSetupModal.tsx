@@ -316,6 +316,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                       type="text"
                       value={personalInfo.firstName}
                       onChange={(e) => setPersonalInfo({ ...personalInfo, firstName: sanitizeName(e.target.value) })}
+                      maxLength={50}
                       className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-accent-purple focus:border-transparent transition-all duration-200"
                       placeholder="Enter your first name"
                       required
@@ -327,6 +328,7 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                       type="text"
                       value={personalInfo.lastName}
                       onChange={(e) => setPersonalInfo({ ...personalInfo, lastName: sanitizeName(e.target.value) })}
+                      maxLength={50}
                       className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-accent-purple focus:border-transparent transition-all duration-200"
                       placeholder="Enter your last name"
                       required
@@ -388,11 +390,13 @@ const ProfileSetupModal = ({ isOpen, onComplete }: ProfileSetupModalProps) => {
                   <textarea
                     value={personalInfo.address}
                     onChange={(e) => setPersonalInfo({ ...personalInfo, address: e.target.value })}
+                    maxLength={300}
                     className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-accent-purple focus:border-transparent transition-all duration-200 resize-none"
                     rows={3}
                     placeholder="Enter your full address"
                     required
                   />
+                  <p className="mt-1 text-xs text-slate-500 text-right">{personalInfo.address.length} / 300</p>
                 </div>
 
                 <div className="space-y-2">

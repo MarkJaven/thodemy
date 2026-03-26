@@ -722,6 +722,7 @@ const QuizzesSection = ({ view }: { view?: "quizzes" | "scores" }) => {
                 placeholder="Search quizzes..."
                 value={quizSearch}
                 onChange={(e) => { setQuizSearch(e.target.value); setQuizPage(1); }}
+                maxLength={100}
                 className="w-full border-0 bg-transparent text-xs text-white placeholder-slate-500 outline-none focus:outline-none focus:ring-0"
               />
             </div>
@@ -817,6 +818,7 @@ const QuizzesSection = ({ view }: { view?: "quizzes" | "scores" }) => {
                 placeholder="Search by quiz or user..."
                 value={scoreSearch}
                 onChange={(e) => { setScoreSearch(e.target.value); setScorePage(1); }}
+                maxLength={100}
                 className="w-full border-0 bg-transparent text-xs text-white placeholder-slate-500 outline-none focus:outline-none focus:ring-0"
               />
             </div>
@@ -925,6 +927,7 @@ const QuizzesSection = ({ view }: { view?: "quizzes" | "scores" }) => {
               type="text"
               value={formState.title}
               onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
+              maxLength={150}
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             />
           </label>
@@ -936,8 +939,10 @@ const QuizzesSection = ({ view }: { view?: "quizzes" | "scores" }) => {
                 setFormState((prev) => ({ ...prev, description: event.target.value }))
               }
               rows={3}
+              maxLength={2000}
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             />
+            <p className="mt-1 text-xs text-slate-500 text-right">{formState.description.length} / 2000</p>
           </label>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
@@ -966,6 +971,7 @@ const QuizzesSection = ({ view }: { view?: "quizzes" | "scores" }) => {
                   placeholder="Search users..."
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
+                  maxLength={100}
                   className="w-full border-0 bg-transparent text-xs text-white placeholder-slate-500 outline-none focus:outline-none focus:ring-0"
                 />
               </div>
@@ -1005,6 +1011,7 @@ const QuizzesSection = ({ view }: { view?: "quizzes" | "scores" }) => {
                   setFormState((prev) => ({ ...prev, link_url: event.target.value }))
                 }
                 placeholder="https://forms.office.com/..."
+                maxLength={500}
                 className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
               />
             </label>

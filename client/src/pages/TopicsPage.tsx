@@ -29,7 +29,7 @@ type ConfirmDialogState = {
   onConfirm: () => void | Promise<void>;
 };
 
-const MAX_TOPIC_DESCRIPTION_LENGTH = 5000;
+const MAX_TOPIC_DESCRIPTION_LENGTH = 2000;
 
 const formatDate = (value?: string | null) => {
   if (!value) return "--";
@@ -597,6 +597,7 @@ const TopicsPage = () => {
               type="text"
               value={formState.title}
               onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
+              maxLength={150}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
           </label>
@@ -639,12 +640,10 @@ const TopicsPage = () => {
               onChange={(event) =>
                 setFormState((prev) => ({ ...prev, description: event.target.value }))
               }
-              maxLength={MAX_TOPIC_DESCRIPTION_LENGTH}
+              maxLength={2000}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
-            <span className="mt-2 block text-[10px] uppercase tracking-[0.2em] text-slate-500">
-              {formState.description.length}/{MAX_TOPIC_DESCRIPTION_LENGTH} characters
-            </span>
+            <p className="mt-1 text-xs text-slate-500 text-right">{formState.description.length} / 2000</p>
           </label>
           <label className="md:col-span-2 text-xs uppercase tracking-[0.25em] text-slate-400">
             Topic link
@@ -654,6 +653,7 @@ const TopicsPage = () => {
               onChange={(event) =>
                 setFormState((prev) => ({ ...prev, link_url: event.target.value }))
               }
+              maxLength={500}
               placeholder="https://example.com"
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
@@ -739,8 +739,10 @@ const TopicsPage = () => {
               rows={3}
               value={submissionMessage}
               onChange={(event) => setSubmissionMessage(event.target.value)}
+              maxLength={500}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
+            <p className="mt-1 text-xs text-slate-500 text-right">{submissionMessage.length} / 500</p>
           </label>
         </div>
       </Modal>

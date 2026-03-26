@@ -191,7 +191,7 @@ type ConfirmDialogState = {
   onConfirm: () => void | Promise<void>;
 };
 
-const MAX_COURSE_DESCRIPTION_LENGTH = 5000;
+const MAX_COURSE_DESCRIPTION_LENGTH = 2000;
 
 const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
@@ -762,6 +762,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search courses, descriptions..."
+            maxLength={100}
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-slate-500"
           />
         </div>
@@ -991,6 +992,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
                     value={formState.title}
                     onChange={(e) => setFormState((prev) => ({ ...prev, title: e.target.value }))}
                     placeholder="e.g., Advanced Web Development"
+                    maxLength={150}
                     className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
                 </div>
@@ -1006,9 +1008,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
                     maxLength={MAX_COURSE_DESCRIPTION_LENGTH}
                     className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
-                  <span className="mt-2 block text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                    {formState.description.length}/{MAX_COURSE_DESCRIPTION_LENGTH} characters
-                  </span>
+                  <p className="mt-1 text-xs text-slate-500 text-right">{formState.description.length} / {MAX_COURSE_DESCRIPTION_LENGTH}</p>
                 </div>
               </div>
             </div>
@@ -1119,6 +1119,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
                     value={groupNameInput}
                     onChange={(event) => setGroupNameInput(event.target.value)}
                     placeholder="Grouped Topics name"
+                    maxLength={100}
                     className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500"
                   />
                   <button

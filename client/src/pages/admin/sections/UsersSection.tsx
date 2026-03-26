@@ -583,6 +583,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
           <input
             type="search"
             value={searchQuery}
+            maxLength={100}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search by name, email, or username..."
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-slate-500"
@@ -720,6 +721,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.firstName}
+                        maxLength={50}
                         onChange={(e) => setProfileForm((prev) => ({ ...prev, firstName: sanitizeName(e.target.value) }))}
                         placeholder="First name"
                         className="input"
@@ -736,6 +738,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.lastName}
+                        maxLength={50}
                         onChange={(e) => setProfileForm((prev) => ({ ...prev, lastName: sanitizeName(e.target.value) }))}
                         placeholder="Last name"
                         className="input"
@@ -758,6 +761,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                       <input
                         type="text"
                         value={profileForm.username}
+                        maxLength={50}
                         onChange={(e) => setProfileForm((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                         placeholder="Username"
                         className="input"
@@ -909,6 +913,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="email"
                   value={formState.email}
+                  maxLength={254}
                   onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))}
                   placeholder="user@example.com"
                   autoComplete="off"
@@ -934,6 +939,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="text"
                   value={formState.username}
+                  maxLength={50}
                   onChange={(e) => setFormState((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                   placeholder="johndoe"
                   autoComplete="off"
@@ -945,6 +951,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="password"
                   value={formState.password}
+                  maxLength={128}
                   onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))}
                   autoComplete="new-password"
                   placeholder="Min. 8 characters"
@@ -1031,6 +1038,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="text"
                   value={formState.username}
+                  maxLength={50}
                   onChange={(e) => setFormState((prev) => ({ ...prev, username: sanitizeUsername(e.target.value) }))}
                   className="input"
                 />
@@ -1043,6 +1051,7 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <input
                   type="password"
                   value={formState.password}
+                  maxLength={128}
                   onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))}
                   autoComplete="new-password"
                   placeholder="Leave blank to keep current"

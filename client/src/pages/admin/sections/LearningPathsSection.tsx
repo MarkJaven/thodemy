@@ -423,6 +423,7 @@ const LearningPathsSection = () => {
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search learning paths, codes, descriptions..."
+            maxLength={100}
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-slate-500"
           />
         </div>
@@ -676,6 +677,7 @@ const LearningPathsSection = () => {
                       }))
                     }
                     placeholder="e.g., Full-Stack Developer Path"
+                    maxLength={150}
                     className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
                 </div>
@@ -693,8 +695,10 @@ const LearningPathsSection = () => {
                       }))
                     }
                     placeholder="Brief description of what learners will achieve..."
+                    maxLength={2000}
                     className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
+                  <p className="mt-1 text-xs text-slate-500 text-right">{formState.description.length} / 2000</p>
                 </div>
               </div>
             </div>

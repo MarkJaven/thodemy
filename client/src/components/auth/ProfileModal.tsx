@@ -388,6 +388,7 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                           type="text"
                           value={profile.first_name}
                           onChange={(e) => handleInputChange('first_name', e.target.value)}
+                          maxLength={50}
                           className={inputClass}
                         />
                       ) : (
@@ -401,6 +402,7 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                           type="text"
                           value={profile.last_name}
                           onChange={(e) => handleInputChange('last_name', e.target.value)}
+                          maxLength={50}
                           className={inputClass}
                         />
                       ) : (
@@ -470,12 +472,16 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                   <div>
                     <label className="block text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">Address</label>
                     {isEditMode ? (
-                      <textarea
-                        value={profile.address}
-                        onChange={(e) => handleInputChange('address', e.target.value)}
-                        rows={3}
-                        className={`${inputClass} resize-none`}
-                      />
+                      <>
+                        <textarea
+                          value={profile.address}
+                          onChange={(e) => handleInputChange('address', e.target.value)}
+                          maxLength={300}
+                          rows={3}
+                          className={`${inputClass} resize-none`}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 text-right">{profile.address.length} / 300</p>
+                      </>
                     ) : (
                       <div className={`${readOnlyClass} whitespace-pre-wrap`}>
                         {profile.address || 'Not set'}

@@ -1069,6 +1069,7 @@ const AdminDashboard = () => {
                 type="text"
                 value={profileView.first_name ?? ""}
                 onChange={(event) => handleProfileFieldChange("first_name", event.target.value)}
+                maxLength={50}
                 className={inputClass}
               />
             ) : (
@@ -1084,6 +1085,7 @@ const AdminDashboard = () => {
                 type="text"
                 value={profileView.last_name ?? ""}
                 onChange={(event) => handleProfileFieldChange("last_name", event.target.value)}
+                maxLength={50}
                 className={inputClass}
               />
             ) : (
@@ -1163,12 +1165,16 @@ const AdminDashboard = () => {
             Address
           </label>
           {isProfileEditing ? (
-            <textarea
-              rows={3}
-              value={profileView.address ?? ""}
-              onChange={(event) => handleProfileFieldChange("address", event.target.value)}
-              className={`${inputClass} resize-none`}
-            />
+            <>
+              <textarea
+                rows={3}
+                value={profileView.address ?? ""}
+                onChange={(event) => handleProfileFieldChange("address", event.target.value)}
+                maxLength={300}
+                className={`${inputClass} resize-none`}
+              />
+              <p className="mt-1 text-xs text-slate-500 text-right">{(profileView.address ?? "").length} / 300</p>
+            </>
           ) : (
             <div className={`${readOnlyClass} whitespace-pre-wrap`}>
               {profileView.address || "Not set"}

@@ -256,6 +256,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
           <input
             type="search"
             value={searchQuery}
+            maxLength={100}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search topics, authors, descriptions..."
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-slate-500"
@@ -505,6 +506,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
             <input
               type="text"
               value={formState.title}
+              maxLength={150}
               onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
@@ -561,6 +563,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
               type="url"
               placeholder="https://example.com/lesson"
               value={formState.link_url}
+              maxLength={2048}
               onChange={(event) =>
                 setFormState((prev) => ({ ...prev, link_url: event.target.value }))
               }

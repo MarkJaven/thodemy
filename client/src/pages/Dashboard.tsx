@@ -3185,6 +3185,7 @@ const Dashboard = () => {
                     ref={learningPathCodeRef}
                     value={learningPathCode}
                     onChange={(event) => setLearningPathCode(event.target.value)}
+                    maxLength={50}
                     placeholder="Enter learning path code"
                     className="flex-1 min-w-[180px] rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
                   />
@@ -3633,6 +3634,7 @@ const Dashboard = () => {
                 type="text"
                 value={profileView.first_name ?? ""}
                 onChange={(event) => handleProfileFieldChange("first_name", event.target.value)}
+                maxLength={50}
                 className={inputClass}
               />
             ) : (
@@ -3648,6 +3650,7 @@ const Dashboard = () => {
                 type="text"
                 value={profileView.last_name ?? ""}
                 onChange={(event) => handleProfileFieldChange("last_name", event.target.value)}
+                maxLength={50}
                 className={inputClass}
               />
             ) : (
@@ -3727,12 +3730,16 @@ const Dashboard = () => {
             Address
           </label>
           {isProfileEditing ? (
-            <textarea
-              rows={3}
-              value={profileView.address ?? ""}
-              onChange={(event) => handleProfileFieldChange("address", event.target.value)}
-              className={`${inputClass} resize-none`}
-            />
+            <>
+              <textarea
+                rows={3}
+                value={profileView.address ?? ""}
+                onChange={(event) => handleProfileFieldChange("address", event.target.value)}
+                maxLength={300}
+                className={`${inputClass} resize-none`}
+              />
+              <p className="mt-1 text-xs text-slate-500 text-right">{(profileView.address ?? "").length} / 300</p>
+            </>
           ) : (
             <div className={`${readOnlyClass} whitespace-pre-wrap`}>
               {profileView.address || "Not set"}
@@ -4149,8 +4156,10 @@ const Dashboard = () => {
                   rows={3}
                   value={proofMessage}
                   onChange={(event) => setProofMessage(event.target.value)}
+                  maxLength={500}
                   className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
                 />
+                <p className="mt-1 text-xs text-slate-500 text-right">{proofMessage.length} / 500</p>
               </label>
               {proofError && (
                 <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
@@ -4210,8 +4219,10 @@ const Dashboard = () => {
                   rows={3}
                   value={quizProofMessage}
                   onChange={(event) => setQuizProofMessage(event.target.value)}
+                  maxLength={500}
                   className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
                 />
+                <p className="mt-1 text-xs text-slate-500 text-right">{quizProofMessage.length} / 500</p>
               </label>
               {quizProofError && (
                 <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
