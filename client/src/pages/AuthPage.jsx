@@ -444,7 +444,7 @@ const AuthPage = () => {
                       </p>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+                    <form onSubmit={handleSubmit} method="POST" className="mt-6 space-y-5">
                       <div className="space-y-2">
                         <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                           Email address
@@ -456,6 +456,7 @@ const AuthPage = () => {
                           onChange={handleChange}
                           placeholder="name@company.com"
                           autoComplete="email"
+                          required
                           className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-base text-white placeholder:text-slate-500 transition-all duration-200 focus:border-accent-purple/50 focus:outline-none focus:ring-2 focus:ring-accent-purple/20"
                         />
                       </div>
@@ -472,6 +473,8 @@ const AuthPage = () => {
                             onChange={handleChange}
                             placeholder="••••••••"
                             autoComplete="current-password"
+                            required
+                            minLength={8}
                             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 pr-12 text-base text-white placeholder:text-slate-500 transition-all duration-200 focus:border-accent-purple/50 focus:outline-none focus:ring-2 focus:ring-accent-purple/20"
                           />
                           <button
