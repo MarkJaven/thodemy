@@ -479,6 +479,7 @@ const UploadWidget = ({
                   placeholder="Reflection or assignment title"
                   className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2.5 text-sm text-white focus:border-white/30 focus:outline-none focus:ring-0"
                 />
+                <CharacterCounter current={title.length} max={100} />
               </label>
               <label className="block text-xs uppercase tracking-[0.2em] text-slate-400">
                 GitHub link

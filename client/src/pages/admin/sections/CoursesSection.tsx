@@ -996,6 +996,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
                     maxLength={100}
                     className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 transition focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                   />
+                  <CharacterCounter current={formState.title.length} max={100} />
                 </div>
                 <div className="lg:col-span-2">
                   <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
@@ -1123,6 +1124,7 @@ const CoursesSection = ({ editable = true }: { editable?: boolean }) => {
                     maxLength={100}
                     className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500"
                   />
+                  <CharacterCounter current={groupNameInput.length} max={100} />
                   <button
                     type="button"
                     onClick={handleCreateTopicGroup}

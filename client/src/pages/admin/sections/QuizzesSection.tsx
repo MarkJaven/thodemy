@@ -931,6 +931,7 @@ const QuizzesSection = ({ view }: { view?: "quizzes" | "scores" }) => {
               maxLength={100}
               className="mt-2 w-full rounded-xl border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-white focus:border-white/30 focus:ring-0"
             />
+            <CharacterCounter current={formState.title.length} max={100} />
           </label>
           <label className="text-xs uppercase tracking-[0.25em] text-slate-400">
             Description

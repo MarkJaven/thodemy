@@ -601,6 +601,7 @@ const TopicsPage = () => {
               maxLength={100}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
+            <CharacterCounter current={formState.title.length} max={100} />
           </label>
           <div className="text-xs uppercase tracking-[0.25em] text-slate-400">
             Time allocated
