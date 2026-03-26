@@ -20,7 +20,7 @@ export const reportService = {
       });
       const fileName =
         parseFileName(response.headers?.["content-disposition"]) ||
-        `user-checklist-${new Date().toISOString().slice(0, 10)}.csv`;
+        `Thodemy_Reports_LearnerChecklist_AllUsers_${new Date().toISOString().slice(0, 10)}.csv`;
       return { blob: response.data, fileName };
     } catch (error) {
       throw new Error(getApiErrorMessage(error));
@@ -34,7 +34,7 @@ export const reportService = {
       });
       const fileName =
         parseFileName(response.headers?.["content-disposition"]) ||
-        `user-checklist-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        `Thodemy_Reports_LearnerChecklist_AllUsers_${new Date().toISOString().slice(0, 10)}.xlsx`;
       return { blob: response.data, fileName };
     } catch (error) {
       throw new Error(getApiErrorMessage(error));

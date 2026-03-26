@@ -1243,7 +1243,7 @@ const toWholeScoreOption = (
       a.href = downloadUrl;
       const disposition = response.headers["content-disposition"] || "";
       const match = disposition.match(/filename="?([^"]+)"?/);
-      a.download = match?.[1] || `evaluation_${evalId}.xlsx`;
+      a.download = match?.[1] || `Thodemy_Evaluation_TraineeEvaluation_${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();

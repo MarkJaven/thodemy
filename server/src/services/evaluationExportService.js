@@ -1789,11 +1789,14 @@ const buildEvaluationWorkbook = async (evaluationId, options = {}) => {
 
   const buffer = await workbook.xlsx.writeBuffer();
   const dateToken = new Date().toISOString().slice(0, 10);
-  const safeName = String(traineeName || "evaluation")
-    .replace(/[^A-Za-z0-9\s_-]/g, " ")
-    .replace(/\s+/g, "_")
-    .trim();
-  const fileName = `${safeName || "evaluation"}_evaluation_${dateToken}.xlsx`;
+  const safeTrainee = String(traineeName || "")
+    .replace(/[^A-Za-z0-9\s]/g, "")
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join("");
+  const scope = safeTrainee || "Trainee";
+  const fileName = `Thodemy_Evaluation_TraineeEvaluation_${scope}_${dateToken}.xlsx`;
 
   return { buffer, fileName };
 };

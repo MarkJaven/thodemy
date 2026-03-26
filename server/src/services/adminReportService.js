@@ -516,21 +516,35 @@ const loadUserChecklistRows = async ({ userId } = {}) => {
   return rows;
 };
 
-const buildChecklistFileName = ({ rows, ext }) => {
+/**
+ * Convert a string to PascalCase with no spaces.
+ * e.g. "john smith" → "JohnSmith", "INCO reyes" → "IncoReyes"
+ */
+const toPascalCase = (str) =>
+  String(str)
+    .replace(/[^A-Za-z0-9\s]/g, "")
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join("");
+
+/**
+ * Generate a standardized export filename.
+ * Format: Thodemy_{Module}_{ReportType}_{Scope}_{YYYY-MM-DD}.{ext}
+ */
+const generateExportFilename = (module, reportType, scope, ext) => {
   const dateToken = new Date().toISOString().slice(0, 10);
+  const safeScope = toPascalCase(scope) || "AllUsers";
+  return `Thodemy_${module}_${reportType}_${safeScope}_${dateToken}.${ext}`;
+};
+
+const buildChecklistFileName = ({ rows, ext }) => {
   const uniqueNames = Array.from(new Set(rows.map((row) => row.userName).filter(Boolean)));
-  let baseName = "users";
+  let scope = "AllUsers";
   if (uniqueNames.length === 1) {
-    baseName = uniqueNames[0];
-  } else if (uniqueNames.length > 1) {
-    baseName = "multiple_users";
+    scope = uniqueNames[0];
   }
-  const safeName = String(baseName)
-    .replace(/[^A-Za-z0-9\s_-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const nameToken = safeName || "users";
-  return `${nameToken}_checklist_${dateToken}.${ext}`;
+  return generateExportFilename("Reports", "LearnerChecklist", scope, ext);
 };
 
 const buildUserChecklistCsv = async ({ userId } = {}) => {
