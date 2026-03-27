@@ -18,6 +18,9 @@ const validateOrigin = (origin, callback) => {
         return callback(null, true);
   }
   if (env.frontendOrigins.includes("*")) {
+    if (env.nodeEnv === "production") {
+      return callback(new Error("Wildcard CORS origin is not allowed in production"));
+    }
     return callback(null, true);
   }
   if (env.frontendOrigins.includes(origin)) {
