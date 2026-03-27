@@ -101,13 +101,6 @@ const MenuIcon = () => (
   </svg>
 );
 
-const CloseIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <line x1="18" y1="6" x2="6" y2="18" />
-    <line x1="6" y1="6" x2="18" y2="18" />
-  </svg>
-);
-
 const ReportsIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
@@ -1697,13 +1690,6 @@ const AdminDashboard = () => {
               className="h-32 w-auto object-contain shrink-0"
               loading="lazy"
             />
-            {/* Close button for mobile */}
-            <button
-              className="lg:hidden ml-auto p-1 text-slate-400 hover:text-white"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <CloseIcon />
-            </button>
           </div>
 
           {/* Navigation Label */}
