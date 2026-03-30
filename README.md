@@ -106,7 +106,7 @@ thodemy/
 │   └── src/
 │       ├── config/             # Environment and client setup
 │       ├── controllers/        # Request handlers
-│       ├── middleware/          # Auth, validation, rate limiting
+│       ├── middleware/         # Auth, validation, rate limiting
 │       ├── routes/             # API route definitions
 │       ├── services/           # Business logic layer
 │       ├── validators/         # Input validation schemas
