@@ -399,19 +399,19 @@ const AuthPage = () => {
                     <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-accent-purple/40 bg-[#101326] text-sm font-semibold text-accent-purple shadow-[0_0_18px_rgba(124,92,255,0.25)]">
                       01
                     </span>
-                    <span>Progress snapshots by topic and milestone.</span>
+                    <span>Enroll in courses and track your learning path.</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-accent-purple/40 bg-[#101326] text-sm font-semibold text-accent-purple shadow-[0_0_18px_rgba(124,92,255,0.25)]">
                       02
                     </span>
-                    <span>Verification-ready records for audits.</span>
+                    <span>Submit proofs and get admin verification.</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-accent-purple/40 bg-[#101326] text-sm font-semibold text-accent-purple shadow-[0_0_18px_rgba(124,92,255,0.25)]">
                       03
                     </span>
-                    <span>Manager approvals with clear history.</span>
+                    <span>Complete quizzes, forms, and evaluations.</span>
                   </div>
                 </div>
               </div>
