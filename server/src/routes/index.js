@@ -7,6 +7,7 @@ const topicRoutes = require("./topics");
 const activityRoutes = require("./activities");
 const submissionRoutes = require("./submissions");
 const healthRoutes = require("./health");
+const statsRoutes = require("./stats");
 const sessionRoutes = require("./session");
 const formRoutes = require("./forms");
 const mfaRoutes = require("./mfa");
@@ -14,6 +15,7 @@ const mfaRoutes = require("./mfa");
 const router = express.Router();
 
 router.use("/health", healthRoutes);
+router.use("/api/stats", statsRoutes);
 router.use("/api/mfa", mfaRoutes);
 router.use("/api/admin", adminRoutes);
 router.use("/api/courses", courseRoutes);

@@ -34,6 +34,20 @@ const AuthPage = () => {
   const [mfaUserEmail, setMfaUserEmail] = useState("");
   const [mfaLockedUntil, setMfaLockedUntil] = useState(null);
   const mfaResendTimer = useRef(null);
+  const [platformStats, setPlatformStats] = useState({ activeUsers: 0, activeCourses: 0 });
+
+  useEffect(() => {
+    const API_BASE =
+      import.meta.env.VITE_API_BASE_URL ||
+      import.meta.env.VITE_API_URL ||
+      `${window.location.protocol}//${window.location.hostname}:5000`;
+    fetch(`${API_BASE}/api/stats`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.data) setPlatformStats(json.data);
+      })
+      .catch(() => {});
+  }, []);
 
   /**
    * Reset view state when the auth mode changes.
@@ -405,15 +419,15 @@ const AuthPage = () => {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    Active tracks
+                    Active Users
                   </p>
-                  <p className="mt-2 font-display text-2xl font-semibold text-white">12</p>
+                  <p className="mt-2 font-display text-2xl font-semibold text-white">{platformStats.activeUsers}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    Completion
+                    Active Courses
                   </p>
-                  <p className="mt-2 font-display text-2xl font-semibold text-white">86%</p>
+                  <p className="mt-2 font-display text-2xl font-semibold text-white">{platformStats.activeCourses}</p>
                 </div>
               </div>
             </section>

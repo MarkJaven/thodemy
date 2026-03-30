@@ -158,6 +158,16 @@ const ActivitiesSection = ({
   const [projectScore, setProjectScore] = useState("");
   const [projectReviewNotes, setProjectReviewNotes] = useState("");
   const [reviewingSubmission, setReviewingSubmission] = useState(false);
+  const [pendingSubmissions, setPendingSubmissions] = useState<TopicSubmission[]>([]);
+  const [pendingSubmissionsLoading, setPendingSubmissionsLoading] = useState(false);
+  const [pendingSubmissionPage, setPendingSubmissionPage] = useState(1);
+  const [pendingSubmissionPagination, setPendingSubmissionPagination] = useState({
+    page: 1,
+    pageSize: TOPIC_SUBMISSIONS_PAGE_SIZE,
+    total: 0,
+    totalPages: 0,
+  });
+  const [pendingSubmissionError, setPendingSubmissionError] = useState<string | null>(null);
   const [submissionFilters, setSubmissionFilters] = useState({
     status: "",
     topicId: "",
@@ -244,7 +254,7 @@ const ActivitiesSection = ({
     setSubmissionError(null);
     try {
       const data = await topicSubmissionService.listSubmissions({
-        status: submissionFilters.status || undefined,
+        status: submissionFilters.status || "completed,rejected",
         topicId: submissionFilters.topicId || undefined,
         userId: submissionFilters.userId || undefined,
         from: submissionFilters.from || undefined,
@@ -262,6 +272,28 @@ const ActivitiesSection = ({
       );
     } finally {
       setSubmissionsLoading(false);
+    }
+  };
+
+  const loadPendingSubmissions = async () => {
+    setPendingSubmissionsLoading(true);
+    setPendingSubmissionError(null);
+    try {
+      const data = await topicSubmissionService.listSubmissions({
+        status: "pending",
+        page: pendingSubmissionPage,
+        pageSize: TOPIC_SUBMISSIONS_PAGE_SIZE,
+      });
+      setPendingSubmissions(data.submissions);
+      setPendingSubmissionPagination(data.pagination);
+    } catch (loadError) {
+      setPendingSubmissionError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load pending submissions.",
+      );
+    } finally {
+      setPendingSubmissionsLoading(false);
     }
   };
 
@@ -299,6 +331,10 @@ const ActivitiesSection = ({
   useEffect(() => {
     loadTopicSubmissions();
   }, [submissionFilters, submissionPage]);
+
+  useEffect(() => {
+    loadPendingSubmissions();
+  }, [pendingSubmissionPage]);
 
   useEffect(() => {
     loadLearningPathEnrollments();
@@ -686,7 +722,7 @@ const ActivitiesSection = ({
       );
       setSelectedSubmission(null);
       setReviewNotes("");
-      await loadTopicSubmissions();
+      await Promise.all([loadTopicSubmissions(), loadPendingSubmissions()]);
     } catch (updateError) {
       setActionError(
         updateError instanceof Error
@@ -1476,6 +1512,83 @@ const ActivitiesSection = ({
     [users, courses, learningPaths, saving],
   );
 
+  const pendingSubmissionRows = useMemo(
+    () =>
+      pendingSubmissions.map((submission) => ({
+        submission,
+        topic: topics.find((entry) => entry.id === submission.topic_id),
+        user: users.find((entry) => entry.id === submission.user_id),
+      })),
+    [pendingSubmissions, topics, users],
+  );
+
+  const pendingSubmissionColumns = useMemo(
+    () => [
+      {
+        key: "topic",
+        header: "Topic",
+        render: (row: (typeof pendingSubmissionRows)[number]) => (
+          <div>
+            <p className="font-semibold text-white">
+              {row.topic?.title ?? row.submission.topic_id}
+            </p>
+            {row.submission.message && (
+              <p className="text-xs text-slate-400">{row.submission.message}</p>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "user",
+        header: "User",
+        render: (row: (typeof pendingSubmissionRows)[number]) => (
+          <span className="text-xs text-slate-300">
+            {row.user?.email ?? row.submission.user_id}
+          </span>
+        ),
+      },
+      {
+        key: "submitted",
+        header: "Submitted",
+        render: (row: (typeof pendingSubmissionRows)[number]) => (
+          <span className="text-xs text-slate-400">
+            {formatDate(row.submission.submitted_at)}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (row: (typeof pendingSubmissionRows)[number]) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleViewTopicSubmission(row.submission)}
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white"
+            >
+              View
+            </button>
+            <button
+              type="button"
+              onClick={() => openSubmissionReview(row.submission)}
+              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-200"
+            >
+              Review
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [pendingSubmissionRows],
+  );
+
+  const pendingRangeStart =
+    (pendingSubmissionPagination.page - 1) * pendingSubmissionPagination.pageSize + 1;
+  const pendingRangeEnd = Math.min(
+    pendingSubmissionPagination.page * pendingSubmissionPagination.pageSize,
+    pendingSubmissionPagination.total,
+  );
+
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
   }
@@ -1741,13 +1854,90 @@ const ActivitiesSection = ({
 
       {showSubmissionApprovals && (
         <>
+          <div ref={courseProofsRef} className="space-y-3">
+            <div>
+              <h3 className="font-display text-xl text-white">
+                Course Completion Proofs
+              </h3>
+              <p className="text-sm text-slate-400">
+                Review uploaded course proofs before unlocking the next course.
+              </p>
+            </div>
+            {pendingCourseCompletionRequests.length > 0 && (
+              <DataTable
+                columns={courseCompletionColumns}
+                data={pendingCourseCompletionRequests}
+                emptyMessage=""
+              />
+            )}
+            {pendingSubmissionsLoading ? (
+              <p className="text-sm text-slate-400">Loading pending submissions...</p>
+            ) : (
+              <div className="space-y-4">
+                <DataTable
+                  columns={pendingSubmissionColumns}
+                  data={pendingSubmissionRows}
+                  emptyMessage={pendingCourseCompletionRequests.length > 0 ? "" : "No pending submissions to review."}
+                />
+                {pendingSubmissionPagination.total > 0 && (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-slate-300 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-slate-400">
+                      Showing {pendingRangeStart}-{pendingRangeEnd} of{" "}
+                      {pendingSubmissionPagination.total} pending submissions
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPendingSubmissionPage((prev) => Math.max(prev - 1, 1))
+                        }
+                        disabled={
+                          pendingSubmissionsLoading || pendingSubmissionPagination.page <= 1
+                        }
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Previous
+                      </button>
+                      <span className="min-w-20 text-center text-slate-400">
+                        Page {pendingSubmissionPagination.page} of{" "}
+                        {Math.max(pendingSubmissionPagination.totalPages, 1)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPendingSubmissionPage((prev) =>
+                            Math.min(
+                              prev + 1,
+                              Math.max(pendingSubmissionPagination.totalPages, 1),
+                            ),
+                          )
+                        }
+                        disabled={
+                          pendingSubmissionsLoading ||
+                          pendingSubmissionPagination.page >=
+                            Math.max(pendingSubmissionPagination.totalPages, 1)
+                        }
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {pendingSubmissionError && (
+              <p className="text-xs text-rose-200">{pendingSubmissionError}</p>
+            )}
+          </div>
+
           <div ref={topicSubmissionsRef} className="space-y-3">
             <div>
               <h3 className="font-display text-xl text-white">
                 Topic Submissions
               </h3>
               <p className="text-sm text-slate-400">
-                Review learner-uploaded certificates and mark completion status.
+                Approved and rejected learner submissions.
               </p>
             </div>
             <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300 md:grid-cols-5">
@@ -1767,8 +1957,6 @@ const ActivitiesSection = ({
                   className="rounded-xl border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-white"
                 >
                   <option value="">All</option>
-                  <option value="pending">Pending</option>
-                  <option value="in_progress">In Progress</option>
                   <option value="completed">Completed</option>
                   <option value="rejected">Rejected</option>
                 </select>
@@ -1861,7 +2049,7 @@ const ActivitiesSection = ({
                 <DataTable
                   columns={topicSubmissionColumns}
                   data={topicSubmissionRows}
-                  emptyMessage="No topic submissions yet."
+                  emptyMessage="No reviewed submissions yet."
                 />
                 {submissionPagination.total > 0 && (
                   <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-slate-300 sm:flex-row sm:items-center sm:justify-between">
@@ -1913,22 +2101,6 @@ const ActivitiesSection = ({
             {submissionError && (
               <p className="text-xs text-rose-200">{submissionError}</p>
             )}
-          </div>
-
-          <div ref={courseProofsRef} className="space-y-3">
-            <div>
-              <h3 className="font-display text-xl text-white">
-                Course Completion Proofs
-              </h3>
-              <p className="text-sm text-slate-400">
-                Review uploaded course proofs before unlocking the next course.
-              </p>
-            </div>
-            <DataTable
-              columns={courseCompletionColumns}
-              data={pendingCourseCompletionRequests}
-              emptyMessage="No course proofs yet."
-            />
           </div>
         </>
       )}
