@@ -260,6 +260,7 @@ const AdminDashboard = () => {
     activeNav === "activity-submissions"
   );
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [isSignOutOpen, setIsSignOutOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const navScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -809,6 +810,19 @@ const AdminDashboard = () => {
 
   const handleSignOut = async () => {
     await signOut({ redirectTo: "/" });
+  };
+
+  const handleOpenSignOut = () => {
+    setIsSignOutOpen(true);
+  };
+
+  const handleCloseSignOut = () => {
+    setIsSignOutOpen(false);
+  };
+
+  const handleConfirmSignOut = async () => {
+    setIsSignOutOpen(false);
+    await handleSignOut();
   };
 
   useEffect(() => {
@@ -1932,7 +1946,7 @@ const AdminDashboard = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setProfileDropdownOpen(false); handleSignOut(); }}
+                        onClick={() => { setProfileDropdownOpen(false); handleOpenSignOut(); }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-rose-400 hover:text-rose-300 hover:bg-ink-700 transition-colors"
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2064,6 +2078,43 @@ const AdminDashboard = () => {
           </div>
         );
       })()}
+
+      {isSignOutOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="signout-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-800/95 p-6 shadow-glow">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Account</p>
+              <h3 id="signout-modal-title" className="mt-2 font-display text-xl text-white">
+                Sign out?
+              </h3>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">
+              Do you really want to sign out? You can come back anytime.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleCloseSignOut}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSignOut}
+                className="rounded-full bg-gradient-to-r from-[#7f5bff] via-[#6a3df0] to-[#4d24c4] px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white shadow-[0_10px_30px_rgba(94,59,219,0.45)] transition hover:opacity-90"
+              >
+                Proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
