@@ -56,6 +56,7 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
   const [success, setSuccess] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarBroken, setAvatarBroken] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const getAvatarPublicUrl = (path: string | null | undefined) => {
@@ -94,6 +95,7 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
         .eq("id", user.id);
       if (updateError) throw updateError;
       setProfile(prev => ({ ...prev, avatar_url: filePath }));
+      setAvatarBroken(false);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
@@ -298,11 +300,12 @@ const ProfileModal = ({ isOpen, onClose }: ProfileModalProps) => {
                       className="relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple overflow-hidden"
                       title="Change profile photo"
                     >
-                      {profile.avatar_url ? (
+                      {profile.avatar_url && !avatarBroken ? (
                         <img
                           src={getAvatarPublicUrl(profile.avatar_url) ?? ""}
-                          alt={displayName}
+                          alt=""
                           className="h-full w-full object-cover"
+                          onError={() => setAvatarBroken(true)}
                         />
                       ) : (
                         initials

@@ -855,6 +855,7 @@ const Dashboard = () => {
   const [profileUpdateError, setProfileUpdateError] = useState<string | null>(null);
   const [profileUpdateSuccess, setProfileUpdateSuccess] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarBroken, setAvatarBroken] = useState(false);
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaToggleLoading, setMfaToggleLoading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -894,6 +895,7 @@ const Dashboard = () => {
       if (updateError) throw updateError;
       setProfile((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
       setProfileDraft((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
+      setAvatarBroken(false);
       setProfileUpdateSuccess("Profile photo updated.");
       setTimeout(() => setProfileUpdateSuccess(null), 3000);
     } catch (err: any) {
@@ -1182,9 +1184,9 @@ const Dashboard = () => {
     return hasActiveEnrollment;
   });
 
-  const visibleForms = hasActiveEnrollment
-    ? data.forms.filter((form) => form.assigned_user_id === user?.id || !form.assigned_user_id)
-    : [];
+  const visibleForms = data.forms.filter(
+    (form) => form.assigned_user_id === user?.id || !form.assigned_user_id
+  );
 
   const quizAttemptLookup = useMemo(
     () => buildLatestByQuizId(quizAttemptEntries),
@@ -2805,9 +2807,20 @@ const Dashboard = () => {
                 <p className="text-sm text-slate-400">No forms assigned yet.</p>
               ) : (
                 visibleForms.slice(0, 3).map((form) => {
-                  const dueDate = form.due_at ?? form.end_at ?? null;
-                  const statusLabel =
-                    form.status?.replace(/_/g, " ") ?? "open";
+                  const endDate = form.end_at ? new Date(form.end_at) : null;
+                  const isClosed = endDate ? new Date() > endDate : false;
+                  const isSubmitted = Boolean(form.submitted_at);
+                  const isMissed = isClosed && !isSubmitted;
+                  const statusLabel = isSubmitted
+                    ? "Submitted"
+                    : isMissed
+                      ? "Missed"
+                      : "Pending";
+                  const statusBadge = isSubmitted
+                    ? "badge-success"
+                    : isMissed
+                      ? "badge-error"
+                      : "badge-default";
                   return (
                     <div
                       key={form.id}
@@ -2820,13 +2833,13 @@ const Dashboard = () => {
                             <p className="text-xs text-slate-400">{form.description}</p>
                           )}
                         </div>
-                        <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
+                        <span className={statusBadge}>
                           {statusLabel}
                         </span>
                       </div>
-                      {dueDate && (
+                      {endDate && (
                         <p className="mt-2 text-xs text-slate-500">
-                          Due {formatDate(dueDate)}
+                          {isClosed ? "Closed" : "Due"} {formatDate(form.end_at!)}
                         </p>
                       )}
                     </div>
@@ -3576,11 +3589,12 @@ const Dashboard = () => {
               className="relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple overflow-hidden"
               title="Change profile photo"
             >
-              {profileView.avatar_url ? (
+              {profileView.avatar_url && !avatarBroken ? (
                 <img
                   src={getAvatarPublicUrl(profileView.avatar_url) ?? ""}
-                  alt={displayName}
+                  alt=""
                   className="h-full w-full object-cover"
+                  onError={() => setAvatarBroken(true)}
                 />
               ) : (
                 initials
@@ -3972,8 +3986,8 @@ const Dashboard = () => {
           <div className="p-4 border-t border-white/5">
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple overflow-hidden">
-                {profile?.avatar_url ? (
-                  <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={welcomeName} className="h-full w-full object-cover" />
+                {profile?.avatar_url && !avatarBroken ? (
+                  <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt="" className="h-full w-full object-cover" onError={() => setAvatarBroken(true)} />
                 ) : userInitials}
               </div>
               <div className="flex-1 min-w-0">
@@ -4019,8 +4033,8 @@ const Dashboard = () => {
                     aria-label="Open profile menu"
                     className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors overflow-hidden"
                   >
-                    {profile?.avatar_url ? (
-                      <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={welcomeName} className="h-full w-full object-cover" />
+                    {profile?.avatar_url && !avatarBroken ? (
+                      <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt="" className="h-full w-full object-cover" onError={() => setAvatarBroken(true)} />
                     ) : userInitials}
                   </button>
                   {profileDropdownOpen && (

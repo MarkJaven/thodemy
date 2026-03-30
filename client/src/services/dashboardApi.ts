@@ -552,6 +552,15 @@ export const dashboardApi = {
       courses = (data ?? []) as Course[];
     }
 
+    let formsPromise: Promise<Form[]>;
+    try {
+      formsPromise = apiClient
+        .get("/api/forms")
+        .then((res) => (res?.data?.data ?? []) as Form[]);
+    } catch {
+      formsPromise = readTable<Form>("forms", mockData.forms);
+    }
+
     const [
       lessons,
       lessonTopics,
@@ -573,7 +582,7 @@ export const dashboardApi = {
       readTable<Quiz>("quizzes", mockData.quizzes),
       readTable<QuizScore>("quiz_scores", mockData.quizScores, userFilter),
       readTable<QuizAttempt>("quiz_attempts", mockData.quizAttempts, userFilter),
-      readTable<Form>("forms", mockData.forms),
+      formsPromise,
     ]);
 
     const submissionActivities: Activity[] = activitySubmissions.map((submission) => ({

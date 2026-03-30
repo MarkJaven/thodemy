@@ -3,6 +3,16 @@ const { env } = require("../config/env");
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
+ * Check whether an origin is a local development address.
+ * @param {string} origin
+ * @returns {boolean}
+ */
+const isLocalOrigin = (origin) =>
+  origin.includes("localhost") ||
+  origin.includes("127.0.0.1") ||
+  /^https?:\/\/(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(origin);
+
+/**
  * Extract the origin from a URL string.
  * @param {string} url
  * @returns {string|null}
@@ -34,6 +44,11 @@ const verifyCsrfOrigin = (req, res, next) => {
 
   if (!origin) {
     return res.status(403).json({ error: "Forbidden – missing origin" });
+  }
+
+  // Allow all local origins in development, matching CORS behaviour
+  if (env.nodeEnv === "development" && isLocalOrigin(origin)) {
+    return next();
   }
 
   const allowed =

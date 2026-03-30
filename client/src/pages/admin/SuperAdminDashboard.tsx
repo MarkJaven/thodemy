@@ -311,6 +311,7 @@ const SuperAdminDashboard = () => {
   const [profileUpdateError, setProfileUpdateError] = useState<string | null>(null);
   const [profileUpdateSuccess, setProfileUpdateSuccess] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarBroken, setAvatarBroken] = useState(false);
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaToggleLoading, setMfaToggleLoading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -350,6 +351,7 @@ const SuperAdminDashboard = () => {
       if (updateError) throw updateError;
       setProfile((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
       setProfileDraft((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
+      setAvatarBroken(false);
       setProfileUpdateSuccess("Profile photo updated.");
       setTimeout(() => setProfileUpdateSuccess(null), 3000);
     } catch (err: any) {
@@ -987,11 +989,12 @@ const SuperAdminDashboard = () => {
               className="relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-purple/20 text-sm font-semibold uppercase text-accent-purple overflow-hidden"
               title="Change profile photo"
             >
-              {profileView.avatar_url ? (
+              {profileView.avatar_url && !avatarBroken ? (
                 <img
                   src={getAvatarPublicUrl(profileView.avatar_url) ?? ""}
-                  alt={displayName}
+                  alt=""
                   className="h-full w-full object-cover"
+                  onError={() => setAvatarBroken(true)}
                 />
               ) : (
                 initials
@@ -1824,8 +1827,8 @@ const SuperAdminDashboard = () => {
           <div className="p-4 border-t border-white/5">
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-purple/20 text-xs font-semibold text-accent-purple overflow-hidden">
-                {profile?.avatar_url ? (
-                  <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={sidebarDisplayName} className="h-full w-full object-cover" />
+                {profile?.avatar_url && !avatarBroken ? (
+                  <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt="" className="h-full w-full object-cover" onError={() => setAvatarBroken(true)} />
                 ) : sidebarInitials}
               </div>
               <div className="flex-1 min-w-0">
@@ -1895,8 +1898,8 @@ const SuperAdminDashboard = () => {
                     onClick={() => setProfileDropdownOpen((prev) => !prev)}
                     className="w-9 h-9 rounded-full bg-ink-700 border border-white/10 flex items-center justify-center text-xs font-semibold text-white hover:border-accent-purple/40 transition-colors overflow-hidden"
                   >
-                    {profile?.avatar_url ? (
-                      <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt={sidebarDisplayName} className="h-full w-full object-cover" />
+                    {profile?.avatar_url && !avatarBroken ? (
+                      <img src={getAvatarPublicUrl(profile.avatar_url) ?? ""} alt="" className="h-full w-full object-cover" onError={() => setAvatarBroken(true)} />
                     ) : sidebarInitials}
                   </button>
                   {profileDropdownOpen && (

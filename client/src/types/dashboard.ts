@@ -216,12 +216,14 @@ export type Form = {
   id: string;
   title: string;
   description: string;
-  status?: "open" | "closed" | "draft" | null;
+  status?: "open" | "closed" | "draft" | "active" | null;
   assigned_user_id?: string | null;
   link_url?: string | null;
+  has_link?: boolean | null;
   start_at?: string | null;
   end_at?: string | null;
   due_at?: string | null;
+  submitted_at?: string | null;
 };
 
 export type LearningPath = {
