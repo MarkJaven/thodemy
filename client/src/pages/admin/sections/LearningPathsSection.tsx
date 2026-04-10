@@ -977,8 +977,8 @@ const LearningPathsSection = () => {
       {/* Detail / Tracking Modal */}
       <Modal
         isOpen={isDetailOpen}
-        title="Learning Path Tracking"
-        description="Monitor enrollments and learner progress across all courses."
+        title="Learning Path Details"
+        description="View the courses included in this learning path."
         onClose={() => setIsDetailOpen(false)}
         size="lg"
         topAligned
@@ -1042,179 +1042,27 @@ const LearningPathsSection = () => {
               </div>
             </div>
 
-            {/* Enrollments List */}
-            {detail.enrollments.length === 0 ? (
-              <p className="text-sm text-slate-400">No enrolled users yet.</p>
-            ) : (
-              detail.enrollments.map((enrollment) => {
-                const progressForUser = new Map(
-                  detail.topicProgress
-                    .filter((entry) => entry.user_id === enrollment.user_id)
-                    .map((entry) => [entry.topic_id, entry])
-                );
-
-                const displayName =
-                  enrollment.user?.email ||
-                  enrollment.user?.username ||
-                  enrollment.user_id;
-                const enrollmentStatus = enrollment.status ?? "pending";
-                const isPending = enrollmentStatus === "pending";
-                const isRejected = enrollmentStatus === "rejected";
-                const isRemoved = enrollmentStatus === "removed";
-
-                return (
-                  <div
-                    key={`enrollment-${enrollment.id}`}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-white">{displayName}</p>
-                        <p className="text-xs text-slate-400">
-                          Status: {enrollmentStatus}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {isPending && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateEnrollment(
-                                  enrollment.id,
-                                  "approved"
-                                )
-                              }
-                              disabled={
-                                removingEnrollmentId === enrollment.id
-                              }
-                              className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200 disabled:opacity-50"
-                            >
-                              {removingEnrollmentId === enrollment.id
-                                ? "Updating..."
-                                : "Approve"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateEnrollment(
-                                  enrollment.id,
-                                  "rejected"
-                                )
-                              }
-                              disabled={
-                                removingEnrollmentId === enrollment.id
-                              }
-                              className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
-                            >
-                              {removingEnrollmentId === enrollment.id
-                                ? "Updating..."
-                                : "Reject"}
-                            </button>
-                          </>
-                        )}
-                        {!isPending && !isRejected && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleKickEnrollment(enrollment.id)
-                            }
-                            disabled={
-                              removingEnrollmentId === enrollment.id ||
-                              isRemoved
-                            }
-                            className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-rose-200 disabled:opacity-50"
-                          >
-                            {isRemoved
-                              ? "Removed"
-                              : removingEnrollmentId === enrollment.id
-                              ? "Removing..."
-                              : "Remove"}
-                          </button>
-                        )}
-                      </div>
+            {/* Courses List */}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <p className="mb-3 text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                Courses
+              </p>
+              {detail.courses.length === 0 ? (
+                <p className="text-sm text-slate-400">No courses in this learning path.</p>
+              ) : (
+                <div className="space-y-2">
+                  {detail.courses.map((course, index) => (
+                    <div
+                      key={course.id}
+                      className="flex items-center gap-3 rounded-xl border border-white/5 bg-black/20 px-4 py-3"
+                    >
+                      <span className="text-[11px] text-slate-500">{index + 1}</span>
+                      <p className="text-sm text-white">{course.title}</p>
                     </div>
-
-                    {/* Per-enrollment: courses with topic progress */}
-                    <div className="mt-3 space-y-3">
-                      {detail.courses.map((course) => {
-                        const courseTopicIds = course.topic_ids ?? [];
-                        const groupedTopicNameById = new Map<string, string>();
-                        (course.topic_groups ?? []).forEach((group) => {
-                          group.topic_ids.forEach((topicId) => {
-                            groupedTopicNameById.set(topicId, group.name);
-                          });
-                        });
-                        const courseTopics = courseTopicIds
-                          .map((tid) =>
-                            detail.topics.find((t) => t.id === tid)
-                          )
-                          .filter(Boolean) as typeof detail.topics;
-
-                        const completedCount = courseTopics.filter(
-                          (topic) =>
-                            progressForUser.get(topic.id)?.status ===
-                            "completed"
-                        ).length;
-                        const courseCompletion =
-                          courseTopics.length > 0
-                            ? Math.round(
-                                (completedCount / courseTopics.length) * 100
-                              )
-                            : 0;
-
-                        return (
-                          <div
-                            key={`course-progress-${enrollment.id}-${course.id}`}
-                            className="rounded-xl border border-white/5 bg-black/20 p-3"
-                          >
-                            <div className="mb-2 flex items-center justify-between">
-                              <p className="text-sm font-medium text-white">
-                                {course.title}
-                              </p>
-                              <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                                {courseCompletion}% complete
-                              </span>
-                            </div>
-                            <div className="grid gap-1.5 md:grid-cols-2">
-                              {courseTopics.map((topic) => {
-                                const progress = progressForUser.get(
-                                  topic.id
-                                );
-                                const topicStatus = progress?.status
-                                  ? progress.status === "completed"
-                                    ? "Completed"
-                                    : "In Progress"
-                                  : "Not Started";
-                                const groupName = groupedTopicNameById.get(topic.id);
-                                return (
-                                  <div
-                                    key={`tp-${enrollment.id}-${course.id}-${topic.id}`}
-                                    className="flex items-center justify-between rounded-lg border border-white/10 bg-ink-800/60 px-3 py-2 text-xs text-slate-300"
-                                  >
-                                    <span className="flex items-center gap-2">
-                                      <span>{topic.title}</span>
-                                      {groupName ? (
-                                        <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.15em] text-amber-200">
-                                          {groupName}
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                    <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                                      {topicStatus}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </Modal>
