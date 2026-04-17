@@ -406,7 +406,7 @@ const FAQSection = () => {
             workflow.
           </p>
           <a
-            href="https://youtu.be/Aq5WXmQQooo?si=sCEVz5fvDMDnu6zj"
+            href="https://www.youtube.com/playlist?list=PLdxi8UI2R0u_a4PZSVhhY-SKCrWxtvGki"
             target="_blank"
             rel="noreferrer"
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent-purple to-white px-5 py-3 text-sm font-bold uppercase tracking-[0.15em] text-ink-900 shadow-[0_12px_30px_rgba(124,92,255,0.35)] transition-all duration-200 hover:scale-[1.02] hover:brightness-105 sm:mt-6 sm:w-auto sm:px-6 sm:py-3.5"
@@ -583,7 +583,7 @@ const LandingPage = () => {
 
             <div className="flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:gap-4 lg:justify-start">
               <a
-                href="https://youtu.be/Aq5WXmQQooo?si=sCEVz5fvDMDnu6zj"
+                href="https://www.youtube.com/playlist?list=PLdxi8UI2R0u_a4PZSVhhY-SKCrWxtvGki"
                 target="_blank"
                 rel="noreferrer"
                 className="w-full rounded-xl bg-gradient-to-r from-accent-purple to-white px-6 py-3 text-sm font-bold uppercase tracking-[0.15em] text-ink-900 shadow-[0_12px_30px_rgba(124,92,255,0.35)] transition-all duration-200 hover:scale-[1.02] hover:brightness-105 sm:w-auto sm:py-3.5"
