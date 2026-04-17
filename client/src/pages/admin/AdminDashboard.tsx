@@ -317,6 +317,7 @@ const AdminDashboard = () => {
   const [profileUpdateSuccess, setProfileUpdateSuccess] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarBroken, setAvatarBroken] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaToggleLoading, setMfaToggleLoading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -331,9 +332,12 @@ const AdminDashboard = () => {
     const file = e.target.files?.[0];
     if (!file || !supabase || !user?.id) return;
     if (e.target) e.target.value = "";
-    const allowed = ["image/jpeg", "image/png", "image/webp"];
-    if (!allowed.includes(file.type)) {
-      setProfileUpdateError("Only JPG, PNG, or WebP images are allowed.");
+    setAvatarError(null);
+    const allowedTypes = ["image/jpeg", "image/png"];
+    const allowedExts = ["jpg", "jpeg", "png"];
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!allowedTypes.includes(file.type) || !allowedExts.includes(ext)) {
+      setAvatarError("File not supported. Please upload a JPG or PNG image.");
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
@@ -357,6 +361,7 @@ const AdminDashboard = () => {
       setProfile((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
       setProfileDraft((prev: any) => ({ ...(prev ?? {}), avatar_url: filePath }));
       setAvatarBroken(false);
+      setAvatarError(null);
       setProfileUpdateSuccess("Profile photo updated.");
       setTimeout(() => setProfileUpdateSuccess(null), 3000);
     } catch (err: any) {
@@ -457,7 +462,7 @@ const AdminDashboard = () => {
       setProfileUpdateError("Company ID must be numbers only and up to 7 digits.");
       return;
     }
-    if (profileDraft?.company_id_no) {
+    if (profileDraft?.company_id_no && profileDraft.company_id_no !== profile?.company_id_no) {
       const companyIdTaken = await isCompanyIdTaken(profileDraft.company_id_no, user.id);
       if (companyIdTaken) {
         setProfileUpdateError("Company ID already exists. Please use a different Company ID.");
@@ -1028,7 +1033,7 @@ const AdminDashboard = () => {
             <input
               ref={avatarInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png"
               className="hidden"
               onChange={handleAvatarUpload}
             />
@@ -1037,6 +1042,9 @@ const AdminDashboard = () => {
               <p className="text-sm text-slate-400">
                 {profileView.email ?? user?.email ?? "No email on file"}
               </p>
+              {avatarError && (
+                <p className="mt-1 text-xs text-rose-400" role="alert">{avatarError}</p>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
