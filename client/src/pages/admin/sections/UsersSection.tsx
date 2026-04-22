@@ -505,7 +505,8 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
   const profileDisplayName = getDisplayName(selectedUser);
   const profileInitial = getUserInitial(selectedUser);
   const profileRoleConfig = selectedUser ? roleConfig[selectedUser.role] || roleConfig.user : roleConfig.user;
-  const canEditSelectedProfile = Boolean(selectedUser?.profile_setup_completed);
+  const isPrivilegedRole = selectedUser?.role === "admin" || selectedUser?.role === "superadmin";
+  const canEditSelectedProfile = isPrivilegedRole || Boolean(selectedUser?.profile_setup_completed);
   const profileHasChanges = !!selectedUser && (
     profileForm.firstName !== (selectedUser.first_name ?? "") ||
     profileForm.lastName !== (selectedUser.last_name ?? "") ||
@@ -790,15 +791,15 @@ const UsersSection = ({ readOnly = false }: UsersSectionProps) => {
                 <div className="mt-4 space-y-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Onboarding</span>
-                    <span className="font-medium text-white">{formatDate(selectedUser?.onboarding_date)}</span>
+                    <span className="font-medium text-white">{isPrivilegedRole ? "Not Applicable" : formatDate(selectedUser?.onboarding_date)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Training Start</span>
-                    <span className="font-medium text-white">{formatDate(selectedUser?.training_starting_date)}</span>
+                    <span className="font-medium text-white">{isPrivilegedRole ? "Not Applicable" : formatDate(selectedUser?.training_starting_date)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Regularization</span>
-                    <span className="font-medium text-white">{formatDate(selectedUser?.target_regularization_date)}</span>
+                    <span className="font-medium text-white">{isPrivilegedRole ? "Not Applicable" : formatDate(selectedUser?.target_regularization_date)}</span>
                   </div>
                 </div>
               </div>
