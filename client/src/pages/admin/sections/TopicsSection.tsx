@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../../components/admin/Modal";
 import ConfirmationModal from "../../../components/admin/ConfirmationModal";
 import CharacterCounter from "../../../components/CharacterCounter";
 import { superAdminService } from "../../../services/superAdminService";
-import type { Topic } from "../../../types/superAdmin";
+import type { Topic, TopicResource } from "../../../types/superAdmin";
 
 type TopicsSectionProps = {
   role?: "admin" | "superadmin";
@@ -48,6 +48,12 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
     time_unit: "days",
   });
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [resourcesTopic, setResourcesTopic] = useState<Topic | null>(null);
+  const [resources, setResources] = useState<TopicResource[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [resourceUploading, setResourceUploading] = useState(false);
+  const [resourceError, setResourceError] = useState<string | null>(null);
+  const resourceFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -126,6 +132,126 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
     });
     setActionError(null);
     setIsFormOpen(true);
+  };
+
+  const openResourcesManager = (topic: Topic) => {
+    setResourcesTopic(topic);
+    setResources([]);
+    setResourceError(null);
+    void loadResources(topic.id);
+  };
+
+  const closeResourcesManager = () => {
+    if (resourceUploading) return;
+    setResourcesTopic(null);
+    setResources([]);
+    setResourceError(null);
+  };
+
+  const loadResources = async (topicId: string) => {
+    setResourcesLoading(true);
+    setResourceError(null);
+    try {
+      const list = await superAdminService.listTopicResources(topicId, {
+        status: "all",
+      });
+      setResources(list);
+    } catch (loadError) {
+      setResourceError(
+        loadError instanceof Error ? loadError.message : "Unable to load resources."
+      );
+      setResources([]);
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
+
+  const handleResourceUpload = async (file: File) => {
+    if (!resourcesTopic) return;
+    setResourceUploading(true);
+    setResourceError(null);
+    try {
+      await superAdminService.uploadTopicResource({
+        topicId: resourcesTopic.id,
+        file,
+      });
+      await loadResources(resourcesTopic.id);
+    } catch (uploadError) {
+      setResourceError(
+        uploadError instanceof Error ? uploadError.message : "Unable to upload resource."
+      );
+    } finally {
+      setResourceUploading(false);
+      if (resourceFileInputRef.current) {
+        resourceFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleResourceDelete = (resource: TopicResource) => {
+    setConfirmDialog({
+      title: "Permanently delete resource?",
+      description: `Permanently remove "${resource.file_name}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        setResourceError(null);
+        try {
+          await superAdminService.deleteTopicResource(resource.id);
+          if (resourcesTopic) {
+            await loadResources(resourcesTopic.id);
+          }
+        } catch (deleteError) {
+          setResourceError(
+            deleteError instanceof Error
+              ? deleteError.message
+              : "Unable to delete resource."
+          );
+        }
+      },
+    });
+  };
+
+  const handleResourceToggleStatus = (resource: TopicResource) => {
+    const nextStatus = resource.status === "inactive" ? "active" : "inactive";
+    setConfirmDialog({
+      title: nextStatus === "inactive" ? "Deactivate resource?" : "Activate resource?",
+      description:
+        nextStatus === "inactive"
+          ? `Hide "${resource.file_name}" from learners? You can reactivate it later.`
+          : `Make "${resource.file_name}" visible to learners again?`,
+      confirmLabel: nextStatus === "inactive" ? "Deactivate" : "Activate",
+      variant: nextStatus === "inactive" ? "danger" : "default",
+      onConfirm: async () => {
+        setResourceError(null);
+        try {
+          await superAdminService.updateTopicResourceStatus(resource.id, nextStatus);
+          if (resourcesTopic) {
+            await loadResources(resourcesTopic.id);
+          }
+        } catch (toggleError) {
+          setResourceError(
+            toggleError instanceof Error
+              ? toggleError.message
+              : "Unable to update resource status."
+          );
+        }
+      },
+    });
+  };
+
+  const handleResourceOpen = async (resource: TopicResource) => {
+    setResourceError(null);
+    try {
+      const url = await superAdminService.getTopicResourceUrl(resource.id);
+      if (url) {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } catch (openError) {
+      setResourceError(
+        openError instanceof Error ? openError.message : "Unable to open resource."
+      );
+    }
   };
 
   const hasFormChanges = useMemo(() => {
@@ -232,7 +358,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
 
   const gridTemplate = isSuperAdmin
     ? "lg:grid-cols-[2.4fr_1fr_0.7fr_0.9fr_1.4fr]"
-    : "lg:grid-cols-[2.6fr_1fr_0.7fr_0.9fr]";
+    : "lg:grid-cols-[2.2fr_1fr_0.7fr_0.9fr_1.1fr]";
 
   return (
     <div className="space-y-6">
@@ -363,6 +489,13 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                     </button>
                     <button
                       type="button"
+                      onClick={() => openResourcesManager(topic)}
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10"
+                    >
+                      Resources
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => openStatusConfirm(topic)}
                       className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/20"
                     >
@@ -410,7 +543,7 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
             <span>Author</span>
             <span>Time</span>
             <span>Status</span>
-            {isSuperAdmin && <span className="text-right">Actions</span>}
+            <span className="text-right">{isSuperAdmin ? "Actions" : "Resources"}</span>
           </div>
 
           <div className="divide-y divide-white/10 border-y border-white/10">
@@ -449,8 +582,8 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                       {topic.status ?? "active"}
                     </span>
                   </div>
-                  {isSuperAdmin && (
-                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    {isSuperAdmin && (
                       <button
                         type="button"
                         onClick={() => openEdit(topic)}
@@ -458,6 +591,15 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                       >
                         Edit
                       </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => openResourcesManager(topic)}
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10"
+                    >
+                      Resources
+                    </button>
+                    {isSuperAdmin && (
                       <button
                         type="button"
                         onClick={() => openStatusConfirm(topic)}
@@ -465,8 +607,8 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
                       >
                         {topic.status === "inactive" ? "Activate" : "Deactivate"}
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -570,6 +712,121 @@ const TopicsSection = ({ role = "superadmin" }: TopicsSectionProps) => {
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
             />
           </label>
+
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(resourcesTopic)}
+        title="Topic resources"
+        description={
+          resourcesTopic
+            ? `Manage uploaded learning materials for "${resourcesTopic.title}".`
+            : undefined
+        }
+        onClose={closeResourcesManager}
+        footer={
+          <button
+            type="button"
+            onClick={closeResourcesManager}
+            disabled={resourceUploading}
+            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Close
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[11px] text-slate-500">
+              PDF, Office docs, images, zip (max 15MB)
+            </span>
+          </div>
+
+          {resourceError && (
+            <div
+              className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"
+              role="alert"
+            >
+              {resourceError}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <input
+              ref={resourceFileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,image/*"
+              disabled={resourceUploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void handleResourceUpload(file);
+              }}
+              className="w-full text-xs text-slate-300 file:mr-3 file:rounded-full file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-[11px] file:uppercase file:tracking-[0.2em] file:text-white"
+              aria-label="Upload topic resource"
+            />
+            {resourceUploading && (
+              <p className="mt-2 text-[11px] text-slate-400">Uploading...</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {resourcesLoading ? (
+              <p className="text-xs text-slate-400">Loading resources...</p>
+            ) : resources.length === 0 ? (
+              <p className="text-xs text-slate-500">No resources uploaded yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {resources.map((resource) => {
+                  const isInactive = resource.status === "inactive";
+                  return (
+                    <li
+                      key={resource.id}
+                      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                        isInactive
+                          ? "border-white/5 bg-white/[0.02] opacity-70"
+                          : "border-white/10 bg-white/5"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleResourceOpen(resource)}
+                        className="min-w-0 flex-1 truncate text-left text-xs text-slate-200 transition hover:text-white"
+                        title={resource.file_name}
+                      >
+                        {resource.file_name}
+                      </button>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${
+                          isInactive
+                            ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                            : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                        }`}
+                      >
+                        {isInactive ? "Inactive" : "Active"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleResourceToggleStatus(resource)}
+                        className="rounded-full border border-amber-500/30 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/10"
+                      >
+                        {isInactive ? "Activate" : "Deactivate"}
+                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleResourceDelete(resource)}
+                          className="rounded-full border border-rose-500/30 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-rose-200 transition hover:bg-rose-500/10"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
       </Modal>
 

@@ -11,6 +11,7 @@ import type {
   LessonSubmission,
   LessonTopic,
   Topic,
+  TopicResource,
   TopicSubmission,
   CourseCompletionRequest,
   TopicProgress,
@@ -518,6 +519,79 @@ export const superAdminService = {
   async deleteTopic(topicId: string): Promise<void> {
     try {
       await apiClient.delete(`/api/topics/${topicId}`);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
+  },
+
+  async listTopicResources(
+    topicId: string,
+    options: { status?: "all" | "active" | "inactive" } = {}
+  ): Promise<TopicResource[]> {
+    try {
+      const params: Record<string, string> = {};
+      if (options.status) params.status = options.status;
+      const { data } = await apiClient.get(
+        `/api/topics/${topicId}/resources`,
+        Object.keys(params).length > 0 ? { params } : undefined
+      );
+      return (data?.resources ?? []) as TopicResource[];
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
+  },
+
+  async updateTopicResourceStatus(
+    resourceId: string,
+    status: "active" | "inactive"
+  ): Promise<TopicResource> {
+    try {
+      const { data } = await apiClient.patch(
+        `/api/topics/resources/${resourceId}/status`,
+        { status }
+      );
+      return data?.resource as TopicResource;
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
+  },
+
+  async uploadTopicResource(payload: {
+    topicId: string;
+    file: File;
+    title?: string | null;
+  }): Promise<TopicResource> {
+    const formData = new FormData();
+    formData.append("file", payload.file);
+    if (payload.title) {
+      formData.append("title", payload.title);
+    }
+    try {
+      const { data } = await apiClient.post(
+        `/api/topics/${payload.topicId}/resources`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      return data?.resource as TopicResource;
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
+  },
+
+  async deleteTopicResource(resourceId: string): Promise<void> {
+    try {
+      await apiClient.delete(`/api/topics/resources/${resourceId}`);
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
+  },
+
+  async getTopicResourceUrl(resourceId: string): Promise<string | null> {
+    try {
+      const { data } = await apiClient.get(
+        `/api/topics/resources/${resourceId}/file`
+      );
+      return (data?.file_url as string | null) ?? null;
     } catch (error) {
       throw new Error(getApiErrorMessage(error));
     }

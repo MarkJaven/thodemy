@@ -4,6 +4,7 @@ import Modal from "../components/admin/Modal";
 import ConfirmationModal from "../components/admin/ConfirmationModal";
 import CharacterCounter from "../components/CharacterCounter";
 import Navbar from "../components/dashboard/Navbar";
+import TopicResourcesDropdown from "../components/dashboard/TopicResourcesDropdown";
 import { useAuth } from "../context/AuthContext";
 import { useTopicsData } from "../hooks/useTopicsData";
 import { useUser } from "../hooks/useUser";
@@ -470,7 +471,7 @@ const TopicsPage = () => {
                           {status}
                         </span>
                       </div>
-                      <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-400">
+                      <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
                         <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
                           {topic.time_allocated} {topic.time_unit === "hours" ? (Number(topic.time_allocated) === 1 ? "hour" : "hours") : (Number(topic.time_allocated) === 1 ? "day" : "days")}
                         </span>
@@ -480,6 +481,7 @@ const TopicsPage = () => {
                         <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
                           End: {formatDate(progress?.end_date)}
                         </span>
+                        <TopicResourcesDropdown topicId={topic.id} />
                       </div>
                       {status === "Not Started" && missingPrereqs.length > 0 && (
                         <p className="mt-3 text-xs text-slate-400">

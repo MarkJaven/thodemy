@@ -5,6 +5,7 @@ import FormList from "../components/dashboard/FormList";
 import LoadingScreen from "../components/LoadingScreen";
 import ProfileSetupModal from "../components/auth/ProfileSetupModal";
 import QuizList from "../components/dashboard/QuizList";
+import TopicResourcesDropdown from "../components/dashboard/TopicResourcesDropdown";
 import UploadWidget from "../components/dashboard/UploadWidget";
 import Breadcrumb from "../components/admin/Breadcrumb";
 import { useAuth } from "../context/AuthContext";
@@ -2412,6 +2413,7 @@ const Dashboard = () => {
                                                     No link yet
                                                   </span>
                                                 )}
+                                                <TopicResourcesDropdown topicId={topic.id} />
                                               </div>
                                               {missingPrereqs.length > 0 && (
                                                 <p className="mt-3 text-xs text-slate-400">

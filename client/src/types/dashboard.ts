@@ -278,3 +278,19 @@ export type TopicsData = {
   topicProgress: TopicProgress[];
   topicSubmissions: TopicSubmission[];
 };
+
+export type TopicResource = {
+  id: string;
+  topic_id: string;
+  title?: string | null;
+  file_name: string;
+  file_type?: string | null;
+  file_size?: number | null;
+  storage_path: string;
+  uploaded_by?: string | null;
+  status?: "active" | "inactive" | null;
+  deactivated_at?: string | null;
+  deactivated_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};

@@ -6,6 +6,20 @@ const validateSubmissionIdParam = [
   param("submissionId").isUUID().withMessage("Invalid submission id."),
 ];
 
+const validateResourceIdParam = [
+  param("resourceId").isUUID().withMessage("Invalid resource id."),
+];
+
+const validateCreateTopicResource = [
+  body("title").optional().isString().isLength({ max: 200 }),
+];
+
+const validateUpdateTopicResourceStatus = [
+  body("status")
+    .isIn(["active", "inactive"])
+    .withMessage("Status must be active or inactive."),
+];
+
 const MAX_TOPIC_DESCRIPTION_LENGTH = 5000;
 
 const validateCreateTopic = [
@@ -77,8 +91,11 @@ const validateSubmissionQuery = [
 module.exports = {
   validateTopicIdParam,
   validateSubmissionIdParam,
+  validateResourceIdParam,
   validateCreateTopic,
   validateUpdateTopic,
+  validateCreateTopicResource,
+  validateUpdateTopicResourceStatus,
   validateSubmissionStatus,
   validateSubmissionQuery,
 };

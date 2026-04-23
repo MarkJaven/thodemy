@@ -15,6 +15,7 @@ import type {
   LessonSubmission,
   LessonTopic,
   Topic,
+  TopicResource,
   TopicSubmission,
   CourseCompletionRequest,
   TopicProgress,
@@ -449,6 +450,26 @@ export const dashboardApi = {
       throw new Error(error.message);
     }
     return data as TopicProgress;
+  },
+
+  async listTopicResources(topicId: string): Promise<TopicResource[]> {
+    try {
+      const { data } = await apiClient.get(`/api/topics/${topicId}/resources`);
+      return (data?.resources ?? []) as TopicResource[];
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
+  },
+
+  async getTopicResourceUrl(resourceId: string): Promise<string | null> {
+    try {
+      const { data } = await apiClient.get(
+        `/api/topics/resources/${resourceId}/file`
+      );
+      return (data?.file_url as string | null) ?? null;
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error));
+    }
   },
 
   async submitTopicSubmission(payload: {
